@@ -1,0 +1,71 @@
+---
+name: review
+description: Run a comprehensive multi-agent code review covering security, UI, tests, and performance.
+argument-hint: [file-or-branch]
+user-invocable: true
+---
+
+# Multi-Agent Code Review
+
+Run a comprehensive review of the current changes by spawning specialized review agents in parallel.
+
+## Steps
+
+1. First, determine the scope of the review. Resolve the base branch from
+   CLAUDE.md's `Base branch:` line, else `gh repo view --json defaultBranchRef -q
+   .defaultBranchRef.name`, else `main`:
+   - If `$ARGUMENTS` is a file path, review that file
+   - If `$ARGUMENTS` is a branch name, review `git diff <base>...$ARGUMENTS`
+   - If no arguments, review all uncommitted changes (`git diff` + `git diff --cached` + untracked files)
+
+2. Get the diff to understand what changed:
+   ```
+   !`git diff --stat HEAD`
+   ```
+
+3. Discover which reviewer agents actually exist — `/adapt` deletes the ones that
+   don't apply to this stack (e.g. `reviewer-ui` on a backend-only project):
+   ```
+   !`ls .claude/agents/reviewer-*.md 2>/dev/null`
+   ```
+   Spawn **one agent per discovered `reviewer-*` file, in parallel** using the
+   Agent tool, each with `subagent_type` matching the custom agent. The full kit
+   provides:
+   - **reviewer-security** — Security vulnerabilities, injection risks, data exposure
+   - **reviewer-ui** — Theme compliance, accessibility, responsive design, brand consistency
+   - **reviewer-tests** — Missing tests, test quality, coverage gaps
+   - **reviewer-performance** — API efficiency, bundle size, caching, slow patterns
+
+   Only spawn the ones present on disk. Never invoke a `subagent_type` whose file
+   was deleted — skip its section in the report instead.
+
+4. Each agent receives the same scope (files/diff) and reviews independently. Pass a `name:` for each agent so it's addressable, and bake an investigation budget and required output format into each spawn prompt (e.g. "Spend at most N tool calls, then emit the structured report. Do not stop without it."). If a final message lacks the structured report, re-spawn with a firmer lead-in; do not synthesize missing findings by hand.
+
+5. After all agents complete, synthesize their findings into a unified report.
+   Include only the sections for reviewers that actually ran:
+
+```
+# Code Review Summary
+
+## Scope
+[what was reviewed]
+
+## Security
+[findings from reviewer-security]
+
+## UI / Theme
+[findings from reviewer-ui]
+
+## Test Coverage
+[findings from reviewer-tests]
+
+## Performance
+[findings from reviewer-performance]
+
+## Action Items
+- [ ] Critical: ...
+- [ ] High: ...
+- [ ] Medium: ...
+```
+
+6. Present the unified report to the user.

@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+secrets/
+
+# Build outputs
+.next/
+.expo/
+.turbo/
+dist/
+build/
+out/
+
+# Supabase local
+supabase/.temp/
+supabase/.branches/
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# claude-kit source (bootstrap kit — already adapted into .claude/; kept local
+# for /sync-check, not part of the project)
+claude-kit/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
