@@ -31,6 +31,7 @@ El diferenciador comercial frente a competidores (Repsly, Teamcore, Repsly) es e
 - [[00 - Análisis del Proyecto]]
 - [[01 - Stack Tecnológico]]
 - [[02 - Arquitectura Técnica]]
+- [`docs/adr/`](adr/README.md) — **registro de decisiones (ADR)**: por qué está hecho así, y qué se descartó
 - [[09 - Diagramas de Arquitectura]] — diagramas Excalidraw (solución + técnica) para presentar
 
 ### Dominio y producto
