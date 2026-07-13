@@ -13,6 +13,10 @@ desviación en el momento.
 Además, cada marca tolera una desviación de precio distinta: lo que para una es
 una alerta, para otra es ruido.
 
+**El documento del cliente lo exige explícitamente**: pide que los precios
+regulares, las promociones vigentes y las exhibiciones negociadas estén
+"pre-cargados" en la app. No es solo una preferencia técnica nuestra.
+
 ## Opciones consideradas
 
 | Opción | A favor | En contra |
