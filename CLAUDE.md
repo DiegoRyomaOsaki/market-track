@@ -66,23 +66,28 @@ todos/                task tracker
 
 ## Dev Commands
 
-> El scaffolding del monorepo (package.json raíz, turbo.json, apps) aún no
-> existe — es el primer paso de la Fase 0. Estos son los comandos convenidos;
-> crear los scripts con estos nombres al scaffoldear.
+> El esqueleto del monorepo (package.json raíz, pnpm-workspace.yaml,
+> turbo.json) ya existe. **Todavía no hay ningún workspace**: las tareas de
+> turbo corren en 0 paquetes y salen en verde. Las filas marcadas *(pendiente)*
+> aún no son ejecutables — dependen de tickets que no han aterrizado.
+>
+> pnpm está fijado en `packageManager` (10.34.5) y pnpm lo autodescarga: no
+> hace falta que tu pnpm global coincida.
 
-| Task | Command |
-|---|---|
-| Install | `pnpm install` |
-| Dev (todo) | `pnpm turbo run dev` |
-| Dev web | `pnpm --filter web dev` |
-| Dev mobile | `pnpm --filter mobile start` |
-| Test | `pnpm turbo run test` |
-| Lint | `pnpm turbo run lint` |
-| Type check | `pnpm turbo run typecheck` |
-| Format | `pnpm prettier --write .` |
-| DB local | `supabase start` / `supabase db reset` |
-| Nueva migración | `supabase migration new <nombre>` |
-| Tipos DB | `supabase gen types typescript --local > packages/db/src/database.types.ts` |
+| Task | Command | |
+|---|---|---|
+| Install | `pnpm install` | |
+| Dev (todo) | `pnpm dev` | |
+| Build | `pnpm build` | |
+| Test | `pnpm test` | |
+| Lint | `pnpm lint` | |
+| Type check | `pnpm typecheck` | |
+| Dev web | `pnpm --filter web dev` | *(pendiente: apps/web)* |
+| Dev mobile | `pnpm --filter mobile start` | *(pendiente: apps/mobile)* |
+| Format | `pnpm prettier --write .` | *(pendiente: tooling compartido)* |
+| DB local | `supabase start` / `supabase db reset` | *(pendiente: Supabase)* |
+| Nueva migración | `supabase migration new <nombre>` | *(pendiente: Supabase)* |
+| Tipos DB | `supabase gen types typescript --local > packages/db/src/database.types.ts` | *(pendiente: packages/db)* |
 
 ## Git Workflow
 
