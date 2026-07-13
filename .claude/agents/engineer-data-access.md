@@ -53,6 +53,7 @@ Read `CLAUDE.md` for the full data architecture. Key facts for this project:
 - [ ] Active/revoked flag re-checked on every access; permission state is not cached in a way that delays a revocation taking effect
 
 ### Offline Sync (PowerSync)
+- [ ] **Sync rules never use client parameters for access control.** PowerSync replicates with a `BYPASSRLS` role, so the download path is governed *only* by sync rules — RLS cannot save you here. A rule filtered by `request.parameters()` is a tenant leak: the client can send any value. Scope only by `request.user_id()` (signed JWT) or by a table lookup keyed on it, e.g. `SELECT tenant_id FROM profile WHERE id = request.user_id()`. See `docs/adr/0001-motor-offline-dedicado.md`.
 - [ ] Sync rules scope each mercaderista to their own rutero/tiendas/SKUs of the day — no full-table downloads
 - [ ] Writes are idempotent under retry (sync may deliver the same upload twice)
 - [ ] Conflict strategy is last-write-wins per field with an audit trail, as documented — no custom conflict logic without justification

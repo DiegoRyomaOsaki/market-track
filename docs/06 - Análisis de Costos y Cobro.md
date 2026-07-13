@@ -20,7 +20,7 @@ Tipo de cambio de referencia: **USD 1 ≈ COP 3.150** (jun 2026).
 | Servicio | USD/mes | 5 meses |
 |---|---|---|
 | Supabase Pro | 25 | 125 |
-| PowerSync | 0–35 | 0–175 |
+| PowerSync | 0 en desarrollo (free tier) | 0 |
 | Vercel | 0 | 0 |
 | Cloudflare R2 | 0–5 | 0–25 |
 | Expo EAS | 0–19 | 0–95 |
@@ -30,11 +30,21 @@ Tipo de cambio de referencia: **USD 1 ≈ COP 3.150** (jun 2026).
 ### En operación (piloto, 20–50 mercaderistas)
 | Concepto | USD/mes |
 |---|---|
-| Infra base (Supabase + PowerSync + Vercel) | 50–95 |
+| Supabase Pro | 25 |
+| **PowerSync Pro** (el free tier **no sirve** en producción — ver abajo) | **desde 49** |
+| Vercel | 0 |
 | Cloudflare R2 (fotos, crece) | 5–20 |
 | Email / push | 0–20 |
 | **OTP por SMS / WhatsApp** (canales nuevos, jul 2026) | **a estimar** |
-| **Total operación** | **~55–135 USD/mes** + OTP |
+| **Total operación** | **~79–114 USD/mes** + OTP |
+
+> ⚠️ **El plan gratuito de PowerSync no es viable para el piloto** (verificado
+> jul 2026): tope de **50 conexiones concurrentes pico** —que 20–50
+> mercaderistas más supervisores rozan o superan— y **desactivación del proyecto
+> tras una semana de inactividad**. El plan **Pro arranca en USD 49/mes** (30 GB
+> sincronizados, 10 GB alojados, 1.000 conexiones). La cifra anterior de este
+> documento (0–35 USD/mes) estaba desactualizada. Sirve gratis **durante el
+> desarrollo**, no en operación.
 
 > ⚠️ **Dos costos nuevos entran por la revisión con el cliente de julio 2026 y
 > todavía no están cuantificados:**
