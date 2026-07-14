@@ -1,0 +1,20 @@
+# Prettier NO lee el .gitignore: solo ignora node_modules por defecto. Sin estas
+# líneas, el primer build local dejaría a `pnpm format` reescribiendo artefactos
+# generados, y a `format:check` en rojo por archivos que nadie escribió.
+.next/
+.expo/
+.turbo/
+dist/
+build/
+out/
+coverage/
+
+# Markdown: la documentación es la fuente de verdad contractual y arquitectónica
+# del proyecto — la leen humanos, no se compila. Prettier acolcha las tablas
+# (filas de 200+ caracteres, rompiendo el ajuste a 80 columnas) y cambia
+# *énfasis* por _énfasis_ en toda la prosa: 54 de 55 archivos reescritos, sin
+# ninguna ganancia. Prettier manda en el código; los docs se escriben a mano.
+**/*.md
+
+# Generado por pnpm, que lo reescribe a su manera.
+pnpm-lock.yaml

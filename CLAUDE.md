@@ -66,13 +66,19 @@ todos/                task tracker
 
 ## Dev Commands
 
-> El esqueleto del monorepo (package.json raíz, pnpm-workspace.yaml,
-> turbo.json) ya existe. **Todavía no hay ningún workspace**: las tareas de
-> turbo corren en 0 paquetes y salen en verde. Las filas marcadas *(pendiente)*
-> aún no son ejecutables — dependen de tickets que no han aterrizado.
+> El esqueleto del monorepo y el tooling compartido (TypeScript strict, ESLint,
+> Prettier) ya existen. **Todavía no hay ningún workspace**: las tareas de turbo
+> corren solo en la raíz. Las filas marcadas *(pendiente)* aún no son
+> ejecutables — dependen de tickets que no han aterrizado.
 >
 > pnpm está fijado en `packageManager` (10.34.5) y pnpm lo autodescarga: no
 > hace falta que tu pnpm global coincida.
+>
+> **Ojo con `lint` y `typecheck`:** los scripts de la raíz (`pnpm lint`,
+> `pnpm typecheck`) revisan **solo la raíz** — turbo los invoca como tareas
+> `//#lint` y `//#typecheck`. Para revisar **todo el monorepo** usa las tareas
+> de turbo. No pueden llamarse igual: un script raíz `lint: turbo run lint`
+> haría que turbo se invocase a sí mismo (error de recursión).
 
 | Task | Command | |
 |---|---|---|
@@ -80,14 +86,25 @@ todos/                task tracker
 | Dev (todo) | `pnpm dev` | |
 | Build | `pnpm build` | |
 | Test | `pnpm test` | |
-| Lint | `pnpm lint` | |
-| Type check | `pnpm typecheck` | |
+| **Lint (todo)** | `pnpm turbo run lint` | raíz + workspaces |
+| **Type check (todo)** | `pnpm turbo run typecheck` | raíz + workspaces |
+| Lint (solo raíz) | `pnpm lint` | `eslint .` |
+| Type check (solo raíz) | `pnpm typecheck` | `tsc --noEmit` |
+| Format | `pnpm format` | escribe; `pnpm format:check` solo verifica |
 | Dev web | `pnpm --filter web dev` | *(pendiente: apps/web)* |
 | Dev mobile | `pnpm --filter mobile start` | *(pendiente: apps/mobile)* |
-| Format | `pnpm prettier --write .` | *(pendiente: tooling compartido)* |
 | DB local | `supabase start` / `supabase db reset` | *(pendiente: Supabase)* |
 | Nueva migración | `supabase migration new <nombre>` | *(pendiente: Supabase)* |
 | Tipos DB | `supabase gen types typescript --local > packages/db/src/database.types.ts` | *(pendiente: packages/db)* |
+
+**Prettier no toca el Markdown** (`.prettierignore`): los docs son la fuente de
+verdad contractual del proyecto, los leen humanos y no se compilan. Prettier
+manda en el código; la documentación se escribe a mano.
+
+**TypeScript está fijado en `~6.0.3`, no en la última.** TypeScript 7 (el port
+nativo en Go) **hace crashear a `typescript-eslint`**, cuyo peer declarado es
+`<6.1.0`. No es un aviso: es un `TypeError` y exit 2. Es una restricción
+temporal — se revisa cuando typescript-eslint publique soporte para TS 7.
 
 ## Git Workflow
 
