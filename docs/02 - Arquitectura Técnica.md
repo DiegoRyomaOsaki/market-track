@@ -67,7 +67,10 @@ graph TB
   - El **mercaderista** solo ve su rutero y las tiendas/SKUs asignados.
   - El **supervisor** ve sus rutas; el **admin** de la empresa de outsourcing ve todo dentro de la organización.
 - **Roles** (en `auth` + tabla `profiles.role`): `admin`, `supervisor`, `mercaderista`, `cliente`.
-- ⚠️ **RLS protege a PostgREST (web), no necesariamente al móvil.** Un motor de sincronización como PowerSync se conecta a Postgres con **sus propias credenciales** y aplica **sus** *sync rules*: no ejecuta las políticas RLS. El aislamiento multi-tenant del móvil vive, por tanto, en una **segunda superficie de seguridad**. Ver [ADR-0001](adr/0001-motor-offline-dedicado.md) — es lo que el spike del motor offline debe cerrar.
+- ⚠️ **En el móvil, el aislamiento es asimétrico** (verificado contra la documentación de PowerSync, jul 2026):
+  - **Escritura → sí pasa por RLS.** Las subidas se envían con el cliente de Supabase, o sea por PostgREST, donde las políticas se aplican con normalidad.
+  - **Lectura → NO pasa por RLS.** PowerSync replica el WAL con un rol creado con `BYPASSRLS`. Lo que el mercaderista se **descarga** lo deciden **solo las *sync rules***, y un error ahí filtra datos entre marcas sin que ninguna política de Postgres lo impida.
+  - Es decir: RLS sigue siendo obligatorio y sigue protegiendo la escritura; lo que aparece es una **segunda superficie de seguridad** para la lectura. Ver [ADR-0001](adr/0001-motor-offline-dedicado.md), que documenta cómo se expresa el aislamiento y cuál es la trampa (*client parameters*).
 - **Autenticación:** usuario/contraseña + **segundo factor**. El **correo** es el canal por defecto (compromiso de la propuesta aceptada); **SMS y WhatsApp** se suman como canales habilitables desde el panel (`configuracion_plataforma.otp_canales_habilitados`).
 - **Acceso de emergencia:** el usuario que no recibe su OTP por ningún canal se desbloquea con un **pase de acceso temporal** emitido desde el panel — código de un solo uso, 15 minutos de vida, motivo obligatorio y auditoría de quién lo emitió. No existe un interruptor de "desactivar el 2FA a este usuario": un permiso así se queda encendido para siempre.
 - Las **fotos en R2** se sirven con **URLs firmadas** de expiración corta (no públicas), generadas por Edge Function validando el rol.

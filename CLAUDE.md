@@ -167,11 +167,14 @@ Aún no hay `.env`. Al scaffoldear, crear `.env.example` por app. Previstas:
   es el diferenciador #1 del producto.
 - **Toda tabla nueva habilita RLS en su misma migración** con políticas por
   rol y `tenant_id` — una tabla sin RLS es legible por el mundo vía PostgREST.
-- **RLS no cubre al móvil.** El motor de sincronización (PowerSync) se conecta a
-  Postgres con sus propias credenciales y aplica sus *sync rules*, no las
-  políticas RLS. El aislamiento entre marcas en el móvil vive ahí: es una
-  segunda superficie de seguridad, y un error en ella filtra datos sin que
-  ninguna política de Postgres lo impida. Ver `docs/adr/0001-motor-offline-dedicado.md`.
+- **En el móvil, RLS protege la escritura pero NO la lectura.** Las subidas van
+  por el cliente de Supabase (PostgREST) y sí pasan por RLS. La bajada la
+  replica PowerSync con un rol `BYPASSRLS`: lo que el mercaderista se descarga
+  lo deciden **solo las *sync rules***. Es una segunda superficie de seguridad —
+  y un harness que solo pruebe RLS da un **falso verde** para el móvil. Nunca
+  filtrar por *client parameters* en una sync rule (el cliente puede enviar
+  cualquier valor): solo por `request.user_id()` o por tabla. Ver
+  `docs/adr/0001-motor-offline-dedicado.md`.
 - **La validación de geocerca del cliente es UX, no seguridad** — se re-valida
   en servidor al sincronizar (PostGIS + timestamp de servidor).
 - **Watermark y timestamps se graban al capturar**, nunca al subir — la subida
