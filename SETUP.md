@@ -43,17 +43,29 @@ reconoce al abrir el proyecto. Falta el OAuth:
 > Si no, el flujo OAuth reusa la sesión abierta y acabas autenticado en el
 > workspace equivocado. La cuenta correcta es **`diegopuerto0628@gmail.com`**.
 
-### 2. Desactivar el conector de Linear equivocado
+### 2. Autenticar Supabase
 
 ```
-/mcp  →  claude.ai Linear  →  disable
+/mcp  →  supabase-mt  →  Authenticate
 ```
 
-Ese conector apunta a **otra cuenta** (`diego@scrybe.pro`, workspaces
-Scrybe/Sonar) y **no ve Market-Track**. Si se queda activo, un ticket puede
-acabar creado en el workspace equivocado. Está en `~/.claude.json`, que es
+Organización **`market-track`**, proyecto **`market-track`** (`us-east-1`).
+
+### 3. Desactivar los conectores equivocados
+
+```
+/mcp  →  claude.ai Linear    →  disable
+/mcp  →  claude.ai Supabase  →  disable
+```
+
+Los dos apuntan a **otras cuentas**: el de Linear a `diego@scrybe.pro`
+(workspaces Scrybe/Sonar, que **no ven Market-Track**), y el de Supabase a la
+organización `Gobigagency` (el proyecto "Gobig Back office", que **no es este**).
+
+Si se quedan activos, un ticket puede acabar en el workspace equivocado o una
+migración en la base de datos equivocada. Viven en `~/.claude.json`, que es
 configuración **de tu máquina**: no viaja con el repositorio, así que **hay que
-desactivarlo en cada equipo**.
+desactivarlos en cada equipo**.
 
 ---
 

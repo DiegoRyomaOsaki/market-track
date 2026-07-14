@@ -113,7 +113,11 @@ La app es offline-first — el mercaderista lleva encima una réplica SQLite con
 rutero, las tiendas y los SKUs del cliente. Apagar la fila en Postgres **no borra
 lo que ya está en su bolsillo**. La baja debe:
 
-1. **Cortar la sesión** (RLS y login rechazan al usuario deshabilitado).
+1. **Dejarlo sin datos** (RLS). ⚠️ **La RLS NO bloquea el login** — verificado: el
+   usuario desactivado **sí recibe un token válido**, simplemente no ve nada.
+   GoTrue solo mira `auth.users`, no `public.profile`. Rechazar la
+   autenticación de verdad exige `auth.users.banned_until` o un hook
+   `custom_access_token`: **no está implementado todavía**.
 2. **Vaciar los *buckets* de sync.** La *parameter query* de PowerSync debe
    exigir el acceso efectivo: si deja de cumplirse, los buckets desaparecen y el
    motor **purga la réplica local** en la siguiente conexión. Si la sync rule

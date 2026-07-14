@@ -185,7 +185,7 @@ El documento pide un "agente de IA" que analice la foto de góndola y cuente fac
 ```
 Móvil      React Native + Expo + PowerSync (SQLite local)
 Web        Next.js 15 + Tailwind + shadcn/ui + MapLibre + Tremor
-API/BD     Supabase (Postgres 16 + PostGIS + PostgREST + Edge Functions)
+API/BD     Supabase (Postgres 17 + PostGIS + PostgREST + Edge Functions)
 Auth       Supabase Auth + RLS (multi-tenant)
 Realtime   Supabase Realtime (pines en vivo)
 Fotos      Cloudflare R2 (S3-compatible)
