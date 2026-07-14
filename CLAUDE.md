@@ -143,6 +143,18 @@ temporal — se revisa cuando typescript-eslint publique soporte para TS 7.
   reiniciar la sesión y autenticar con la cuenta de arriba (cerrar sesión en
   linear.app antes, o usar incógnito, para que el OAuth no reuse la otra cuenta).
 
+- **Supabase: usar exclusivamente el servidor MCP `supabase-mt`** — prefijo
+  `mcp__supabase-mt__*`. Organización **`market-track`**, proyecto
+  **`market-track`** (`us-east-1`).
+- ⚠️ Misma historia que con Linear: el conector `mcp__claude_ai_Supabase__` de
+  esta máquina apunta a **otra cuenta** (org `Gobigagency`, proyecto "Gobig Back
+  office") y **no** es este proyecto. Está desactivado en este repo; no
+  reactivarlo.
+- **Región `us-east-1`, no São Paulo.** AWS no tiene región en la costa oeste de
+  Sudamérica y el tráfico internacional de Perú enruta por Miami: Virginia queda
+  más cerca *en red* que São Paulo, aunque el mapa diga lo contrario. Sin medir
+  desde Lima — si alguna vez se mide, esto se revisa.
+
 ## Naming & File Organization
 
 - Archivos kebab-case; componentes React en PascalCase.
