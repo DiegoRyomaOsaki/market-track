@@ -86,7 +86,7 @@ todos/                task tracker
 | Install | `pnpm install` | activa los hooks de paso (script `prepare`) |
 | Dev (todo) | `pnpm dev` | |
 | Build | `pnpm build` | |
-| Test | `pnpm test` | |
+| Test | `pnpm test` | Vitest. Tests co-locados: `*.test.ts` junto al código |
 | **Lint (todo)** | `pnpm turbo run lint` | raíz + workspaces |
 | **Type check (todo)** | `pnpm turbo run typecheck` | raíz + workspaces |
 | Lint (solo raíz) | `pnpm lint` | `eslint .` |
@@ -255,6 +255,15 @@ Aún no hay `.env`. Al scaffoldear, crear `.env.example` por app. Previstas:
   el flujo sin el bypass incumple la propuesta aceptada.
 - **Campos derivados** (quiebre, diferencia, semáforo, KPIs) se calculan en
   vistas/triggers/Edge Functions, una sola vez — no en el código de las apps.
+- **Nunca poner `passWithNoTests: true` en Vitest.** El default (`false`) es lo
+  único que impide que la suite vuelva a ser un verde falso: si alguien borra el
+  último test, Vitest sale con exit 1 en vez de fingir que todo está bien.
+- **Un `vitest.config.ts` en un workspace rompe `pnpm lint`** (`not found by the
+  project service`) salvo que se añada `"*.ts"` al `include` de su
+  `tsconfig.json` — ESLint y `tsc` tienen que ver los mismos archivos. Hoy
+  `packages/db` no necesita config: los defaults de Vitest ya bastan. El primer
+  workspace que necesite una (apps/web, con jsdom) debe tocar las dos cosas en el
+  mismo commit.
 - **Los tipos de BD se regeneran con `pnpm db:types`, nunca con una redirección.**
   Si Docker está apagado, `supabase gen types` **escribe su error en stdout**: un
   `> database.types.ts` machacaría la fuente de verdad con un blob JSON. El script
