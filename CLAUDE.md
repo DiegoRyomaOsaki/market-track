@@ -91,7 +91,22 @@ todos/                task tracker
 
 ## Git Workflow
 
-Base branch: main
+**Base branch: `dev`.** Todo PR de trabajo apunta a `dev`, nunca a `main`.
+
+- **`main` = producción.** Solo recibe PRs **desde `dev`**. Nada más.
+- **`dev` = integración.** Recibe PRs desde las ramas de trabajo.
+- **Nada de commits directos a `dev` ni a `main`** — todo pasa por PR.
+- Rama de trabajo: la que sugiere Linear (`diegopuerto0628/mar-N-...`), creada
+  **desde `dev`**. Se borra al mergear.
+
+> ⚠️ **Esta regla no la hace cumplir GitHub.** La protección de ramas y los
+> rulesets exigen **GitHub Pro** cuando el repositorio es privado, y este lo es
+> (verificado: la API responde 403 *"Upgrade to GitHub Pro or make this
+> repository public"*). Lo único que hay es el hook `.githooks/pre-push`, que
+> rechaza el push directo a `main` y `dev` — un guardarraíl, no un candado:
+> `--no-verify` lo salta y solo protege a quien lo tenga activado.
+>
+> **Activarlo en cada clon:** `git config core.hooksPath .githooks`
 
 ## Integrations
 
