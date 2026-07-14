@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // `allowJs` sin `checkJs`, y a propósito: el `eslint.config.mjs` de este
+    // paquete tiene que estar dentro de un proyecto de TypeScript o el project
+    // service de typescript-eslint no sabe parsearlo. Pero NO queremos
+    // type-checkearlo: arrastraría el config raíz, que usa `import.meta.dirname`
+    // y exigiría `@types/node` en un paquete que también consumirá React Native.
+    "allowJs": true,
+    "types": []
+  },
+  "include": ["src/**/*.ts", "*.mjs"]
+}
