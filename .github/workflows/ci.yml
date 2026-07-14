@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+# Privilegio mínimo POR DEFECTO: solo leer el código. Cualquier job que necesite
+# más tiene que pedirlo explícitamente, y entonces se ve en la revisión.
+permissions:
+  contents: read
+
+concurrency:
+  # Un push nuevo cancela la corrida vieja del mismo PR: nadie espera por un
+  # resultado que ya no importa. En dev/main no se cancela: ahí sí queremos el
+  # historial completo de qué commit pasó y cuál no.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Las acciones de terceros van ancladas al SHA del commit, nunca a un tag.
+# Un tag es MUTABLE: quien controle el repo de la acción puede reapuntar `v5` a
+# código nuevo, y ese código corre con nuestro token. El SHA no se puede
+# reescribir. El comentario `# vX` es solo para saber qué versión es al leerlo.
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  verificar:
+    name: Lint · tipos · tests · formato
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        # Sin `version:` a propósito: la lee de `packageManager` en package.json.
+        # Fijarla aquí crearía una segunda fuente de verdad que se desincroniza.
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Caché de turbo
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-
+
+      - run: pnpm turbo run lint typecheck test --cache-dir=.turbo
+
+      - name: Formato
+        # Separado y al final: que un espacio de más no tape un test roto.
+        run: pnpm format:check
+
+  aislamiento:
+    name: Aislamiento multi-tenant (RLS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # Job aparte porque levanta un Postgres real en Docker: cuesta minutos, no
+    # segundos. Corre EN PARALELO con `verificar` — no depende de él. Si esperase,
+    # un error de lint retrasaría el único job que verifica que ningún cliente ve
+    # los datos de otro, que es la promesa contractual del producto.
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Levantar Supabase local
+        # `pnpm exec`, NO la acción `supabase/setup-cli`: el CLI ya es una
+        # devDependency fijada en el lockfile. La acción instalaría una segunda
+        # versión distinta, y CI acabaría probando con un CLI que ningún
+        # desarrollador tiene. Una sola versión, la del lockfile.
+        #
+        # Solo db y auth: no hacen falta Studio, Realtime ni Storage para probar
+        # las políticas, y arrancarlos son minutos de CI regalados.
+        run: pnpm exec supabase start -x studio,realtime,storage-api,imgproxy,edge-runtime,logflare,vector,supavisor
+
+      - name: Aplicar migraciones y seed
+        # `db reset` es lo que garantiza que las políticas probadas son las de las
+        # MIGRACIONES, no las de un estado acumulado a mano.
+        run: pnpm exec supabase db reset
+
+      - name: Tests de aislamiento
+        run: pnpm turbo run test:db --cache-dir=.turbo
+
+      - name: Los tipos generados no se han quedado atrás
+        # Una migración que cambia el esquema sin regenerar los tipos deja a
+        # TypeScript mintiendo: compila en verde contra columnas que ya no existen.
+        # Aquí se detecta; en runtime, no.
+        run: |
+          pnpm db:types
+          if ! git diff --quiet -- packages/db/src/database.types.ts; then
+            echo "::error file=packages/db/src/database.types.ts::Los tipos no coinciden con las migraciones. Corre 'pnpm db:types' y commitea el resultado."
+            git --no-pager diff -- packages/db/src/database.types.ts
+            exit 1
+          fi
