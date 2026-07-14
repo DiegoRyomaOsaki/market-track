@@ -1,4 +1,5 @@
 import js from "@eslint/js";
+import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
@@ -26,6 +27,9 @@ export default tseslint.config(
   tseslint.configs.recommendedTypeChecked,
   {
     languageOptions: {
+      // Los archivos de la raíz y de `scripts/` corren en Node: sin esto,
+      // `no-undef` no conoce `console`, `process` ni `URL`.
+      globals: globals.node,
       parserOptions: {
         projectService: true,
         tsconfigRootDir: import.meta.dirname,
