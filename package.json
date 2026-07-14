@@ -6,6 +6,8 @@
     "node": ">=22.14.0"
   },
   "scripts": {
+    "bootstrap": "node scripts/bootstrap.mjs",
+    "prepare": "node scripts/bootstrap.mjs --hooks-only",
     "dev": "turbo run dev",
     "build": "turbo run build",
     "test": "turbo run test",
@@ -18,6 +20,7 @@
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.1.1",
     "eslint": "^10.7.0",
+    "globals": "^17.7.0",
     "prettier": "^3.9.5",
     "turbo": "^2.10.5",
     "typescript": "~6.0.3",

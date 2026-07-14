@@ -82,7 +82,8 @@ todos/                task tracker
 
 | Task | Command | |
 |---|---|---|
-| Install | `pnpm install` | |
+| **Equipo nuevo** | `pnpm bootstrap` | instala, activa los hooks y audita las herramientas. Ver `SETUP.md` |
+| Install | `pnpm install` | activa los hooks de paso (script `prepare`) |
 | Dev (todo) | `pnpm dev` | |
 | Build | `pnpm build` | |
 | Test | `pnpm test` | |

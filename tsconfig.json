@@ -10,5 +10,13 @@
   // se listara `eslint.config.mjs`, un `.ts` en la raíz pasaría el typecheck en
   // silencio (tsc no lo miraría) y a la vez rompería el lint con un error
   // críptico del project service. Las dos herramientas deben ver lo mismo.
-  "include": ["*.mjs", "*.mts", "*.ts", "*.cts", "*.js", "scripts/**/*.ts"]
+  "include": [
+    "*.mjs",
+    "*.mts",
+    "*.ts",
+    "*.cts",
+    "*.js",
+    "scripts/**/*.mjs",
+    "scripts/**/*.ts"
+  ]
 }
