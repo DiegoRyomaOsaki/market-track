@@ -40,7 +40,7 @@ entra al piloto).
 | Auth | Supabase Auth — contraseña + **2FA multicanal** (correo por defecto · SMS · WhatsApp, habilitables desde el panel) + **pase de acceso temporal** para el usuario que no recibe su OTP + RLS multi-tenant |
 | Web (`apps/web`) | Next.js 15 App Router — `/admin`, `/supervisor`, `/cliente` |
 | UI (web) | Tailwind CSS + shadcn/ui · MapLibre GL (mapas) · Tremor/Recharts (KPIs) |
-| Backend/DB | Supabase — Postgres 16 + PostGIS, PostgREST, Auth + RLS, Realtime, Edge Functions (Deno), pg_cron |
+| Backend/DB | Supabase — **Postgres 17** + PostGIS, PostgREST, Auth + RLS, Realtime, Edge Functions (Deno), pg_cron |
 | Validation | Zod (`packages/shared`) + tipos generados de Supabase (`packages/db`) |
 | Server state (web) | TanStack Query + supabase-js |
 | Photo storage | Cloudflare R2 (URLs firmadas, metadata en Postgres) |
@@ -200,6 +200,18 @@ Aún no hay `.env`. Al scaffoldear, crear `.env.example` por app. Previstas:
   es el diferenciador #1 del producto.
 - **Toda tabla nueva habilita RLS en su misma migración** con políticas por
   rol y `tenant_id` — una tabla sin RLS es legible por el mundo vía PostgREST.
+- **El GRANT es la puerta; la RLS es el portero.** Una tabla nueva **no le da ni
+  `SELECT` a `authenticated`**: sin el `grant`, la consulta muere con
+  `42501 permission denied` **antes** de que ninguna política se evalúe — y el
+  error parece de RLS sin serlo. Toda tabla nueva necesita **las dos cosas**.
+- **En una política RLS, las funciones van SIEMPRE envueltas en `(select ...)`.**
+  Sin el `select`, Postgres las evalúa **una vez por fila**; con él, una vez por
+  consulta. Medido sobre 200.000 filas: **42.480 ms contra 12,9 ms**. En una
+  tabla de 3 filas da igual; en `visita` es un dashboard o un timeout.
+- **La regla de acceso tiene un solo dueño: `app.perfil_efectivo()`.** No copiar
+  el rol ni el `tenant_id` a los claims del JWT: un claim es una copia rancia y
+  el mercaderista de un cliente que canceló seguiría dentro hasta que expire el
+  token. La función lo recalcula en cada consulta — la revocación es inmediata.
 - **`tenant` es el CLIENTE, no la marca.** Un cliente tiene varias marcas (Oster,
   Sharpie…) y el `sku` cuelga de la **marca**. El mercaderista es **exclusivo de
   un cliente** (`profile.tenant_id` único) y audita todas las marcas de ese
