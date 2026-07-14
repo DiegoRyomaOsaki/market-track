@@ -37,6 +37,19 @@ export default tseslint.config(
     },
     rules: {
       "@typescript-eslint/consistent-type-imports": "error",
+      // El guion bajo es la convención para "esto lo descarto a propósito", y el
+      // caso más común es quitar una clave de un objeto:
+      //   const { SECRETO: _omitido, ...resto } = env;
+      // Sin esto, la única forma de omitir una clave es escribir código peor.
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+          ignoreRestSiblings: true,
+        },
+      ],
     },
   },
 );
