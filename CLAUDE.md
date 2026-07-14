@@ -9,7 +9,7 @@ Wong). Tres frentes sobre una misma API y base de datos: app móvil
 levantamiento de quiebres/precios/exhibiciones), panel de gestión para
 supervisores/admins, y portal web para el cliente-marca (dashboard, mapa en
 vivo, alertas). Multi-tenant por diseño. Meta: piloto operativo con 1 cliente
-real (20–50 mercaderistas); la propuesta aceptada fija **septiembre 2026**.
+real (20–50 mercaderistas).
 
 **El alcance contractual es `docs/Propuesta Maracumango.pdf`** (aceptada el
 23 jun 2026) — ante cualquier discrepancia con los demás docs, manda la
@@ -18,6 +18,18 @@ propuesta. La documentación completa vive en `docs/` — empezar por
 (arquitectura y estructura del repo), `docs/03 - Modelo de Datos.md` (esquema)
 y `docs/04 - Módulos y Funcionalidades.md` (alcance MVP: solo lo marcado ✅
 entra al piloto).
+
+### Las fechas y el dinero NO guían el desarrollo
+
+**El proyecto se entrega cuando está terminado, no cuando toca.** El calendario
+(`docs/05`) y las cifras (`docs/06`, `docs/08`) son **información de guía para el
+developer** — nada más. No se usan para decidir el alcance, priorizar tickets,
+recortar calidad ni justificar una decisión técnica. La fecha puede variar mucho
+y eso está previsto.
+
+Lo que sí manda: **el alcance** (`docs/04`, solo lo ✅) y **el orden de
+dependencias técnicas** (abajo). Si un razonamiento empieza por "no da tiempo" o
+"para ese presupuesto", es el razonamiento el que está mal.
 
 ## Workflows & Agents
 
@@ -176,9 +188,9 @@ temporal — se revisa cuando typescript-eslint publique soporte para TS 7.
 
 ## Implementation Order
 
-Sigue `docs/05 - Fases de Desarrollo.md` (⚠️ pendiente de re-basar: la
-propuesta aceptada fija el piloto para **septiembre 2026**, docs/05 aún dice
-noviembre):
+El orden de abajo es una **cadena de dependencias técnicas**, no un calendario:
+no hay check-in geocercado sin auth, ni auth sin RLS, ni RLS sin modelo de
+datos. Por eso manda. Las fechas de `docs/05` no — ver arriba.
 
 1. **Fase 0** — scaffolding del monorepo (Turborepo + pnpm), proyecto Supabase,
    app Expo, app Next.js, CI. Wireframes.
