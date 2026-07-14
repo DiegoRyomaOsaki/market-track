@@ -166,6 +166,23 @@ auditoría, y una sesión iniciada con pase queda marcada como tal.
 
 ### Maestro comercial (pre-carga)
 
+> **La pre-carga llega como un Excel del cliente**, no tecleada a mano. Eso
+> impone dos cosas al esquema:
+>
+> **`codigo_externo`** en `marca`, `cadena`, `tienda` y `sku` — el código que usa
+> **el cliente** en su Excel. Es la **clave natural del upsert**: sin ella, la
+> segunda importación duplicaría todo el catálogo. `UNIQUE (tenant_id,
+> codigo_externo)`.
+>
+> **`activo`** explícito en esas mismas tablas. **La importación solo añade y
+> actualiza: nunca desactiva por ausencia.** Que un SKU desaparezca del Excel
+> nuevo no significa que lo hayan dado de baja — puede que copiaran mal una hoja
+> o dejaran un filtro puesto. Para dar de baja, el cliente pone `activo = NO` en
+> su archivo. Un despiste suyo no puede apagarle el catálogo y dejar a treinta
+> mercaderistas en campo con la lista de SKUs equivocada. (Es la regla de
+> "reconciliación destructiva" de `coding_practices.md`: distinguir *confirmado
+> como ausente* de *no llegó la información*.)
+
 **`cadena`** — retail (Plaza Vea, Tottus…). `id, tenant_id, nombre, tipo_tienda`.
 
 **`tienda`** — punto de venta físico.
@@ -285,7 +302,47 @@ que se venda en esa tienda** (derivado de `tienda_sku`).
 
 **`lote_vencimiento`** — control PVPS/FEFO. `visita_id, sku_id, lote, fecha_vencimiento, dias_para_vencer (derivado), alerta_color (verde/ámbar/rojo)`.
 
-### Evidencia y alertas
+### Importación del Excel del cliente
+
+El cliente manda su maestro (marcas, tiendas, SKUs, matriz tienda×SKU, precios,
+promos) en un Excel. **Sin una pre-carga correcta la app del mercaderista no
+sirve** (ver [ADR-0007](adr/0007-catalogos-y-tolerancias-precargados.md)): una
+matriz mal cargada hace que el mercaderista vea en su teléfono productos que esa
+tienda no vende, y el dato de toda la jornada sale inservible.
+
+**`importacion`** — cada intento de carga, con su resultado. Es la evidencia de
+*qué nos mandaron y qué hicimos con ello*.
+| Campo | Tipo | Nota |
+|---|---|---|
+| id | uuid PK | |
+| tenant_id | uuid FK | a qué cliente pertenece el maestro |
+| archivo_url_r2, archivo_hash | text | **el .xlsx original se conserva**: es la prueba de qué se recibió |
+| subido_por | uuid FK | |
+| estado | enum | `validando` \| `con_errores` \| `previsualizada` \| `aplicada` \| `cancelada` |
+| resumen | jsonb | `{creadas, actualizadas, con_error}` por entidad |
+| errores | jsonb | `[{hoja, fila, columna, valor, mensaje}]` — el informe fila por fila |
+| aplicada_at | timestamptz | null hasta que el admin confirma |
+
+**`mapeo_importacion`** — cómo se traducen las columnas del Excel *de ese
+cliente* a nuestros campos, guardado para no repetir el trabajo en cada carga.
+`id, tenant_id, nombre, mapeo (jsonb: hoja → entidad, columna → campo), creado_por`.
+
+**El flujo, y por qué es así:**
+
+1. El admin sube el `.xlsx`. **Se parsea en el navegador** (son cientos de filas;
+   no hace falta procesamiento en segundo plano).
+2. Si es la **plantilla nuestra**, el mapeo es implícito. Si es **el Excel del
+   cliente**, el admin mapea las columnas una vez y el mapeo queda guardado.
+3. **Vista previa obligatoria**: cuántas filas se crearían, cuántas se
+   actualizarían, y **cada error con su hoja, fila y motivo**. Nada se ha escrito
+   todavía.
+4. El admin confirma → una Edge Function **revalida en servidor** y aplica **en
+   una transacción**: upsert por `(tenant_id, codigo_externo)`. Si algo falla, no
+   se aplica nada — jamás un catálogo a medio cargar.
+
+> **La validación del navegador es UX, no seguridad.** El servidor revalida
+> siempre: el payload que llega a la Edge Function es entrada externa y se parsea
+> con Zod, como cualquier otra frontera.
 
 **`foto`** — toda imagen. `id, visita_id, levantamiento_id (null en la selfie de check-in y en las contingencias de visita), tenant_id, tipo, url_r2, hash, capturada_at, geo, subida_at`.
 

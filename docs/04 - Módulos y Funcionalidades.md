@@ -175,6 +175,8 @@ piloto y ya están reflejados en las tablas de abajo, en
 | Función | MVP |
 |---|---|
 | Alta de **clientes**, sus **marcas**, cadenas, tiendas, SKUs, precios, promos (pre-carga) | ✅ |
+| **Importación del Excel del cliente** — plantilla propia, vista previa con errores fila por fila, y aplicación transaccional (todo o nada) | ✅ |
+| **Mapeador de columnas** — el cliente sube SU Excel y el admin mapea sus columnas una vez; el mapeo queda guardado | ✅ ⚠️ **alcance nuevo, fuera de la propuesta** |
 | **Baja de un cliente** → sus mercaderistas pierden el acceso automáticamente (y la réplica local de sus teléfonos se purga al sincronizar) | ✅ |
 | Diseño de **ruteros** y asignación a mercaderistas | ✅ |
 | Asignación de tareas y seguimiento en tiempo real | ✅ |
