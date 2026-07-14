@@ -25,6 +25,12 @@
     "test": {
       "dependsOn": ["^build"]
     },
+    "test:db": {
+      "dependsOn": ["^build"],
+      // Habla con el Postgres local: no se cachea, porque el resultado depende de
+      // un estado que turbo no ve (el esquema y el seed de la base).
+      "cache": false
+    },
     "//#lint": {
       "inputs": [
         "eslint.config.mjs",

@@ -86,7 +86,8 @@ todos/                task tracker
 | Install | `pnpm install` | activa los hooks de paso (script `prepare`) |
 | Dev (todo) | `pnpm dev` | |
 | Build | `pnpm build` | |
-| Test | `pnpm test` | Vitest. Tests co-locados: `*.test.ts` junto al código |
+| Test | `pnpm test` | Vitest. Tests co-locados: `*.test.ts` junto al código. **No necesita Docker** |
+| **Aislamiento (RLS)** | `pnpm turbo run test:db` | `packages/db/test/` — **exige `supabase start`** |
 | **Lint (todo)** | `pnpm turbo run lint` | raíz + workspaces |
 | **Type check (todo)** | `pnpm turbo run typecheck` | raíz + workspaces |
 | Lint (solo raíz) | `pnpm lint` | `eslint .` |
@@ -94,7 +95,7 @@ todos/                task tracker
 | Format | `pnpm format` | escribe; `pnpm format:check` solo verifica |
 | Dev web | `pnpm --filter web dev` | *(pendiente: apps/web)* |
 | Dev mobile | `pnpm --filter mobile start` | *(pendiente: apps/mobile)* |
-| DB local | `supabase start` / `supabase db reset` | *(pendiente: Supabase)* |
+| DB local | `supabase start` / `supabase db reset` | |
 | Nueva migración | `supabase migration new <nombre>` | *(pendiente: Supabase)* |
 | Tipos DB | `pnpm db:types` | regenera tras cada migración |
 
