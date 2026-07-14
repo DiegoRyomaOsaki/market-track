@@ -1,0 +1,37 @@
+#!/bin/sh
+# Rechaza el push directo a las ramas protegidas: todo entra por PR.
+#
+# Por qué existe este archivo: GitHub NO puede hacer cumplir esta regla en este
+# repositorio. La protección de ramas y los rulesets exigen GitHub Pro cuando el
+# repo es privado, y este lo es. Este hook es la red que queda.
+#
+# Es un guardarraíl, no un candado: `git push --no-verify` lo salta, y solo
+# protege a quien lo tenga activado. La única protección real es del lado del
+# servidor (GitHub Pro, ~4 USD/mes).
+#
+# Activar en cada clon (una vez):
+#   git config core.hooksPath .githooks
+
+RAMAS_PROTEGIDAS="main dev"
+
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+    rama="${remote_ref#refs/heads/}"
+    for protegida in $RAMAS_PROTEGIDAS; do
+        if [ "$rama" = "$protegida" ]; then
+            echo ""
+            echo "  ✗ Push directo a '$rama' rechazado."
+            echo ""
+            echo "    'main' es producción y solo recibe PRs desde 'dev'."
+            echo "    'dev' es integración y solo recibe PRs desde ramas de trabajo."
+            echo ""
+            echo "    Haz una rama y abre un PR:"
+            echo "      git checkout -b <rama> dev"
+            echo "      git push -u origin <rama>"
+            echo "      gh pr create --base dev"
+            echo ""
+            exit 1
+        fi
+    done
+done
+
+exit 0
