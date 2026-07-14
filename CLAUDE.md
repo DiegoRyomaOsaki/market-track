@@ -96,7 +96,7 @@ todos/                task tracker
 | Dev mobile | `pnpm --filter mobile start` | *(pendiente: apps/mobile)* |
 | DB local | `supabase start` / `supabase db reset` | *(pendiente: Supabase)* |
 | Nueva migración | `supabase migration new <nombre>` | *(pendiente: Supabase)* |
-| Tipos DB | `supabase gen types typescript --local > packages/db/src/database.types.ts` | *(pendiente: packages/db)* |
+| Tipos DB | `pnpm db:types` | regenera tras cada migración |
 
 **Prettier no toca el Markdown** (`.prettierignore`): los docs son la fuente de
 verdad contractual del proyecto, los leen humanos y no se compilan. Prettier
@@ -255,6 +255,12 @@ Aún no hay `.env`. Al scaffoldear, crear `.env.example` por app. Previstas:
   el flujo sin el bypass incumple la propuesta aceptada.
 - **Campos derivados** (quiebre, diferencia, semáforo, KPIs) se calculan en
   vistas/triggers/Edge Functions, una sola vez — no en el código de las apps.
+- **Los tipos de BD se regeneran con `pnpm db:types`, nunca con una redirección.**
+  Si Docker está apagado, `supabase gen types` **escribe su error en stdout**: un
+  `> database.types.ts` machacaría la fuente de verdad con un blob JSON. El script
+  valida la salida antes de escribir. Y `packages/db/src/database.types.ts` está
+  en `.prettierignore` **a propósito**: si Prettier lo reformatea, deja de
+  coincidir con la salida del generador y el check de CI se pone rojo para siempre.
 - **El 2FA nunca se desactiva por usuario.** Al mercaderista que no recibe su
   OTP se le emite un **pase de acceso temporal** (un solo uso, 15 min, motivo
   obligatorio, auditado). Un interruptor de "sin 2FA para este usuario" se queda
