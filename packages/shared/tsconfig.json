@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Igual que en packages/db: `allowJs` sin `checkJs` para que el project
+    // service de typescript-eslint pueda parsear el eslint.config.mjs, sin
+    // arrastrar @types/node a un paquete que también consumirá React Native.
+    "allowJs": true,
+    "types": []
+  },
+  "include": ["src/**/*.ts", "*.mjs"]
+}
