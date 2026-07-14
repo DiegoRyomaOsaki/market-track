@@ -1,0 +1,5 @@
+# El repositorio se normaliza a LF. Sin esto, `core.autocrlf` es un ajuste POR
+# MÁQUINA y no viaja con el repo: un contribuidor en Windows con autocrlf=false
+# commitea blobs con CRLF, y `prettier --check` se pone en rojo en el CI de Linux
+# con un error que no menciona los finales de línea por ningún lado.
+* text=auto eol=lf
