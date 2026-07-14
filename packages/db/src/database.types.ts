@@ -34,6 +34,654 @@ export type Database = {
   }
   public: {
     Tables: {
+      alerta: {
+        Row: {
+          canal: Database["public"]["Enums"]["canal_alerta"]
+          creado_at: string
+          estado: Database["public"]["Enums"]["estado_alerta"]
+          id: string
+          marca_id: string | null
+          payload: Json
+          severidad: Database["public"]["Enums"]["severidad_alerta"]
+          tenant_id: string
+          tipo: Database["public"]["Enums"]["tipo_alerta"]
+          visita_id: string | null
+        }
+        Insert: {
+          canal?: Database["public"]["Enums"]["canal_alerta"]
+          creado_at?: string
+          estado?: Database["public"]["Enums"]["estado_alerta"]
+          id?: string
+          marca_id?: string | null
+          payload?: Json
+          severidad?: Database["public"]["Enums"]["severidad_alerta"]
+          tenant_id: string
+          tipo: Database["public"]["Enums"]["tipo_alerta"]
+          visita_id?: string | null
+        }
+        Update: {
+          canal?: Database["public"]["Enums"]["canal_alerta"]
+          creado_at?: string
+          estado?: Database["public"]["Enums"]["estado_alerta"]
+          id?: string
+          marca_id?: string | null
+          payload?: Json
+          severidad?: Database["public"]["Enums"]["severidad_alerta"]
+          tenant_id?: string
+          tipo?: Database["public"]["Enums"]["tipo_alerta"]
+          visita_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alerta_marca_fk"
+            columns: ["marca_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "marca"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "alerta_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "alerta_visita_fk"
+            columns: ["visita_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "visita"
+            referencedColumns: ["id", "tenant_id"]
+          },
+        ]
+      }
+      cadena: {
+        Row: {
+          activo: boolean
+          codigo_externo: string | null
+          creado_at: string
+          id: string
+          nombre: string
+          tenant_id: string
+          tipo_tienda: Database["public"]["Enums"]["tipo_tienda"] | null
+        }
+        Insert: {
+          activo?: boolean
+          codigo_externo?: string | null
+          creado_at?: string
+          id?: string
+          nombre: string
+          tenant_id: string
+          tipo_tienda?: Database["public"]["Enums"]["tipo_tienda"] | null
+        }
+        Update: {
+          activo?: boolean
+          codigo_externo?: string | null
+          creado_at?: string
+          id?: string
+          nombre?: string
+          tenant_id?: string
+          tipo_tienda?: Database["public"]["Enums"]["tipo_tienda"] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cadena_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      configuracion_plataforma: {
+        Row: {
+          actualizado_at: string
+          id: boolean
+          otp_canales_habilitados: Database["public"]["Enums"]["canal_otp"][]
+          otp_requerido: boolean
+        }
+        Insert: {
+          actualizado_at?: string
+          id?: boolean
+          otp_canales_habilitados?: Database["public"]["Enums"]["canal_otp"][]
+          otp_requerido?: boolean
+        }
+        Update: {
+          actualizado_at?: string
+          id?: boolean
+          otp_canales_habilitados?: Database["public"]["Enums"]["canal_otp"][]
+          otp_requerido?: boolean
+        }
+        Relationships: []
+      }
+      contingencia: {
+        Row: {
+          comentario: string | null
+          creado_at: string
+          foto_id: string | null
+          id: string
+          levantamiento_id: string | null
+          motivo: string
+          paso: Database["public"]["Enums"]["paso_levantamiento"]
+          registrada_at: string
+          tenant_id: string
+          visita_id: string
+        }
+        Insert: {
+          comentario?: string | null
+          creado_at?: string
+          foto_id?: string | null
+          id?: string
+          levantamiento_id?: string | null
+          motivo: string
+          paso: Database["public"]["Enums"]["paso_levantamiento"]
+          registrada_at: string
+          tenant_id: string
+          visita_id: string
+        }
+        Update: {
+          comentario?: string | null
+          creado_at?: string
+          foto_id?: string | null
+          id?: string
+          levantamiento_id?: string | null
+          motivo?: string
+          paso?: Database["public"]["Enums"]["paso_levantamiento"]
+          registrada_at?: string
+          tenant_id?: string
+          visita_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cont_foto_fk"
+            columns: ["foto_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "foto"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "cont_lev_fk"
+            columns: ["levantamiento_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "levantamiento"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "cont_visita_fk"
+            columns: ["visita_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "visita"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "contingencia_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exhibicion: {
+        Row: {
+          completa: boolean | null
+          creado_at: string
+          exhibicion_negociada_id: string | null
+          foto_id: string | null
+          id: string
+          instalada: boolean | null
+          levantamiento_id: string
+          tenant_id: string
+          tipo_adicional: Database["public"]["Enums"]["tipo_exhibicion"] | null
+          unidades: number | null
+          vigente: boolean | null
+        }
+        Insert: {
+          completa?: boolean | null
+          creado_at?: string
+          exhibicion_negociada_id?: string | null
+          foto_id?: string | null
+          id?: string
+          instalada?: boolean | null
+          levantamiento_id: string
+          tenant_id: string
+          tipo_adicional?: Database["public"]["Enums"]["tipo_exhibicion"] | null
+          unidades?: number | null
+          vigente?: boolean | null
+        }
+        Update: {
+          completa?: boolean | null
+          creado_at?: string
+          exhibicion_negociada_id?: string | null
+          foto_id?: string | null
+          id?: string
+          instalada?: boolean | null
+          levantamiento_id?: string
+          tenant_id?: string
+          tipo_adicional?: Database["public"]["Enums"]["tipo_exhibicion"] | null
+          unidades?: number | null
+          vigente?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exh_foto_fk"
+            columns: ["foto_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "foto"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "exh_lev_fk"
+            columns: ["levantamiento_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "levantamiento"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "exh_neg_ref_fk"
+            columns: ["exhibicion_negociada_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "exhibicion_negociada"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "exhibicion_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exhibicion_negociada: {
+        Row: {
+          cantidad_sugerida: number | null
+          creado_at: string
+          fecha_fin: string
+          fecha_inicio: string
+          id: string
+          marca_id: string
+          sku_ids: string[]
+          tenant_id: string
+          tienda_id: string
+          tipo: Database["public"]["Enums"]["tipo_exhibicion"]
+        }
+        Insert: {
+          cantidad_sugerida?: number | null
+          creado_at?: string
+          fecha_fin: string
+          fecha_inicio: string
+          id?: string
+          marca_id: string
+          sku_ids?: string[]
+          tenant_id: string
+          tienda_id: string
+          tipo: Database["public"]["Enums"]["tipo_exhibicion"]
+        }
+        Update: {
+          cantidad_sugerida?: number | null
+          creado_at?: string
+          fecha_fin?: string
+          fecha_inicio?: string
+          id?: string
+          marca_id?: string
+          sku_ids?: string[]
+          tenant_id?: string
+          tienda_id?: string
+          tipo?: Database["public"]["Enums"]["tipo_exhibicion"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exh_neg_marca_fk"
+            columns: ["marca_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "marca"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "exh_neg_tienda_fk"
+            columns: ["tienda_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tienda"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "exhibicion_negociada_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      foto: {
+        Row: {
+          capturada_at: string
+          creado_at: string
+          geo: unknown
+          hash: string | null
+          id: string
+          levantamiento_id: string | null
+          subida_at: string | null
+          tenant_id: string
+          tipo: Database["public"]["Enums"]["tipo_foto"]
+          url_r2: string | null
+          visita_id: string
+        }
+        Insert: {
+          capturada_at: string
+          creado_at?: string
+          geo?: unknown
+          hash?: string | null
+          id?: string
+          levantamiento_id?: string | null
+          subida_at?: string | null
+          tenant_id: string
+          tipo: Database["public"]["Enums"]["tipo_foto"]
+          url_r2?: string | null
+          visita_id: string
+        }
+        Update: {
+          capturada_at?: string
+          creado_at?: string
+          geo?: unknown
+          hash?: string | null
+          id?: string
+          levantamiento_id?: string | null
+          subida_at?: string | null
+          tenant_id?: string
+          tipo?: Database["public"]["Enums"]["tipo_foto"]
+          url_r2?: string | null
+          visita_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "foto_lev_fk"
+            columns: ["levantamiento_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "levantamiento"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "foto_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "foto_visita_fk"
+            columns: ["visita_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "visita"
+            referencedColumns: ["id", "tenant_id"]
+          },
+        ]
+      }
+      importacion: {
+        Row: {
+          aplicada_at: string | null
+          archivo_hash: string | null
+          archivo_url_r2: string | null
+          creado_at: string
+          errores: Json
+          estado: Database["public"]["Enums"]["estado_importacion"]
+          id: string
+          resumen: Json
+          subido_por: string
+          tenant_id: string
+        }
+        Insert: {
+          aplicada_at?: string | null
+          archivo_hash?: string | null
+          archivo_url_r2?: string | null
+          creado_at?: string
+          errores?: Json
+          estado?: Database["public"]["Enums"]["estado_importacion"]
+          id?: string
+          resumen?: Json
+          subido_por: string
+          tenant_id: string
+        }
+        Update: {
+          aplicada_at?: string | null
+          archivo_hash?: string | null
+          archivo_url_r2?: string | null
+          creado_at?: string
+          errores?: Json
+          estado?: Database["public"]["Enums"]["estado_importacion"]
+          id?: string
+          resumen?: Json
+          subido_por?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "importacion_subido_por_fkey"
+            columns: ["subido_por"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "importacion_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      levantamiento: {
+        Row: {
+          creado_at: string
+          estado: Database["public"]["Enums"]["estado_levantamiento"]
+          foto_antes_id: string | null
+          foto_despues_id: string | null
+          id: string
+          marca_id: string
+          sos_foto_id: string | null
+          sos_frentes_competencia: Json
+          sos_frentes_propios: number | null
+          tenant_id: string
+          visita_id: string
+        }
+        Insert: {
+          creado_at?: string
+          estado?: Database["public"]["Enums"]["estado_levantamiento"]
+          foto_antes_id?: string | null
+          foto_despues_id?: string | null
+          id?: string
+          marca_id: string
+          sos_foto_id?: string | null
+          sos_frentes_competencia?: Json
+          sos_frentes_propios?: number | null
+          tenant_id: string
+          visita_id: string
+        }
+        Update: {
+          creado_at?: string
+          estado?: Database["public"]["Enums"]["estado_levantamiento"]
+          foto_antes_id?: string | null
+          foto_despues_id?: string | null
+          id?: string
+          marca_id?: string
+          sos_foto_id?: string | null
+          sos_frentes_competencia?: Json
+          sos_frentes_propios?: number | null
+          tenant_id?: string
+          visita_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lev_foto_antes_fk"
+            columns: ["foto_antes_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "foto"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "lev_foto_despues_fk"
+            columns: ["foto_despues_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "foto"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "lev_marca_fk"
+            columns: ["marca_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "marca"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "lev_sos_foto_fk"
+            columns: ["sos_foto_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "foto"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "lev_visita_fk"
+            columns: ["visita_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "visita"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "levantamiento_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      levantamiento_sku: {
+        Row: {
+          creado_at: string
+          diferencia: boolean | null
+          frentes_competencia: Json
+          frentes_propios: number | null
+          hay_promo: boolean | null
+          id: string
+          levantamiento_id: string
+          precio_registrado: number | null
+          promo_comunicada: boolean | null
+          quiebre: boolean | null
+          sku_id: string
+          sos_foto_id: string | null
+          stock_piso: number | null
+          stock_sistema: number | null
+          tenant_id: string
+        }
+        Insert: {
+          creado_at?: string
+          diferencia?: boolean | null
+          frentes_competencia?: Json
+          frentes_propios?: number | null
+          hay_promo?: boolean | null
+          id?: string
+          levantamiento_id: string
+          precio_registrado?: number | null
+          promo_comunicada?: boolean | null
+          quiebre?: boolean | null
+          sku_id: string
+          sos_foto_id?: string | null
+          stock_piso?: number | null
+          stock_sistema?: number | null
+          tenant_id: string
+        }
+        Update: {
+          creado_at?: string
+          diferencia?: boolean | null
+          frentes_competencia?: Json
+          frentes_propios?: number | null
+          hay_promo?: boolean | null
+          id?: string
+          levantamiento_id?: string
+          precio_registrado?: number | null
+          promo_comunicada?: boolean | null
+          quiebre?: boolean | null
+          sku_id?: string
+          sos_foto_id?: string | null
+          stock_piso?: number | null
+          stock_sistema?: number | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lev_sku_foto_fk"
+            columns: ["sos_foto_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "foto"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "lev_sku_lev_fk"
+            columns: ["levantamiento_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "levantamiento"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "lev_sku_sku_fk"
+            columns: ["sku_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "sku"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "levantamiento_sku_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mapeo_importacion: {
+        Row: {
+          creado_at: string
+          creado_por: string
+          id: string
+          mapeo: Json
+          nombre: string
+          tenant_id: string
+        }
+        Insert: {
+          creado_at?: string
+          creado_por: string
+          id?: string
+          mapeo: Json
+          nombre: string
+          tenant_id: string
+        }
+        Update: {
+          creado_at?: string
+          creado_por?: string
+          id?: string
+          mapeo?: Json
+          nombre?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mapeo_importacion_creado_por_fkey"
+            columns: ["creado_por"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mapeo_importacion_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       marca: {
         Row: {
           activo: boolean
@@ -72,6 +720,112 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "tenant"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      pase_acceso_temporal: {
+        Row: {
+          codigo_hash: string
+          expira_at: string
+          generado_at: string
+          generado_por: string
+          id: string
+          motivo: string
+          profile_id: string
+          revocado_at: string | null
+          usado_at: string | null
+        }
+        Insert: {
+          codigo_hash: string
+          expira_at?: string
+          generado_at?: string
+          generado_por: string
+          id?: string
+          motivo: string
+          profile_id: string
+          revocado_at?: string | null
+          usado_at?: string | null
+        }
+        Update: {
+          codigo_hash?: string
+          expira_at?: string
+          generado_at?: string
+          generado_por?: string
+          id?: string
+          motivo?: string
+          profile_id?: string
+          revocado_at?: string | null
+          usado_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pase_acceso_temporal_generado_por_fkey"
+            columns: ["generado_por"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pase_acceso_temporal_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      precio_regular: {
+        Row: {
+          cadena_id: string
+          creado_at: string
+          id: string
+          precio: number
+          sku_id: string
+          tenant_id: string
+          tipo_tienda: Database["public"]["Enums"]["tipo_tienda"] | null
+          vigente_desde: string
+        }
+        Insert: {
+          cadena_id: string
+          creado_at?: string
+          id?: string
+          precio: number
+          sku_id: string
+          tenant_id: string
+          tipo_tienda?: Database["public"]["Enums"]["tipo_tienda"] | null
+          vigente_desde?: string
+        }
+        Update: {
+          cadena_id?: string
+          creado_at?: string
+          id?: string
+          precio?: number
+          sku_id?: string
+          tenant_id?: string
+          tipo_tienda?: Database["public"]["Enums"]["tipo_tienda"] | null
+          vigente_desde?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "precio_cadena_fk"
+            columns: ["cadena_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "cadena"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "precio_regular_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "precio_sku_fk"
+            columns: ["sku_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "sku"
+            referencedColumns: ["id", "tenant_id"]
           },
         ]
       }
@@ -135,6 +889,202 @@ export type Database = {
           },
         ]
       }
+      promocion: {
+        Row: {
+          clusters: string[]
+          comunicada: boolean
+          creado_at: string
+          fecha_fin: string
+          fecha_inicio: string
+          id: string
+          precio_promo: number
+          sku_id: string
+          tenant_id: string
+        }
+        Insert: {
+          clusters?: string[]
+          comunicada?: boolean
+          creado_at?: string
+          fecha_fin: string
+          fecha_inicio: string
+          id?: string
+          precio_promo: number
+          sku_id: string
+          tenant_id: string
+        }
+        Update: {
+          clusters?: string[]
+          comunicada?: boolean
+          creado_at?: string
+          fecha_fin?: string
+          fecha_inicio?: string
+          id?: string
+          precio_promo?: number
+          sku_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "promocion_sku_fk"
+            columns: ["sku_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "sku"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "promocion_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rutero: {
+        Row: {
+          creado_at: string
+          estado: Database["public"]["Enums"]["estado_rutero"]
+          fecha: string
+          id: string
+          mercaderista_id: string
+          tenant_id: string
+        }
+        Insert: {
+          creado_at?: string
+          estado?: Database["public"]["Enums"]["estado_rutero"]
+          fecha: string
+          id?: string
+          mercaderista_id: string
+          tenant_id: string
+        }
+        Update: {
+          creado_at?: string
+          estado?: Database["public"]["Enums"]["estado_rutero"]
+          fecha?: string
+          id?: string
+          mercaderista_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rutero_mercaderista_id_fkey"
+            columns: ["mercaderista_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rutero_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rutero_parada: {
+        Row: {
+          estado: Database["public"]["Enums"]["estado_parada"]
+          id: string
+          orden: number
+          rutero_id: string
+          tenant_id: string
+          tienda_id: string
+        }
+        Insert: {
+          estado?: Database["public"]["Enums"]["estado_parada"]
+          id?: string
+          orden: number
+          rutero_id: string
+          tenant_id: string
+          tienda_id: string
+        }
+        Update: {
+          estado?: Database["public"]["Enums"]["estado_parada"]
+          id?: string
+          orden?: number
+          rutero_id?: string
+          tenant_id?: string
+          tienda_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parada_rutero_fk"
+            columns: ["rutero_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "rutero"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "parada_tienda_fk"
+            columns: ["tienda_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tienda"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "rutero_parada_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sku: {
+        Row: {
+          activo: boolean
+          codigo: string
+          codigo_barras: string | null
+          codigo_externo: string | null
+          creado_at: string
+          id: string
+          marca_id: string
+          nombre: string
+          presentacion: string | null
+          tenant_id: string
+        }
+        Insert: {
+          activo?: boolean
+          codigo: string
+          codigo_barras?: string | null
+          codigo_externo?: string | null
+          creado_at?: string
+          id?: string
+          marca_id: string
+          nombre: string
+          presentacion?: string | null
+          tenant_id: string
+        }
+        Update: {
+          activo?: boolean
+          codigo?: string
+          codigo_barras?: string | null
+          codigo_externo?: string | null
+          creado_at?: string
+          id?: string
+          marca_id?: string
+          nombre?: string
+          presentacion?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sku_marca_fk"
+            columns: ["marca_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "marca"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "sku_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant: {
         Row: {
           activo: boolean
@@ -156,6 +1106,196 @@ export type Database = {
         }
         Relationships: []
       }
+      tienda: {
+        Row: {
+          activo: boolean
+          cadena_id: string
+          cluster: string | null
+          codigo_externo: string | null
+          creado_at: string
+          direccion: string | null
+          id: string
+          nombre: string
+          radio_geocerca_m: number
+          tenant_id: string
+          ubicacion: unknown
+        }
+        Insert: {
+          activo?: boolean
+          cadena_id: string
+          cluster?: string | null
+          codigo_externo?: string | null
+          creado_at?: string
+          direccion?: string | null
+          id?: string
+          nombre: string
+          radio_geocerca_m?: number
+          tenant_id: string
+          ubicacion?: unknown
+        }
+        Update: {
+          activo?: boolean
+          cadena_id?: string
+          cluster?: string | null
+          codigo_externo?: string | null
+          creado_at?: string
+          direccion?: string | null
+          id?: string
+          nombre?: string
+          radio_geocerca_m?: number
+          tenant_id?: string
+          ubicacion?: unknown
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tienda_cadena_fk"
+            columns: ["cadena_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "cadena"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "tienda_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tienda_sku: {
+        Row: {
+          activo: boolean
+          sku_id: string
+          tenant_id: string
+          tienda_id: string
+        }
+        Insert: {
+          activo?: boolean
+          sku_id: string
+          tenant_id: string
+          tienda_id: string
+        }
+        Update: {
+          activo?: boolean
+          sku_id?: string
+          tenant_id?: string
+          tienda_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tienda_sku_sku_fk"
+            columns: ["sku_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "sku"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "tienda_sku_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tienda_sku_tienda_fk"
+            columns: ["tienda_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tienda"
+            referencedColumns: ["id", "tenant_id"]
+          },
+        ]
+      }
+      visita: {
+        Row: {
+          bateria_inicio_pct: number | null
+          bitacora: string | null
+          check_in_at: string
+          check_in_geo: unknown
+          check_out_at: string | null
+          check_out_geo: unknown
+          creado_at: string
+          estado: Database["public"]["Enums"]["estado_visita"]
+          id: string
+          mercaderista_id: string
+          rutero_parada_id: string
+          selfie_foto_id: string | null
+          tenant_id: string
+          tiempo_traslado_min: number | null
+          tienda_id: string
+        }
+        Insert: {
+          bateria_inicio_pct?: number | null
+          bitacora?: string | null
+          check_in_at?: string
+          check_in_geo?: unknown
+          check_out_at?: string | null
+          check_out_geo?: unknown
+          creado_at?: string
+          estado?: Database["public"]["Enums"]["estado_visita"]
+          id?: string
+          mercaderista_id: string
+          rutero_parada_id: string
+          selfie_foto_id?: string | null
+          tenant_id: string
+          tiempo_traslado_min?: number | null
+          tienda_id: string
+        }
+        Update: {
+          bateria_inicio_pct?: number | null
+          bitacora?: string | null
+          check_in_at?: string
+          check_in_geo?: unknown
+          check_out_at?: string | null
+          check_out_geo?: unknown
+          creado_at?: string
+          estado?: Database["public"]["Enums"]["estado_visita"]
+          id?: string
+          mercaderista_id?: string
+          rutero_parada_id?: string
+          selfie_foto_id?: string | null
+          tenant_id?: string
+          tiempo_traslado_min?: number | null
+          tienda_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "visita_mercaderista_id_fkey"
+            columns: ["mercaderista_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visita_parada_fk"
+            columns: ["rutero_parada_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "rutero_parada"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "visita_selfie_fk"
+            columns: ["selfie_foto_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "foto"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "visita_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visita_tienda_fk"
+            columns: ["tienda_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tienda"
+            referencedColumns: ["id", "tenant_id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -164,7 +1304,47 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
+      canal_alerta: "dashboard" | "email" | "whatsapp"
+      canal_otp: "correo" | "sms" | "whatsapp"
+      estado_alerta: "nueva" | "vista" | "resuelta"
+      estado_importacion:
+        | "validando"
+        | "con_errores"
+        | "previsualizada"
+        | "aplicada"
+        | "cancelada"
+      estado_levantamiento: "pendiente" | "en_curso" | "completado" | "omitido"
+      estado_parada: "pendiente" | "en_curso" | "completada"
+      estado_rutero: "borrador" | "publicado" | "en_curso" | "completado"
+      estado_visita: "en_curso" | "completada" | "bloqueada"
+      paso_levantamiento:
+        | "checkin"
+        | "foto_antes"
+        | "share_of_shelf"
+        | "quiebres"
+        | "precios"
+        | "exhibiciones"
+        | "foto_despues"
+        | "checkout"
       rol_usuario: "admin" | "supervisor" | "mercaderista" | "cliente"
+      severidad_alerta: "info" | "alta" | "critica"
+      tipo_alerta:
+        | "quiebre"
+        | "diferencia_stock"
+        | "desviacion_precio"
+        | "promo_no_activa"
+        | "exhibicion_incompleta"
+        | "contingencia"
+      tipo_exhibicion: "cabecera" | "isla" | "ruma" | "pop" | "adicional"
+      tipo_foto:
+        | "selfie"
+        | "antes"
+        | "despues"
+        | "sos"
+        | "exhibicion"
+        | "precio"
+        | "contingencia"
+      tipo_tienda: "hiper" | "super" | "express"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -295,7 +1475,51 @@ export const Constants = {
   },
   public: {
     Enums: {
+      canal_alerta: ["dashboard", "email", "whatsapp"],
+      canal_otp: ["correo", "sms", "whatsapp"],
+      estado_alerta: ["nueva", "vista", "resuelta"],
+      estado_importacion: [
+        "validando",
+        "con_errores",
+        "previsualizada",
+        "aplicada",
+        "cancelada",
+      ],
+      estado_levantamiento: ["pendiente", "en_curso", "completado", "omitido"],
+      estado_parada: ["pendiente", "en_curso", "completada"],
+      estado_rutero: ["borrador", "publicado", "en_curso", "completado"],
+      estado_visita: ["en_curso", "completada", "bloqueada"],
+      paso_levantamiento: [
+        "checkin",
+        "foto_antes",
+        "share_of_shelf",
+        "quiebres",
+        "precios",
+        "exhibiciones",
+        "foto_despues",
+        "checkout",
+      ],
       rol_usuario: ["admin", "supervisor", "mercaderista", "cliente"],
+      severidad_alerta: ["info", "alta", "critica"],
+      tipo_alerta: [
+        "quiebre",
+        "diferencia_stock",
+        "desviacion_precio",
+        "promo_no_activa",
+        "exhibicion_incompleta",
+        "contingencia",
+      ],
+      tipo_exhibicion: ["cabecera", "isla", "ruma", "pop", "adicional"],
+      tipo_foto: [
+        "selfie",
+        "antes",
+        "despues",
+        "sos",
+        "exhibicion",
+        "precio",
+        "contingencia",
+      ],
+      tipo_tienda: ["hiper", "super", "express"],
     },
   },
 } as const
