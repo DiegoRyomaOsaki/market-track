@@ -67,6 +67,7 @@ graph TB
   - El **mercaderista** solo ve su rutero y las tiendas/SKUs asignados.
   - El **supervisor** ve sus rutas; el **admin** de la empresa de outsourcing ve todo dentro de la organización.
 - **Roles** (en `auth` + tabla `profiles.role`): `admin`, `supervisor`, `mercaderista`, `cliente`.
+- ⚠️ **RLS protege a PostgREST (web), no necesariamente al móvil.** Un motor de sincronización como PowerSync se conecta a Postgres con **sus propias credenciales** y aplica **sus** *sync rules*: no ejecuta las políticas RLS. El aislamiento multi-tenant del móvil vive, por tanto, en una **segunda superficie de seguridad**. Ver [ADR-0001](adr/0001-motor-offline-dedicado.md) — es lo que el spike del motor offline debe cerrar.
 - **Autenticación:** usuario/contraseña + **segundo factor**. El **correo** es el canal por defecto (compromiso de la propuesta aceptada); **SMS y WhatsApp** se suman como canales habilitables desde el panel (`configuracion_plataforma.otp_canales_habilitados`).
 - **Acceso de emergencia:** el usuario que no recibe su OTP por ningún canal se desbloquea con un **pase de acceso temporal** emitido desde el panel — código de un solo uso, 15 minutos de vida, motivo obligatorio y auditoría de quién lo emitió. No existe un interruptor de "desactivar el 2FA a este usuario": un permiso así se queda encendido para siempre.
 - Las **fotos en R2** se sirven con **URLs firmadas** de expiración corta (no públicas), generadas por Edge Function validando el rol.
@@ -169,17 +170,21 @@ market-track/                (Turborepo)
 
 ---
 
-## Decisiones de arquitectura (ADR resumido)
+## Decisiones de arquitectura
 
-| # | Decisión | Razón |
+Cada decisión vive en su propio ADR, con el contexto, las alternativas
+descartadas y las consecuencias. **La fuente de verdad es el registro**
+([`docs/adr/`](adr/README.md)); esta tabla es solo un índice.
+
+| ADR | Decisión | Estado |
 |---|---|---|
-| A1 | Offline-first con motor dedicado (PowerSync) | El sync a mano es el mayor riesgo de cronograma y bugs |
-| A2 | Multi-tenant por RLS, no por BD separada | Un solo dev no puede operar N bases; RLS escala y aísla |
-| A3 | Fotos en R2, metadata en Postgres | Costo de storage/egreso + consultas relacionales |
-| A4 | Una web por rol, no apps separadas | Velocidad de MVP; separar es prematuro |
-| A5 | IA de SOS fuera del MVP | Reduce riesgo y costo del piloto |
-| A6 | Watermark en captura, no en subida | Validez de evidencia con subida diferida (offline) |
-| A7 | Tolerancias y catálogos pre-cargados por marca | El documento lo exige; configurable sin redeploy |
+| [0001](adr/0001-motor-offline-dedicado.md) | Offline-first con un motor de sincronización dedicado (PowerSync) | **propuesto** — lo valida el spike del motor offline |
+| [0002](adr/0002-multi-tenant-por-rls.md) | Multi-tenant por RLS, no por BD separada | aceptado |
+| [0003](adr/0003-fotos-en-r2-metadata-en-postgres.md) | Fotos en R2, metadata en Postgres | aceptado |
+| [0004](adr/0004-una-web-por-rol.md) | Una web para los tres roles, no apps separadas | aceptado |
+| [0005](adr/0005-ia-de-share-of-shelf-fuera-del-mvp.md) | IA de Share of Shelf fuera del MVP | aceptado |
+| [0006](adr/0006-watermark-en-captura.md) | Watermark en la captura, no en la subida | aceptado |
+| [0007](adr/0007-catalogos-y-tolerancias-precargados.md) | Catálogos y tolerancias pre-cargados por marca | aceptado |
 
 ---
 
