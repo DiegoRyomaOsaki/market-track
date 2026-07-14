@@ -126,6 +126,11 @@ temporal — se revisa cuando typescript-eslint publique soporte para TS 7.
 > `--no-verify` lo salta y solo protege a quien lo tenga activado.
 >
 > **Activarlo en cada clon:** `git config core.hooksPath .githooks`
+>
+> Lo mismo vale para CI: `.github/workflows/ci.yml` corre en cada PR y **se pone
+> roja**, pero GitHub **no impide mergear** con los checks en rojo — los *required
+> checks* son parte del mismo muro de pago. El rojo es una señal, no un candado:
+> hay que mirarlo antes de mergear.
 
 ## Integrations
 
