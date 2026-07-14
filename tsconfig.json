@@ -5,5 +5,10 @@
     "checkJs": true,
     "types": ["node"]
   },
-  "include": ["eslint.config.mjs"]
+  // Solo los archivos de la RAÍZ: cada workspace trae su propio tsconfig.
+  // Los globs cubren cualquier archivo suelto que alguien deje aquí — si solo
+  // se listara `eslint.config.mjs`, un `.ts` en la raíz pasaría el typecheck en
+  // silencio (tsc no lo miraría) y a la vez rompería el lint con un error
+  // críptico del project service. Las dos herramientas deben ver lo mismo.
+  "include": ["*.mjs", "*.mts", "*.ts", "*.cts", "*.js", "scripts/**/*.ts"]
 }
