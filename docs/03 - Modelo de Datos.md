@@ -14,10 +14,12 @@ Volver a [[Market Track]] · Arquitectura: [[02 - Arquitectura Técnica]]
 
 ```mermaid
 erDiagram
+    TENANT ||--o{ MARCA : agrupa
     TENANT ||--o{ PROFILE : tiene
     PROFILE ||--o{ PASE_ACCESO_TEMPORAL : desbloquea
     TENANT ||--o{ CADENA : opera
-    TENANT ||--o{ SKU : comercializa
+    MARCA ||--o{ SKU : comercializa
+    MARCA ||--o{ EXHIBICION_NEGOCIADA : negocia
     CADENA ||--o{ TIENDA : agrupa
     TIENDA ||--o{ TIENDA_SKU : codifica
     SKU ||--o{ TIENDA_SKU : se_vende_en
@@ -25,15 +27,24 @@ erDiagram
     RUTERO ||--o{ RUTERO_PARADA : contiene
     TIENDA ||--o{ RUTERO_PARADA : visitada_en
     RUTERO_PARADA ||--|| VISITA : genera
-    VISITA ||--o{ LEVANTAMIENTO_SKU : registra
-    VISITA ||--o{ EXHIBICION : audita
-    VISITA ||--o{ MERMA : reporta
+    VISITA ||--o{ LEVANTAMIENTO : "una por marca auditada"
+    MARCA ||--o{ LEVANTAMIENTO : audita
+    LEVANTAMIENTO ||--o{ LEVANTAMIENTO_SKU : registra
+    LEVANTAMIENTO ||--o{ EXHIBICION : audita
+    LEVANTAMIENTO ||--o{ FOTO : adjunta
     VISITA ||--o{ CONTINGENCIA : registra
-    VISITA ||--o{ FOTO : adjunta
+    VISITA ||--o{ MERMA : reporta
     VISITA ||--o{ ALERTA : dispara
     SKU ||--o{ PRECIO_REGULAR : tiene
     SKU ||--o{ PROMOCION : tiene
 ```
+
+> **`tenant` es el CLIENTE, no la marca.** Un cliente puede comercializar varias
+> marcas (Oster, Sharpie…), y el mercaderista —**exclusivo de un cliente**—
+> audita en cada tienda todas las marcas de ese cliente que allí se vendan.
+> Como cada marca vive en **un pasillo distinto**, una **visita** produce **un
+> `levantamiento` por marca**: su foto "Antes", su Share of Shelf, sus
+> exhibiciones y su foto "Después". Confirmado con el cliente en julio 2026.
 
 ---
 
@@ -41,12 +52,25 @@ erDiagram
 
 ### Organización y usuarios
 
-**`tenant`** — cliente-marca (ej. Maracumango). Aísla todos los datos.
+**`tenant`** — **el cliente** que contrata a la outsourcing. Es la frontera de
+aislamiento: todo dato lleva su `tenant_id`.
 | Campo | Tipo | Nota |
 |---|---|---|
 | id | uuid PK | |
-| nombre | text | "Maracumango" |
-| tolerancia_precio_pct | numeric | desviación de precio tolerada |
+| nombre | text | el cliente, no la marca |
+| activo | bool | |
+
+**`marca`** — marca comercial de un cliente (Oster, Sharpie…). Un cliente puede
+tener varias; el piloto (Maracumango) tiene **una sola**, pero el modelo no
+puede asumirlo: añadirla después obligaría a re-escribir el `sku`, el
+levantamiento y las políticas.
+| Campo | Tipo | Nota |
+|---|---|---|
+| id | uuid PK | |
+| tenant_id | uuid FK | a qué cliente pertenece |
+| nombre | text | "Oster" |
+| logo_url | text | el portal muestra el logo de la marca |
+| tolerancia_precio_pct | numeric | **por marca**, no por cliente: cada marca tolera una desviación distinta |
 | activo | bool | |
 
 **`profile`** — usuario (extiende `auth.users`).
@@ -54,11 +78,53 @@ erDiagram
 |---|---|---|
 | id | uuid PK (= auth.uid) | |
 | rol | enum | `admin` \| `supervisor` \| `mercaderista` \| `cliente` |
-| tenant_id | uuid FK | null para admin/supervisor de la outsourcing |
+| tenant_id | uuid FK | null para admin/supervisor de la outsourcing. **El mercaderista es exclusivo de un cliente** (confirmado jul 2026): un solo `tenant_id`, nunca varios |
 | nombre, dni, telefono | text | `telefono` pasa a ser **obligatorio** si el usuario usa OTP por SMS/WhatsApp |
 | telefono_verificado_at | timestamptz | un teléfono sin verificar no puede recibir el segundo factor |
 | sctr_vigente_hasta | date | blindaje SUNAFIL |
 | supervisor_id | uuid FK | a quién reporta el mercaderista |
+| activo | bool | estado **individual** (contratado / desvinculado). Independiente del estado del cliente |
+| desactivado_at | timestamptz | |
+
+### Baja de un cliente: se cae su gente con él
+
+Cuando un cliente cancela el servicio (`tenant.activo = false`), **todos los
+mercaderistas de ese cliente pierden el acceso** — son exclusivos suyos y sin él
+no tienen trabajo que hacer.
+
+**El acceso efectivo es derivado, no se copia:**
+
+```sql
+profile.activo AND (profile.tenant_id IS NULL OR tenant.activo)
+```
+
+Un `admin` o `supervisor` de la outsourcing tiene `tenant_id` nulo: no cae con
+ningún cliente.
+
+**Por qué derivado y no un trigger que apague `profile.activo`.** Si al dar de
+baja al cliente escribiéramos `false` en cada perfil, perderíamos el estado
+individual: al reactivar al cliente meses después, volverían **todos** — incluido
+el que fue desvinculado por robo durante la baja. Dos banderas independientes, y
+el acceso exige las dos. Es la diferencia entre *"este cliente no opera"* y
+*"esta persona no trabaja aquí"*.
+
+**El punto que importa de verdad: la revocación tiene que llegar al teléfono.**
+La app es offline-first — el mercaderista lleva encima una réplica SQLite con el
+rutero, las tiendas y los SKUs del cliente. Apagar la fila en Postgres **no borra
+lo que ya está en su bolsillo**. La baja debe:
+
+1. **Cortar la sesión** (RLS y login rechazan al usuario deshabilitado).
+2. **Vaciar los *buckets* de sync.** La *parameter query* de PowerSync debe
+   exigir el acceso efectivo: si deja de cumplirse, los buckets desaparecen y el
+   motor **purga la réplica local** en la siguiente conexión. Si la sync rule
+   solo mira `tenant_id` sin comprobar el estado, el teléfono **seguirá
+   descargando datos de un cliente que ya no es cliente.**
+3. **Asumir el límite honesto:** un teléfono que nunca vuelve a conectarse
+   conserva lo que ya tenía. Mitigación: vida corta del token de sesión y borrado
+   local al fallar la autenticación. No hay forma de borrar remotamente un
+   dispositivo que no habla con nosotros; documentarlo es mejor que fingir que sí.
+
+Toda baja y toda reactivación quedan **auditadas** (quién, cuándo, por qué).
 
 ### Autenticación y acceso de emergencia
 
@@ -67,9 +133,10 @@ ser solo correo y aparece un mecanismo para desatascar al mercaderista que no
 recibe su código.
 
 **`configuracion_plataforma`** — ajustes globales de la operación de la
-outsourcing (fila única). No lleva `tenant_id`: el mercaderista tiene **un solo
-login** aunque atienda varias marcas, así que el 2FA no puede configurarse por
-cliente-marca.
+outsourcing (fila única). No lleva `tenant_id` porque el 2FA es una política de
+**la outsourcing**, no de sus clientes: los admins y supervisores no pertenecen
+a ningún cliente, y un mismo interruptor de seguridad no puede depender de a qué
+cliente sirve cada usuario.
 | Campo | Tipo | Nota |
 |---|---|---|
 | id | bool PK | singleton (`CHECK (id)`) |
@@ -99,6 +166,23 @@ auditoría, y una sesión iniciada con pase queda marcada como tal.
 
 ### Maestro comercial (pre-carga)
 
+> **La pre-carga llega como un Excel del cliente**, no tecleada a mano. Eso
+> impone dos cosas al esquema:
+>
+> **`codigo_externo`** en `marca`, `cadena`, `tienda` y `sku` — el código que usa
+> **el cliente** en su Excel. Es la **clave natural del upsert**: sin ella, la
+> segunda importación duplicaría todo el catálogo. `UNIQUE (tenant_id,
+> codigo_externo)`.
+>
+> **`activo`** explícito en esas mismas tablas. **La importación solo añade y
+> actualiza: nunca desactiva por ausencia.** Que un SKU desaparezca del Excel
+> nuevo no significa que lo hayan dado de baja — puede que copiaran mal una hoja
+> o dejaran un filtro puesto. Para dar de baja, el cliente pone `activo = NO` en
+> su archivo. Un despiste suyo no puede apagarle el catálogo y dejar a treinta
+> mercaderistas en campo con la lista de SKUs equivocada. (Es la regla de
+> "reconciliación destructiva" de `coding_practices.md`: distinguir *confirmado
+> como ausente* de *no llegó la información*.)
+
 **`cadena`** — retail (Plaza Vea, Tottus…). `id, tenant_id, nombre, tipo_tienda`.
 
 **`tienda`** — punto de venta físico.
@@ -112,15 +196,26 @@ auditoría, y una sesión iniciada con pase queda marcada como tal.
 | radio_geocerca_m | int | **default 100** (revisión con el cliente, jul 2026); editable por tienda |
 | cluster | text | para promociones por cluster |
 
-**`sku`** — producto del cliente. `id, tenant_id, codigo, nombre, presentacion, ean/codigo_barras, activo`.
+**`sku`** — producto. Cuelga de una **marca**, no del cliente: `id, marca_id, tenant_id, codigo, nombre, presentacion, ean/codigo_barras, activo`.
+
+> `tenant_id` se denormaliza aquí (es derivable vía `marca`) porque **toda tabla
+> de negocio lo necesita para su política RLS y para las *sync rules***. Un join
+> a `marca` en cada política es caro y frágil; las sync rules, además, solo
+> admiten un subconjunto de SQL sin joins complejos (ver
+> [ADR-0001](adr/0001-motor-offline-dedicado.md)). Un trigger garantiza que
+> `sku.tenant_id = marca.tenant_id`.
 
 **`tienda_sku`** — qué SKUs están **codificados** en cada tienda (la "lista exacta" por tienda que pide el documento). `tienda_id, sku_id, activo`.
+
+> **De aquí sale qué marcas se auditan en cada tienda**, sin tabla extra: son las
+> marcas distintas de los SKUs codificados allí. Una `tienda_marca` sería un
+> segundo dueño del mismo hecho, y divergiría.
 
 **`precio_regular`** — precio regular por SKU / cadena / tipo de tienda. `sku_id, cadena_id, tipo_tienda, precio, vigente_desde`.
 
 **`promocion`** — promo pre-cargada. `sku_id, precio_promo, fecha_inicio, fecha_fin, clusters[], comunicada(bool)`.
 
-**`exhibicion_negociada`** — cabecera, isla, ruma negociada. `tienda_id, sku_ids[], tipo, cantidad_sugerida, fecha_inicio, fecha_fin`.
+**`exhibicion_negociada`** — cabecera, isla, ruma negociada. `tienda_id, marca_id, tenant_id, sku_ids[], tipo, cantidad_sugerida, fecha_inicio, fecha_fin`. La negocia **una marca**, no el cliente entero.
 
 ### Operación (ruteros y visitas)
 
@@ -143,12 +238,36 @@ auditoría, y una sesión iniciada con pase queda marcada como tal.
 
 ### Levantamiento
 
-**`levantamiento_sku`** — datos por SKU en una visita.
+**`levantamiento`** — **la auditoría de UNA marca dentro de una visita.** Es la
+pieza que el modelo no tenía y que la realidad física impone: Oster está en
+electrodomésticos y Sharpie en papelería, así que cada marca tiene su propia
+góndola, su propia foto "Antes", su propio Share of Shelf y su propia foto
+"Después". Una visita produce **un `levantamiento` por cada marca del cliente
+que se venda en esa tienda** (derivado de `tienda_sku`).
 | Campo | Tipo | Nota |
 |---|---|---|
-| visita_id, sku_id | FK | |
+| id | uuid PK | |
+| visita_id, marca_id, tenant_id | FK | |
+| foto_antes_id, foto_despues_id | uuid FK | la góndola **de esa marca** |
+| sos_frentes_propios | int | agregado de esa góndola |
+| sos_frentes_competencia | jsonb | `[{competidor, frentes}]` |
+| sos_foto_id | uuid FK | opcional |
+| estado | enum | `pendiente`\|`en_curso`\|`completado`\|`omitido` |
+
+> El % de share es **derivado** (vista), y la suma del detalle por SKU permite
+> cuadrar contra el agregado.
+>
+> **En el piloto hay una sola marca**, así que cada visita tendrá exactamente un
+> `levantamiento` y la app se ve igual que si esta tabla no existiera. Esa es
+> justamente la razón de crearla ahora: cuesta nada hoy y sería una reescritura
+> del núcleo transaccional el día que entre el segundo cliente con tres marcas.
+
+**`levantamiento_sku`** — datos por SKU dentro del levantamiento de su marca.
+| Campo | Tipo | Nota |
+|---|---|---|
+| levantamiento_id, sku_id | FK | el SKU pertenece a la marca del levantamiento |
 | frentes_propios | int | Share of Shelf **por SKU** (manual en MVP) |
-| frentes_competencia | jsonb | `[{marca, frentes}]` |
+| frentes_competencia | jsonb | `[{competidor, frentes}]` — *competidor* es texto libre (Frutísima, Selva Viva): **no** es la entidad `marca`, que solo modela las marcas de nuestros clientes |
 | sos_foto_id | uuid FK | foto **opcional** del frente de ese SKU |
 | stock_sistema | int | unidades en sistema |
 | stock_piso | int | góndola + exhibiciones + trastienda |
@@ -161,20 +280,13 @@ auditoría, y una sesión iniciada con pase queda marcada como tal.
 > piso = 0 y la diferencia exige piso > 0, así que un SKU nunca lleva los dos
 > flags. Ambos se calculan en la misma vista/trigger — nunca en las apps.
 
-**Share of Shelf agregado de la góndola** — convive con el detalle por SKU
-(decisión de la revisión con el cliente, jul 2026): el mercaderista registra el
-total de la góndola *y* el desglose por SKU. Vive como columnas de `visita`
-(relación 1:1, no justifica tabla propia): `sos_frentes_propios` (int),
-`sos_frentes_competencia` (jsonb `[{marca, frentes}]`), `sos_foto_id` (uuid FK,
-opcional). El % de share es **derivado** — se calcula en vista, y la suma del
-detalle por SKU permite cuadrar contra el agregado.
+**`exhibicion`** — auditoría de exhibición, dentro del levantamiento de su marca. `levantamiento_id, exhibicion_negociada_id (o tipo_adicional), instalada(bool), unidades, completa(bool), foto_id, vigente(bool)`.
 
-**`exhibicion`** — auditoría de exhibición en la visita. `visita_id, exhibicion_negociada_id (o tipo_adicional), instalada(bool), unidades, completa(bool), foto_id, vigente(bool)`.
-
-**`contingencia`** — bypass de un paso del levantamiento (compromiso de la propuesta aceptada): cuando el mercaderista no puede completar una fase por causa externa, registra el hallazgo y continúa; dispara una alerta en tiempo real al supervisor.
+**`contingencia`** — bypass de un paso (compromiso de la propuesta aceptada): cuando el mercaderista no puede completar una fase por causa externa, registra el hallazgo y continúa; dispara una alerta en tiempo real al supervisor.
 | Campo | Tipo | Nota |
 |---|---|---|
 | visita_id, tenant_id | FK | |
+| levantamiento_id | uuid FK | **null** si el paso omitido es de la visita (`checkin`/`checkout`); poblado si es de una marca concreta |
 | paso | enum | `foto_antes`\|`share_of_shelf`\|`quiebres`\|`precios`\|`exhibiciones`\|`foto_despues`\|`checkin`\|`checkout` |
 | motivo | text | causa externa (sin acceso al almacén, información no disponible…) |
 | foto_id | uuid FK | evidencia opcional del hallazgo |
@@ -190,14 +302,68 @@ detalle por SKU permite cuadrar contra el agregado.
 
 **`lote_vencimiento`** — control PVPS/FEFO. `visita_id, sku_id, lote, fecha_vencimiento, dias_para_vencer (derivado), alerta_color (verde/ámbar/rojo)`.
 
-### Evidencia y alertas
+### Importación del Excel del cliente
 
-**`foto`** — toda imagen. `id, visita_id, tenant_id, tipo (selfie\|antes\|despues\|sos\|exhibicion\|merma\|precio), url_r2, hash, capturada_at, geo, subida_at`.
+El cliente manda su maestro (marcas, tiendas, SKUs, matriz tienda×SKU, precios,
+promos) en un Excel. **Sin una pre-carga correcta la app del mercaderista no
+sirve** (ver [ADR-0007](adr/0007-catalogos-y-tolerancias-precargados.md)): una
+matriz mal cargada hace que el mercaderista vea en su teléfono productos que esa
+tienda no vende, y el dato de toda la jornada sale inservible.
+
+**`importacion`** — cada intento de carga, con su resultado. Es la evidencia de
+*qué nos mandaron y qué hicimos con ello*.
+| Campo | Tipo | Nota |
+|---|---|---|
+| id | uuid PK | |
+| tenant_id | uuid FK | a qué cliente pertenece el maestro |
+| archivo_url_r2, archivo_hash | text | **el .xlsx original se conserva**: es la prueba de qué se recibió |
+| subido_por | uuid FK | |
+| estado | enum | `validando` \| `con_errores` \| `previsualizada` \| `aplicada` \| `cancelada` |
+| resumen | jsonb | `{creadas, actualizadas, con_error}` por entidad |
+| errores | jsonb | `[{hoja, fila, columna, valor, mensaje}]` — el informe fila por fila |
+| aplicada_at | timestamptz | null hasta que el admin confirma |
+
+**`mapeo_importacion`** — cómo se traducen las columnas del Excel *de ese
+cliente* a nuestros campos, guardado para no repetir el trabajo en cada carga.
+`id, tenant_id, nombre, mapeo (jsonb: hoja → entidad, columna → campo), creado_por`.
+
+**El flujo, y por qué es así:**
+
+1. El admin sube el `.xlsx`. **Se parsea en el navegador** (son cientos de filas;
+   no hace falta procesamiento en segundo plano).
+2. Si es la **plantilla nuestra**, el mapeo es implícito. Si es **el Excel del
+   cliente**, el admin mapea las columnas una vez y el mapeo queda guardado.
+3. **Vista previa obligatoria**: cuántas filas se crearían, cuántas se
+   actualizarían, y **cada error con su hoja, fila y motivo**. Nada se ha escrito
+   todavía.
+4. El admin confirma → una Edge Function **revalida en servidor** y aplica **en
+   una transacción**: upsert por `(tenant_id, codigo_externo)`. Si algo falla, no
+   se aplica nada — jamás un catálogo a medio cargar.
+
+> **La validación del navegador es UX, no seguridad.** El servidor revalida
+> siempre: el payload que llega a la Edge Function es entrada externa y se parsea
+> con Zod, como cualquier otra frontera.
+
+**`foto`** — toda imagen. `id, visita_id, levantamiento_id (null en la selfie de check-in y en las contingencias de visita), tenant_id, tipo, url_r2, hash, capturada_at, geo, subida_at`.
+
+| `tipo` | |
+|---|---|
+| `selfie` | ingreso; cuelga de la visita, no de una marca |
+| `antes` · `despues` | la góndola **de una marca** |
+| `sos` | frentes de un SKU |
+| `exhibicion` · `precio` | evidencia del levantamiento |
+| `contingencia` | evidencia del hallazgo al omitir un paso |
+| `merma` | ⚪ fuera del piloto |
+
+> El valor `contingencia` **faltaba**: la contingencia con foto es ✅ MVP y tiene
+> su `foto_id`, pero sin este valor la imagen se colaría como `antes` y
+> contaminaría la galería filtrable del portal.
 
 **`alerta`** — disparada por las Edge Functions.
 | Campo | Tipo | Nota |
 |---|---|---|
 | id, tenant_id, visita_id | FK | |
+| marca_id | uuid FK | de qué marca es la alerta — el portal filtra por ella |
 | tipo | enum | `quiebre`\|`diferencia_stock`\|`desviacion_precio`\|`promo_no_activa`\|`vencimiento`\|`exhibicion_incompleta`\|`hora_extra`\|`contingencia` |
 | severidad | enum | `info`\|`alta`\|`critica` |
 | canal | enum | `dashboard`\|`email`\|`whatsapp` |
@@ -216,6 +382,10 @@ detalle por SKU permite cuadrar contra el agregado.
 
 | Requisito del documento | Tablas que lo resuelven |
 |---|---|
+| **Un cliente, varias marcas** (Oster, Sharpie…) | `tenant` (cliente) → `marca` → `sku` |
+| **El mercaderista es exclusivo de un cliente** | `profile.tenant_id` único (nunca varios) |
+| **Audita todas las marcas del cliente que se vendan en esa tienda** | un `levantamiento` por marca, derivadas de `tienda_sku` |
+| **Si el cliente cancela, sus mercaderistas pierden el acceso** | `tenant.activo` + `profile.activo` (acceso = las dos) + sync rules que lo exigen |
 | Lista exacta de SKUs por tienda | `tienda_sku` |
 | Quiebre = sistema vs piso, cruce con OC | `levantamiento_sku` (stock_sistema, stock_piso) + Edge Function |
 | **Diferencia de stock** (piso > 0 pero ≠ sistema) | `levantamiento_sku.diferencia` (derivado) + `alerta` tipo `diferencia_stock` |

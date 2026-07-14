@@ -16,6 +16,30 @@ Leyenda: ✅ MVP/piloto · 🟡 Fase 2 — Inteligencia de campo · 🔵 Fase 3 
 
 ---
 
+## Aclaración del cliente — julio 2026: cliente ≠ marca
+
+Dos hechos que el modelo no recogía, y que cambian el núcleo:
+
+1. **El `tenant` es el CLIENTE, no la marca.** Un cliente puede comercializar
+   varias marcas (Oster, Sharpie…). El SKU cuelga de la **marca**.
+2. **El mercaderista es exclusivo de un cliente**, y audita en cada tienda
+   **todas las marcas de ese cliente** que allí se vendan.
+
+Como cada marca vive en un **pasillo distinto**, una **visita** produce **un
+levantamiento por marca**: su foto "Antes", su Share of Shelf, sus exhibiciones y
+su foto "Después".
+
+> **El piloto tiene una sola marca**, así que la app se ve exactamente igual que
+> antes: una visita, un levantamiento. Por eso se modela ahora — cuesta nada hoy
+> y sería reescribir el núcleo transaccional el día que entre un cliente con tres
+> marcas.
+
+Y una regla nueva: **si un cliente cancela el servicio, sus mercaderistas pierden
+el acceso** — incluida la réplica local de sus teléfonos, que se purga al
+sincronizar. Ver [[03 - Modelo de Datos]].
+
+---
+
 ## Revisión con el cliente — julio 2026
 
 Siete cambios acordados **después** de la propuesta aceptada. Todos entran al
@@ -150,7 +174,10 @@ piloto y ya están reflejados en las tablas de abajo, en
 
 | Función | MVP |
 |---|---|
-| Alta de clientes-marca, cadenas, tiendas, SKUs, precios, promos (pre-carga) | ✅ |
+| Alta de **clientes**, sus **marcas**, cadenas, tiendas, SKUs, precios, promos (pre-carga) | ✅ |
+| **Importación del Excel del cliente** — plantilla propia, vista previa con errores fila por fila, y aplicación transaccional (todo o nada) | ✅ |
+| **Mapeador de columnas** — el cliente sube SU Excel y el admin mapea sus columnas una vez; el mapeo queda guardado | ✅ ⚠️ **alcance nuevo, fuera de la propuesta** |
+| **Baja de un cliente** → sus mercaderistas pierden el acceso automáticamente (y la réplica local de sus teléfonos se purga al sincronizar) | ✅ |
 | Diseño de **ruteros** y asignación a mercaderistas | ✅ |
 | Asignación de tareas y seguimiento en tiempo real | ✅ |
 | Aprobar / rechazar reportes de visitas | ✅ |

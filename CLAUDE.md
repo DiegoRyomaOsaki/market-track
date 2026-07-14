@@ -200,6 +200,19 @@ Aún no hay `.env`. Al scaffoldear, crear `.env.example` por app. Previstas:
   es el diferenciador #1 del producto.
 - **Toda tabla nueva habilita RLS en su misma migración** con políticas por
   rol y `tenant_id` — una tabla sin RLS es legible por el mundo vía PostgREST.
+- **`tenant` es el CLIENTE, no la marca.** Un cliente tiene varias marcas (Oster,
+  Sharpie…) y el `sku` cuelga de la **marca**. El mercaderista es **exclusivo de
+  un cliente** (`profile.tenant_id` único) y audita todas las marcas de ese
+  cliente que se vendan en la tienda: **una visita = un `levantamiento` por
+  marca**, porque cada marca está en un pasillo distinto y tiene su propia
+  góndola, su foto "Antes", su Share of Shelf y su foto "Después".
+- **Si un cliente cancela, sus mercaderistas pierden el acceso.** El acceso es
+  **derivado**: `profile.activo AND (tenant_id IS NULL OR tenant.activo)`. Nunca
+  apagar `profile.activo` con un trigger al dar de baja al cliente — se perdería
+  el estado individual y, al reactivarlo, volverían todos, incluido el
+  desvinculado. Y la revocación **tiene que llegar al teléfono**: las *sync
+  rules* deben exigir el acceso efectivo, o la réplica local seguirá
+  descargándose datos de un excliente.
 - **En el móvil, RLS protege la escritura pero NO la lectura.** Las subidas van
   por el cliente de Supabase (PostgREST) y sí pasan por RLS. La bajada la
   replica PowerSync con un rol `BYPASSRLS`: lo que el mercaderista se descarga

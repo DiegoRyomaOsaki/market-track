@@ -105,8 +105,17 @@ Flujo a prototipar (recorrible completo, en orden):
    habilita el botón, "estás a 240 m ✗" lo bloquea; radio default 100 m),
    selfie con cámara en vivo simulada (placeholder con marca de agua visible:
    hora + coordenadas + usuario), confirmación de inicio de jornada
-4. Levantamiento — wizard SECUENCIAL de 5 pasos con barra de progreso; no se
-   avanza sin completar el paso; cada paso tiene el enlace secundario
+3.5 Selector de marcas — el TENANT es el CLIENTE, no la marca: un cliente puede
+   tener varias marcas (Oster, Sharpie) y el mercaderista audita todas las suyas
+   que se vendan en esa tienda. Como cada marca está en un PASILLO DISTINTO, cada
+   una tiene su levantamiento completo (su foto Antes, su SOS, su foto Después).
+   Tras el check-in se listan las marcas con su estado (pendiente / en curso /
+   completada); el check-out se bloquea hasta completarlas todas.
+   ⚠️ El cliente del piloto tiene UNA sola marca: prototipa el flujo saltándose
+   esta pantalla (check-in → wizard directo), y enséñala aparte con un cliente
+   ficticio de dos marcas para mostrar cómo escala.
+4. Levantamiento — wizard SECUENCIAL de 5 pasos POR MARCA, con barra de progreso;
+   no se avanza sin completar el paso; cada paso tiene el enlace secundario
    "No puedo completar este paso" que abre el flujo de CONTINGENCIA
    (motivo → foto opcional → continuar; el paso queda marcado "⚠ Omitido") y un
    ícono "?" de ayuda en su header:

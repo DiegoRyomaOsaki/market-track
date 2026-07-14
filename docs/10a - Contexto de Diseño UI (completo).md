@@ -225,7 +225,29 @@ Secuencia en una sola pantalla con pasos visibles:
 3. **Confirmación:** "Jornada iniciada a las 08:02" (hora del servidor cuando
    hay señal; local marcada como "por confirmar" cuando no).
 
-### 6.4 Levantamiento — wizard secuencial de 5 pasos
+### 6.3b Selector de marcas (tras el check-in)
+
+**El `tenant` es el CLIENTE, no la marca.** Un cliente puede tener varias marcas
+(Oster, Sharpie…), y el mercaderista —exclusivo de ese cliente— audita en cada
+tienda **todas las marcas suyas que allí se vendan**. Como cada marca está en un
+**pasillo distinto**, cada una tiene su propio levantamiento completo.
+
+Tras el check-in, la app muestra **las marcas a auditar en esta tienda**, con su
+estado (`pendiente` / `en curso` / `completada ✓`). El mercaderista entra a una,
+recorre el wizard entero de esa marca, vuelve a la lista, y entra a la siguiente.
+El **check-out se bloquea hasta completar todas** (o registrar su contingencia).
+
+> ⚠️ **Con una sola marca, esta pantalla se salta.** El cliente del piloto
+> (Maracumango) tiene una: el flujo va del check-in directo al wizard, como si
+> este paso no existiera. **Prototípalo así** — pero deja el modelo listo para N
+> marcas, y muestra la pantalla en una demo secundaria con un cliente ficticio de
+> dos marcas para enseñar cómo escala.
+
+### 6.4 Levantamiento — wizard secuencial de 5 pasos (POR MARCA)
+
+Todo lo que sigue ocurre **dentro de una marca**: la foto "Antes" es de *su*
+góndola, el Share of Shelf se mide contra *sus* competidores de *ese* pasillo, y
+la foto "Después" es del mismo encuadre. Un levantamiento por marca.
 Barra de progreso persistente (Paso 2 de 5). No se puede avanzar sin completar
 el paso actual. **Cada paso incluye, discreto pero siempre visible, el enlace
 "No puedo completar este paso"** que abre el flujo de contingencia (6.5), y un
