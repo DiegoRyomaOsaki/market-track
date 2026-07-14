@@ -170,6 +170,11 @@ comment on function app.es_staff() is
 grant usage on schema app to authenticated, service_role;
 grant execute on all functions in schema app to authenticated, service_role;
 
+-- Sin DELETE, a propósito: nada se borra en duro. Las bajas son lógicas
+-- (`activo = false`), porque un cliente o un mercaderista borrado se llevaría por
+-- delante el histórico de visitas que sostiene la evidencia ante SUNAFIL. Las
+-- políticas de escritura son `for all`, así que su rama de DELETE existe pero
+-- está muerta: sin el grant, ni el admin puede borrar por la API.
 grant select on public.tenant to authenticated;
 grant select, insert, update on public.marca to authenticated;
 grant select, insert, update on public.profile to authenticated;
@@ -234,15 +239,19 @@ create policy profile_staff_lee_todo on public.profile
   for select to authenticated
   using ((select app.es_staff()));
 
--- El cliente ve a la gente asignada a su cuenta, pero NO a los desvinculados:
--- quién dejó de trabajar en la outsourcing es información laboral de la
--- outsourcing, no del cliente.
-create policy profile_cliente_lee_los_activos_de_su_tenant on public.profile
-  for select to authenticated
-  using (
-    tenant_id = (select app.tenant_actual())
-    and activo
-  );
+-- NO hay política de "leer los perfiles de mi tenant", y es deliberado.
+--
+-- Una política así (tenant_id = tenant_actual()) parece inofensiva y no lo es:
+-- la RLS filtra FILAS, no COLUMNAS. Le entregaría el `dni`, el `telefono`, el
+-- `sctr_vigente_hasta` y el `supervisor_id` (el organigrama interno de la
+-- outsourcing) a cualquiera del mismo cliente — incluido el brand manager, que
+-- es una PARTE EXTERNA. Datos personales de tus empleados en manos de un tercero,
+-- con la Ley 29733 peruana de por medio. Y de paso, un mercaderista leyendo el
+-- DNI de sus compañeros.
+--
+-- Hoy nadie necesita listar perfiles salvo el staff. Cuando el portal del cliente
+-- necesite el NOMBRE del mercaderista que visitó su tienda (Fase 3), se hará con
+-- una vista que exponga solo `id` y `nombre` — nunca con acceso a esta tabla.
 
 create policy profile_admin_escribe on public.profile
   for all to authenticated

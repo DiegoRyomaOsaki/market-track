@@ -1,3 +1,10 @@
+-- ⛔ NUNCA CONTRA UN PROYECTO REMOTO. ⛔
+--
+-- Este archivo crea un admin con la contraseña "password123". `supabase db push`
+-- NO lo ejecuta (solo `db reset`, en local), pero `db reset --linked` o un
+-- `psql -f seed.sql` contra la nube SÍ — y eso pondría un administrador con
+-- contraseña trivial en la base de datos de un cliente real.
+--
 -- Datos de prueba. `supabase db reset` los carga solos.
 --
 -- Sirven para dos cosas: verificar los criterios de aceptación de esta migración,
