@@ -9,6 +9,11 @@ status: borrador-v1
 
 Volver a [[Market Track]] · Base: [[APP de levantamiento]] · Soporte: [[04 - Módulos y Funcionalidades]], [[05 - Fases de Desarrollo]], [[06 - Análisis de Costos y Cobro]]
 
+> [!warning] Documento comercial. Sus fechas y cifras NO guían el desarrollo
+> **Ojo con la versión.** Este es un **borrador interno**; el documento contractual real es **`Propuesta Maracumango.pdf`** (aceptada el 23 jun 2026) y es el que manda ante cualquier discrepancia.
+>
+> Las fechas y las cifras que aparezcan aquí son **información de guía para el developer**: no deciden alcance, prioridad de tickets ni decisiones técnicas. El proyecto se entrega cuando está terminado.
+
 > **Borrador para presentar al cliente.** El alcance está ceñido al documento de levantamiento. Completa los campos marcados con `[…]` antes de enviar. Las cifras son la recomendación de [[06 - Análisis de Costos y Cobro]] (ajustables). La sección final **"Notas internas"** NO se envía al cliente.
 
 ---

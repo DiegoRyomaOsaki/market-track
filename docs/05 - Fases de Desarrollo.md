@@ -9,7 +9,14 @@ status: propuesta-v1
 
 Volver a [[Market Track]]
 
-> **Propuesta v1 — para cerrar juntos.** Plan para llegar a un **piloto operativo con 1 cliente real (20–50 mercaderistas)** en **noviembre 2026**, desarrollado por Diego + Claude Code. Alcance = MVP de [[04 - Módulos y Funcionalidades]].
+> [!warning] Las fechas de este documento son informativas y NO vinculantes
+> El proyecto **se entrega cuando está terminado, no cuando toca**. El calendario, la ventana de semanas y la fecha de piloto que aparecen abajo son **información de guía para el developer** — no se usan para decidir el alcance, priorizar tickets, recortar calidad ni justificar una decisión técnica. La fecha puede variar mucho, y eso está previsto.
+>
+> Lo que sí es vinculante de este documento es el **orden de las fases**, porque es una cadena de dependencias técnicas reales: no hay check-in geocercado sin auth, ni auth sin RLS, ni RLS sin modelo de datos.
+>
+> El alcance lo fija [[04 - Módulos y Funcionalidades]] (solo lo ✅).
+
+> **Propuesta v1 — para cerrar juntos.** Plan para llegar a un **piloto operativo con 1 cliente real (20–50 mercaderistas)**, desarrollado por Diego + Claude Code. Alcance = MVP de [[04 - Módulos y Funcionalidades]].
 
 ## Marco temporal
 

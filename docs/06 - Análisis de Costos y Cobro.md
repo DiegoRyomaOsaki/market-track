@@ -8,6 +8,11 @@ proyecto: market-track
 
 Volver a [[Market Track]]
 
+> [!warning] Documento de negocio. NO guía el desarrollo
+> Las cifras de este documento son **información de guía** y no se usan para decidir el alcance, priorizar tickets, recortar calidad ni justificar una decisión técnica.
+>
+> En particular, **el razonamiento "para ese presupuesto, alcance recortado" que aparece abajo NO se aplica al desarrollo**. El alcance del piloto lo fija [[04 - Módulos y Funcionalidades]] (solo lo ✅) y la propuesta aceptada — no el dinero cobrado. Si una decisión técnica se apoya en el precio, la decisión está mal fundada.
+
 > **TL;DR:** El presupuesto del cliente (**COP 17–22M ≈ USD 5.000–7.000**) está **por debajo del valor de mercado** de esta plataforma. Es viable **solo** con un piloto de alcance recortado, hecho por ti + Claude Code, **sin contratar full-time**, con el **cloud a cuenta del cliente**, y conviene convertirlo en una **relación de largo plazo** (mantenimiento mensual + fases pagadas). Cobra el **tope del rango: COP ~22M (USD ~7.000)**.
 
 Tipo de cambio de referencia: **USD 1 ≈ COP 3.150** (jun 2026).

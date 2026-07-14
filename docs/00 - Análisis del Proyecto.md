@@ -114,8 +114,8 @@ El propio cliente lo advierte: al mercaderista **no se le mide por la venta fina
 | 4 | **Gama media Android** | Los mercaderistas usan equipos económicos; la app debe ser ligera y tolerante a equipos lentos. |
 | 5 | **Marco legal peruano** | SUNAFIL, Ley 29245, SCTR, 45 min de refrigerio, 8h/48h. El producto **vende** este blindaje. |
 | 6 | **Multi-tenant** | Aislamiento de datos por cliente-marca desde el día 1 (RLS). |
-| 7 | **Plazo: noviembre 2026** | ~5 meses desde hoy (18 jun). Obliga a **MVP estricto** (ver [[05 - Fases de Desarrollo]]). |
-| 8 | **Presupuesto bajo** (USD 5–7k) | Recorta el alcance del piloto y descarta contratar full-time. Ver [[06 - Análisis de Costos y Cobro]]. |
+| 7 | **Alcance MVP estricto** | Solo entra lo marcado ✅ en [[04 - Módulos y Funcionalidades]]. La disciplina de alcance viene del **producto**, no de una fecha: el proyecto se entrega cuando está terminado. |
+| 8 | ~~Plazo y presupuesto~~ | **No son restricciones de desarrollo.** Las fechas ([[05 - Fases de Desarrollo]]) y las cifras ([[06 - Análisis de Costos y Cobro]]) son información de guía: no deciden alcance, prioridad de tickets ni decisiones técnicas. |
 
 ---
 
