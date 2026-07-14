@@ -7,7 +7,8 @@
     // type-checkearlo: arrastraría el config raíz, que usa `import.meta.dirname`
     // y exigiría `@types/node` en un paquete que también consumirá React Native.
     "allowJs": true,
-    "types": []
+    // Los tests de aislamiento hablan con Postgres: necesitan los tipos de Node.
+    "types": ["node"]
   },
-  "include": ["src/**/*.ts", "*.mjs"]
+  "include": ["src/**/*.ts", "test/**/*.ts", "*.mjs"]
 }
