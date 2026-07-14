@@ -4,6 +4,10 @@
   hecha y no tumba la decisión; falta el **prototipo ejecutable** que la valide
   (ver "Lo que el prototipo todavía debe probar")
 - **Fecha:** 2026-06-18 · investigación del spike incorporada el 2026-07-13
+- **Alternativas reevaluadas:** 2026-07-13 — nueve candidatos, ninguno desplaza
+  la decisión. Antes de reabrir este debate, lee "Opciones consideradas": lo más
+  probable es que la opción que tienes en mente ya esté ahí, con su motivo de
+  descarte y su fuente.
 
 ## Contexto
 
@@ -18,16 +22,65 @@ un piloto comprometido para septiembre de 2026.
 
 ## Opciones consideradas
 
-| Opción | A favor | En contra |
-|---|---|---|
-| **Motor dedicado (PowerSync)** | Réplica Postgres ⇄ SQLite gestionada, resolución de conflictos y reintentos resueltos; el equipo escribe features, no fontanería de sync | Coste mensual (el plan gratuito **no sirve** para el piloto, ver abajo); el aislamiento de **lectura** deja de estar cubierto por RLS y pasa a depender de las *sync rules* |
-| WatermelonDB | Gratis, control total, muy usado en React Native | **No trae backend**: la documentación es explícita — *"Watermelon is only a local database — you need to bring your own backend"*. Hay que escribir y mantener los endpoints `pullChanges`/`pushChanges` y la resolución de conflictos. Última versión publicada (0.28.0) es de ~abril 2025, y en Expo no es de primera clase |
-| Sync a mano (cola + SQLite) | Cero dependencias | El mayor riesgo de cronograma y de bugs del proyecto. Un solo dev pierde semanas aquí, y los bugs de sync son de los más difíciles de reproducir |
+Se evaluaron **nueve alternativas** contra cuatro criterios innegociables:
+(a) escritura offline real y duradera en React Native, (b) que **Postgres siga
+siendo la fuente de verdad**, (c) aislamiento por marca, (d) mantenible por un
+solo desarrollador con el piloto en septiembre de 2026.
+
+### Los tres finalistas
+
+| Opción | Coste real | ¿RLS en lectura? | Protocolo de sync | Conflictos | Madurez |
+|---|---|---|---|---|---|
+| **PowerSync** (elegida) | **~$588/año** (Pro, $49/mes) | ❌ No — *sync rules* | Completo | Del motor (por confirmar en el prototipo) | GA; el caso de uso móvil-offline **es** su producto |
+| RxDB | **~$1.188/año** (Pro, $99/mes) | ✅ **Sí** | Completo: checkpoints, tombstones, detección de conflictos | Detecta; **el handler lo escribes tú** | GA, activo |
+| Legend-State v3 | **$0** (MIT) | ✅ **Sí** | Débil: diff por timestamp, sin desempate | **Ninguno: lo escribes tú** | **Beta desde hace ~2 años** |
+
+**Por qué no RxDB, pese a eliminar la segunda superficie de seguridad.** Es su
+virtud real: como todo viaja por `supabase-js`, **RLS protege lectura y
+escritura**. Pero cuesta **el doble**, no la mitad — su almacenamiento SQLite
+gratuito es una versión de prueba **limitada a 500 documentos**, y solo el
+catálogo de SKUs y precios ya la revienta, así que en producción es de pago.
+Además impone el impuesto de esquema (ver abajo) y el handler de conflictos
+vuelve a ser código nuestro. **Es una alternativa legítima**, no una descartada
+por inferior: si algún día el aislamiento entre marcas pesa más que ~$600/año,
+este ADR se reemplaza.
+
+**Por qué no Legend-State.** Es el único gratis de verdad y es RN-first, pero
+lleva **dos años en beta**, su *pull* es un diff por timestamp sin clave de
+desempate (puede perder o repetir filas justo en el borde) y **no documenta
+resolución de conflictos**. Para el motor del que depende el diferenciador #1
+del producto, es demasiada superficie sin garantías.
+
+### Las descartadas, y por qué
+
+| Opción | Motivo de descarte |
+|---|---|
+| **Zero** (Rocicorp) | **No admite escritura offline.** Su documentación: *"Zero does not support offline writes… writes are rejected"* estando desconectado. Fin. |
+| **ElectricSQL** | Motor **solo de bajada** — *"Electric does not do write-path sync"*. En 2024 reescribieron el producto y **eliminaron justo la escritura local** que necesitamos. Hoy exigiría ensamblar TanStack DB (beta) + su persistencia (**alpha**) + endpoints de mutación propios. Y su aislamiento es **peor**: un proxy de autorización que escribes y operas tú. |
+| **WatermelonDB** | **No trae backend**: *"Watermelon is only a local database — you need to bring your own backend"*. Endpoints `pullChanges`/`pushChanges` y conflictos, a mano. Última versión 0.28.0 (~abril 2025); en Expo no es de primera clase. |
+| **Triplit** | Sustituye a Postgres. Y está muerto: **Supabase compró al equipo en octubre de 2025** y declaró que **no** lo integraría; sin commits desde septiembre de 2025. |
+| **InstantDB** · **Turso/libSQL** · **Couchbase Lite / PouchDB** | Todas **exigen abandonar Postgres** como fuente de verdad (ver el precio abajo). Turso además tiene la escritura offline en beta, con *last-push-wins* y sin garantías de durabilidad declaradas. |
+| **cr-sqlite / vlcn** | **Abandonado** — sin commits desde 2024. |
+| **Sync a mano** (cola + SQLite) | El mayor riesgo de cronograma y de bugs del proyecto. Los bugs de sync son de los más difíciles de reproducir, y aparecen en un sótano, no en el escritorio. |
+
+**Lo que costaría abandonar Postgres** (y por qué cuatro de las nueve se caen
+solas): perder **RLS**, perder **PostGIS** —y con él la revalidación de geocerca
+en servidor, que es la mitad *de seguridad* del check-in—, perder los campos
+derivados en vistas y triggers, las Edge Functions, Supabase Auth y los tipos
+generados. Entre **2 y 4 meses de rearquitectura sin valor nuevo**, con el
+piloto comprometido para septiembre. Es un descarte por calendario antes que
+por técnica.
 
 ## Decisión
 
 Usar un **motor de sincronización dedicado** en lugar de construir el sync a
 mano. La dirección elegida es **PowerSync**.
+
+Dos señales externas la respaldan: **Supabase nombró explícitamente a PowerSync**
+(junto a ElectricSQL y Zero) como motor de sincronización con el que quiere
+asociarse, al anunciar la compra de Triplit en octubre de 2025. Y de los nueve
+candidatos, es el único cuyo caso de uso central —operarios de campo,
+offline-first, sobre Postgres— **es exactamente el nuestro**.
 
 ## Cómo se aísla el tenant en el móvil (la pregunta del spike)
 
@@ -95,11 +148,50 @@ apoyarse en `request.user_id()` (o en otro claim firmado) y en tablas.
 Límite a tener presente: **≤ 1.000 buckets por usuario**, así que las
 definiciones no pueden ser demasiado granulares.
 
+## Limitaciones y restricciones de diseño
+
+Más allá del precio y de la superficie de seguridad, PowerSync impone
+restricciones que muerden **al implementar**, no al elegir:
+
+- **≤ 1.000 *buckets* por usuario.** Los datos se reparten en cubos que se
+  sincronizan por usuario, y no pueden ser demasiado granulares. Hay que
+  agrupar con criterio (por mercaderista, por rutero del día, por tienda), no
+  crear un bucket por cada cosa.
+- **Las *sync rules* usan un subconjunto limitado de SQL.** No hay joins
+  complejos ni agregaciones. Esto empuja a **desnormalizar** — por suerte, el
+  `tenant_id` en toda tabla de negocio (ver [ADR-0002](0002-multi-tenant-por-rls.md))
+  es justo lo que hace falta para filtrar sin joins.
+- **Todo lo que el móvil lee, se descarga y vive en el dispositivo.** Hay que
+  acotar el alcance con disciplina (el rutero del día, no el histórico), o el
+  Android de gama media se llena.
+- **Los despliegues no son atómicos.** Un cambio de esquema obliga a cambiar las
+  sync rules *y* el esquema del cliente, pero habrá teléfonos con la app vieja
+  aún sincronizando. Los cambios deben ser **aditivos primero**.
+- **El plan gratuito se desactiva tras una semana de inactividad.** Sirve para
+  desarrollar; confundirlo con producción es una bomba de relojería.
+
+**El impuesto de esquema que PowerSync NO cobra.** Las alternativas basadas en
+`supabase-js` (RxDB, Legend-State) exigen **claves primarias de texto**,
+`updated_at` mantenido por trigger y **borrado lógico en todas las tablas** —
+prohibido el `DELETE` real, en el panel, en las Edge Functions y en SQL.
+PowerSync no lo exige, porque lee el WAL y los borrados se propagan solos. Si
+algún día se reemplaza este ADR por RxDB, **ese impuesto hay que pagarlo en las
+migraciones**, así que la decisión no es reversible sin tocar el esquema.
+
 ## Consecuencias
 
 **Lo que ganamos.** El riesgo técnico más grande del proyecto deja de estar en
 nuestro código. El tiempo del único desarrollador se va en funcionalidad de
 negocio, no en reconciliación de estados.
+
+**Riesgo de ciclo de vida del proveedor — real, y con precedente.**
+**Atlas Device Sync de MongoDB, la respuesta estándar de la industria para sync
+móvil, fue apagada el 30 de septiembre de 2025.** En esta categoría, que el
+proveedor cierre la persiana no es hipotético. La mitigación no es cambiar de
+motor —los demás tienen el mismo riesgo, o están muertos ya— sino **mantener la
+integración detrás de una frontera fina y reemplazable** (`packages/sync`), de
+modo que las apps hablen con nuestra abstracción y no con el SDK del proveedor
+esparcido por todo el código.
 
 **Lo que aceptamos a cambio — una segunda superficie de seguridad.** El
 aislamiento de lectura del móvil vive en las *sync rules*, fuera de Postgres. Es
