@@ -176,7 +176,7 @@ export type Database = {
           motivo: string
           paso: Database["public"]["Enums"]["paso_levantamiento"]
           registrada_at: string
-          tenant_id: string
+          tenant_id?: string
           visita_id: string
         }
         Update: {
@@ -244,7 +244,7 @@ export type Database = {
           id?: string
           instalada?: boolean | null
           levantamiento_id: string
-          tenant_id: string
+          tenant_id?: string
           tipo_adicional?: Database["public"]["Enums"]["tipo_exhibicion"] | null
           unidades?: number | null
           vigente?: boolean | null
@@ -376,7 +376,7 @@ export type Database = {
           id?: string
           levantamiento_id?: string | null
           subida_at?: string | null
-          tenant_id: string
+          tenant_id?: string
           tipo: Database["public"]["Enums"]["tipo_foto"]
           url_r2?: string | null
           visita_id: string
@@ -496,7 +496,7 @@ export type Database = {
           sos_foto_id?: string | null
           sos_frentes_competencia?: Json
           sos_frentes_propios?: number | null
-          tenant_id: string
+          tenant_id?: string
           visita_id: string
         }
         Update: {
@@ -590,7 +590,7 @@ export type Database = {
           sos_foto_id?: string | null
           stock_piso?: number | null
           stock_sistema?: number | null
-          tenant_id: string
+          tenant_id?: string
         }
         Update: {
           creado_at?: string
@@ -1237,7 +1237,7 @@ export type Database = {
           mercaderista_id: string
           rutero_parada_id: string
           selfie_foto_id?: string | null
-          tenant_id: string
+          tenant_id?: string
           tiempo_traslado_min?: number | null
           tienda_id: string
         }
