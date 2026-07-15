@@ -1,0 +1,26 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // La base solo trae `lib: ["ES2023"]`; el código de navegador necesita DOM.
+    "lib": ["DOM", "DOM.Iterable", "ES2023"],
+    "jsx": "preserve",
+    "allowJs": true,
+    "noEmit": true,
+    "incremental": true,
+    "types": ["node"],
+    "plugins": [{ "name": "next" }],
+    "paths": { "@/*": ["./src/*"] }
+  },
+  // `**/*.ts` cubre `vitest.config.ts`, y `*.mjs` cubre `eslint.config.mjs` /
+  // `postcss.config.mjs`: ESLint (project service) y `tsc` deben ver los MISMOS
+  // archivos, o `pnpm turbo run lint` peta con "not found by the project service"
+  // (pitfall del primer workspace con config propia — ver CLAUDE.md).
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    "*.mjs"
+  ],
+  "exclude": ["node_modules"]
+}
