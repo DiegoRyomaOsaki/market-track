@@ -47,3 +47,35 @@ revoke execute on function app.notificar_alerta_email() from public;
 create trigger notificar_alerta_email
   after insert on public.alerta
   for each row execute function app.notificar_alerta_email();
+
+-- Correos de los clientes (brand managers) de un tenant, en UNA consulta. La
+-- Edge Function la llama por RPC en vez de iterar getUserById por cada cliente
+-- (N+1). `auth.users` no está expuesta a PostgREST, así que este join va aquí,
+-- SECURITY DEFINER. Vive en `public` (el único esquema que PostgREST expone, para
+-- que `.rpc()` la encuentre) pero SOLO el service_role puede ejecutarla — se
+-- revoca a public/anon/authenticated para que no sea un endpoint de fuga de
+-- correos entre tenants.
+create function public.correos_clientes_del_tenant(p_tenant uuid)
+returns table (correo text)
+language sql
+security definer
+set search_path = ''
+as $$
+  select u.email
+  from public.profile p
+  join auth.users u on u.id = p.id
+  where p.tenant_id = p_tenant
+    and p.rol = 'cliente'
+    and p.activo
+    and u.email is not null;
+$$;
+
+revoke execute on function public.correos_clientes_del_tenant(uuid)
+  from public, anon, authenticated;
+grant execute on function public.correos_clientes_del_tenant(uuid) to service_role;
+
+-- La consulta filtra por (tenant_id, rol='cliente', activo): índice parcial para
+-- que no escanee todos los perfiles del tenant (mayormente mercaderistas).
+create index profile_tenant_cliente_activo_idx
+  on public.profile (tenant_id)
+  where rol = 'cliente' and activo;
