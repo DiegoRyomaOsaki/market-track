@@ -87,10 +87,10 @@ Sobre el prototipo v1 del PANEL DE GESTIÓN que ya construiste, aplica estos
 cambios.
 
 1. ACCESO Y SEGUNDO FACTOR (pantalla de admin) — los switches de canales de OTP
-   (correo / SMS / WhatsApp) son POR CLIENTE, no globales: cada cliente-marca
-   configura sus canales. Además, en la ficha de cada usuario muestra su canal
-   actual ("recibe su código por: correo"). El correo no se puede desactivar (es
-   el canal por defecto obligatorio); SMS y WhatsApp son los que se suman.
+   (correo / SMS / WhatsApp) son una política GLOBAL de la outsourcing, una sola
+   para toda la plataforma (no por cliente: el staff no pertenece a ningún
+   cliente). El correo no se puede desactivar (es el canal por defecto
+   obligatorio); SMS y WhatsApp son los que se suman.
 
 2. ALTA Y GESTIÓN DE USUARIOS — el prototipo v1 lista usuarios; añade el FLUJO DE
    ALTA: crear usuario con rol (admin / supervisor / cliente / mercaderista),
