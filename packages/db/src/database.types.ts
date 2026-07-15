@@ -1212,8 +1212,12 @@ export type Database = {
           bitacora: string | null
           check_in_at: string
           check_in_geo: unknown
+          check_in_geocerca_ok: boolean | null
+          check_in_recibido_at: string
           check_out_at: string | null
           check_out_geo: unknown
+          check_out_geocerca_ok: boolean | null
+          check_out_recibido_at: string | null
           creado_at: string
           estado: Database["public"]["Enums"]["estado_visita"]
           id: string
@@ -1229,8 +1233,12 @@ export type Database = {
           bitacora?: string | null
           check_in_at?: string
           check_in_geo?: unknown
+          check_in_geocerca_ok?: boolean | null
+          check_in_recibido_at?: string
           check_out_at?: string | null
           check_out_geo?: unknown
+          check_out_geocerca_ok?: boolean | null
+          check_out_recibido_at?: string | null
           creado_at?: string
           estado?: Database["public"]["Enums"]["estado_visita"]
           id?: string
@@ -1246,8 +1254,12 @@ export type Database = {
           bitacora?: string | null
           check_in_at?: string
           check_in_geo?: unknown
+          check_in_geocerca_ok?: boolean | null
+          check_in_recibido_at?: string
           check_out_at?: string | null
           check_out_geo?: unknown
+          check_out_geocerca_ok?: boolean | null
+          check_out_recibido_at?: string | null
           creado_at?: string
           estado?: Database["public"]["Enums"]["estado_visita"]
           id?: string
