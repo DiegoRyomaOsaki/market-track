@@ -36,7 +36,14 @@
         "eslint.config.mjs",
         "tsconfig.json",
         "tsconfig.base.json",
-        "package.json"
+        "package.json",
+        "scripts/**",
+        "*.ts",
+        "*.mts",
+        "*.cts",
+        "*.js",
+        "*.mjs",
+        "*.cjs"
       ]
     },
     "//#typecheck": {
@@ -44,7 +51,14 @@
         "eslint.config.mjs",
         "tsconfig.json",
         "tsconfig.base.json",
-        "package.json"
+        "package.json",
+        "scripts/**",
+        "*.ts",
+        "*.mts",
+        "*.cts",
+        "*.js",
+        "*.mjs",
+        "*.cjs"
       ]
     }
   }

@@ -13,4 +13,5 @@
 //   la fila: omiten los campos derivados y los que decide el servidor.
 
 export * from "./enums";
+export * from "./env";
 export * from "./schemas/levantamiento";

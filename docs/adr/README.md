@@ -62,8 +62,9 @@ alguien construirá encima creyendo que está cerrado.
 | [0005](0005-ia-de-share-of-shelf-fuera-del-mvp.md) | La IA de Share of Shelf queda fuera del MVP | aceptado | 2026-06-18 |
 | [0006](0006-watermark-en-captura.md) | Watermark grabado en la captura, no en la subida | aceptado | 2026-06-18 |
 | [0007](0007-catalogos-y-tolerancias-precargados.md) | Catálogos y tolerancias pre-cargados por marca | aceptado | 2026-06-18 |
+| [0008](0008-segundo-factor-multicanal-sobre-mfa-nativo.md) | Segundo factor multicanal sobre el MFA nativo de Supabase | **propuesto** | 2026-07-14 |
 
-Plantilla: [`0000-plantilla.md`](0000-plantilla.md). Siguiente número libre: **0008**.
+Plantilla: [`0000-plantilla.md`](0000-plantilla.md). Siguiente número libre: **0009**.
 
 Los ADR 0001–0007 portan al registro las decisiones que ya estaban tomadas y
 resumidas en la tabla "Decisiones de arquitectura" de

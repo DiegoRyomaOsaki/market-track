@@ -39,6 +39,20 @@ const uuid = z.guid();
 const instante = z.iso.datetime({ offset: true });
 
 /**
+ * Un punto capturado por el GPS del teléfono: `{ lat, lng }`. La geocerca del
+ * cliente es solo UX; el servidor RE-VALIDA con estas coordenadas contra
+ * `tienda.ubicacion` + `radio_geocerca_m` (PostGIS). Sin ellas, esa validación
+ * no tiene datos que comprobar.
+ *
+ * El schema valida el punto capturado; convertirlo al `geography(Point,4326)` de
+ * la columna es tarea de la capa de subida, no de la frontera.
+ */
+export const puntoGeoSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+});
+
+/**
  * Un frente de competencia. `competidor` es TEXTO LIBRE (Frutísima, Selva Viva):
  * no es la entidad `marca`, que solo modela las marcas de nuestros clientes.
  */
@@ -56,6 +70,10 @@ export const visitaUploadSchema = z.object({
   // ajustes. El servidor la re-sella al sincronizar. Ver docs/02.
   check_in_at: instante,
   check_out_at: instante.nullish(),
+  // Coordenadas del check-in: obligatorias, son la prueba de que estuvo en la
+  // tienda. Las del check-out solo existen cuando la visita se cierra.
+  check_in_geo: puntoGeoSchema,
+  check_out_geo: puntoGeoSchema.nullish(),
   estado: estadoVisitaSchema,
   bitacora: z.string().max(2000).nullish(),
   tiempo_traslado_min: z.number().int().min(0).nullish(),
@@ -120,6 +138,9 @@ export const fotoUploadSchema = z.object({
   // Se graba AL CAPTURAR, igual que el watermark. Una foto marcada al subir no
   // prueba nada: la subida puede ocurrir horas después.
   capturada_at: instante,
+  // Dónde se tomó. Nullish: no toda foto lleva geo (una foto de galería antigua),
+  // pero las de campo sí, y es parte de su evidencia.
+  geo: puntoGeoSchema.nullish(),
 });
 
 export const exhibicionUploadSchema = z
