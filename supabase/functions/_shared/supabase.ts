@@ -35,10 +35,14 @@ export function clienteDelLlamante(req: Request): SupabaseClient {
   );
 }
 
-/** Respuesta JSON con los headers CORS mínimos. */
-export function json(status: number, body: unknown): Response {
+/** Respuesta JSON. `extra` añade headers puntuales (p. ej. `Cache-Control`). */
+export function json(
+  status: number,
+  body: unknown,
+  extra?: Record<string, string>,
+): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...extra },
   });
 }

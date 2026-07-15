@@ -28,6 +28,74 @@ export function generarCodigo(): string {
   return String(n % RANGO).padStart(DIGITOS, "0");
 }
 
+// --- Autorización de emisión --------------------------------------------------
+// Se decide aquí, como función pura, por lo mismo que el hash: es el ÚNICO gate de
+// acceso de `emitir-pase` (que corre con service_role y salta la RLS), y así se
+// testea sin levantar el servidor. Replica el criterio de las políticas RLS de la
+// tabla, endurecido: solo a un mercaderista, y sin filtrar existencia entre tenants.
+
+export type PerfilAutz = {
+  id: string;
+  rol: string;
+  supervisor_id: string | null;
+};
+
+export type DecisionEmision =
+  { permitido: true } | { permitido: false; status: 403 | 404; error: string };
+
+/**
+ * ¿Puede `emisor` emitir un pase para `objetivo`? `objetivo` es null si el
+ * `profile_id` pedido no existe. Reglas: admin a cualquier mercaderista;
+ * supervisor solo a un mercaderista que le reporta. El staff no autorizado y el
+ * objetivo inexistente devuelven la MISMA respuesta para el supervisor, para no
+ * revelar si un `profile_id` de otro tenant existe (sonda de existencia).
+ */
+export function puedeEmitirPase(
+  emisor: PerfilAutz,
+  objetivo: PerfilAutz | null,
+): DecisionEmision {
+  const sinPermiso = {
+    permitido: false,
+    status: 403,
+    error: "sin permiso para emitir un pase a este usuario",
+  } as const;
+
+  // Solo staff emite pases. Se rechaza ANTES de mirar al objetivo: un rol sin
+  // permiso no puede así distinguir si el profile_id existe o no.
+  if (emisor.rol !== "admin" && emisor.rol !== "supervisor") return sinPermiso;
+
+  // El admin es staff global (no está acotado a un tenant): puede emitir a
+  // cualquier mercaderista, y para él "no existe" (404) no filtra nada sensible.
+  if (emisor.rol === "admin") {
+    if (!objetivo) {
+      return {
+        permitido: false,
+        status: 404,
+        error: "usuario objetivo no encontrado",
+      };
+    }
+    if (objetivo.rol !== "mercaderista") {
+      return {
+        permitido: false,
+        status: 403,
+        error: "el pase solo se emite a un mercaderista",
+      };
+    }
+    return { permitido: true };
+  }
+
+  // Supervisor: solo a un mercaderista que le reporta. "No existe", "no es suyo" y
+  // "no es mercaderista" comparten respuesta: no filtra existencia entre tenants.
+  if (
+    !objetivo ||
+    objetivo.rol !== "mercaderista" ||
+    objetivo.supervisor_id !== emisor.id
+  ) {
+    return sinPermiso;
+  }
+  return { permitido: true };
+}
+
 /** HMAC-SHA256(codigo) en hex, con el secreto de servidor como clave. */
 export async function hashCodigo(
   codigo: string,

@@ -1,12 +1,13 @@
-// Emite el pase de acceso temporal: el rescate para el usuario de campo que no
-// recibe su OTP. Genera un código de 6 dígitos con randomness criptográfica, lo
-// devuelve UNA sola vez para dictarlo, y guarda solo su hash. La tabla
+// Emite el pase de acceso temporal: el rescate para el mercaderista que no recibe
+// su OTP. Genera un código de 6 dígitos con randomness criptográfica, lo devuelve
+// UNA sola vez para dictarlo, y guarda solo su hash. La tabla
 // `pase_acceso_temporal` ya está endurecida (un solo uso, 15 min por CHECK,
 // `generado_por` atado a quien emite, `codigo_hash` sin grant de lectura).
 //
 // Corre con SERVICE_ROLE (salta la RLS) porque el servidor es quien acuña el
-// código: por eso la autorización por rol se replica AQUÍ a propósito —es el
-// mismo criterio que la política RLS de la tabla, no un segundo camino.
+// código: por eso la autorización se replica AQUÍ a propósito —en `puedeEmitirPase`,
+// el mismo criterio que la política RLS de la tabla, endurecido a solo-mercaderista
+// y sin filtrar existencia entre tenants— no es un segundo camino.
 //
 // El canje (`canjear-pase`) y la elevación de la sesión a `aal2` NO viven aquí:
 // dependen del modelo de enforcement del 2FA (ADR-0008) y se construyen con él.
@@ -22,7 +23,7 @@ import {
   clienteServicio,
   json,
 } from "../_shared/supabase.ts";
-import { generarCodigo, hashCodigo } from "../_shared/pase.ts";
+import { generarCodigo, hashCodigo, puedeEmitirPase } from "../_shared/pase.ts";
 
 // Fail-closed: sin el secreto no se puede acuñar el hash del código, así que la
 // función NO arranca — nunca un fallback que lo abra (igual que el webhook).
@@ -37,9 +38,15 @@ if (!PASE_HASH_SECRET) {
 const LIMITE_DIARIO = 3;
 const VENTANA_MS = 24 * 60 * 60 * 1000;
 
+// Deadline de las consultas: una llamada colgada a Postgres no debe bloquear la
+// respuesta ni consumir el presupuesto de la función (Deno `fetch` no trae timeout).
+const DB_TIMEOUT_MS = 8_000;
+
 const emitirPaseSchema = z.object({
   profile_id: z.guid(),
-  motivo: z.string().min(1),
+  // Acotado: el motivo de un pase de emergencia es corto, y un string sin tope es
+  // relleno barato de la auditoría.
+  motivo: z.string().min(1).max(500),
 });
 
 Deno.serve(async (req) => {
@@ -68,30 +75,24 @@ Deno.serve(async (req) => {
 
   const servicio = clienteServicio();
 
-  // Perfil del emisor (rol) y del objetivo (para el alcance del supervisor).
-  const { data: emisor } = await servicio
+  // Emisor y objetivo en UNA consulta (dos round-trips serían latencia de más en
+  // el camino crítico). `abortSignal` acota el cuelgue de Postgres.
+  const { data: perfiles, error: errPerfiles } = await servicio
     .from("profile")
-    .select("id, rol")
-    .eq("id", auth.user.id)
-    .single();
+    .select("id, rol, supervisor_id")
+    .in("id", [auth.user.id, profile_id])
+    .abortSignal(AbortSignal.timeout(DB_TIMEOUT_MS));
+  if (errPerfiles) {
+    return json(500, { error: "no se pudieron leer los perfiles" });
+  }
+  const emisor = (perfiles ?? []).find((p) => p.id === auth.user!.id) ?? null;
   if (!emisor) return json(403, { error: "el llamante no tiene perfil" });
+  const objetivo = (perfiles ?? []).find((p) => p.id === profile_id) ?? null;
 
-  const { data: objetivo } = await servicio
-    .from("profile")
-    .select("id, supervisor_id")
-    .eq("id", profile_id)
-    .single();
-  if (!objetivo) return json(404, { error: "usuario objetivo no encontrado" });
-
-  // Autorización SIEMPRE en el servidor: admin a cualquiera; supervisor solo a
-  // quien le reporta. Mismo criterio que la RLS de la tabla, que aquí se salta.
-  const esAdmin = emisor.rol === "admin";
-  const esSupervisorDelObjetivo =
-    emisor.rol === "supervisor" && objetivo.supervisor_id === emisor.id;
-  if (!esAdmin && !esSupervisorDelObjetivo) {
-    return json(403, {
-      error: "sin permiso para emitir un pase a este usuario",
-    });
+  // Autorización SIEMPRE en el servidor (service_role salta la RLS de la tabla).
+  const decision = puedeEmitirPase(emisor, objetivo);
+  if (!decision.permitido) {
+    return json(decision.status, { error: decision.error });
   }
 
   // Límite diario por usuario objetivo: pases no revocados en las últimas 24 h.
@@ -101,7 +102,8 @@ Deno.serve(async (req) => {
     .select("id", { count: "exact", head: true })
     .eq("profile_id", profile_id)
     .is("revocado_at", null)
-    .gte("generado_at", desde);
+    .gte("generado_at", desde)
+    .abortSignal(AbortSignal.timeout(DB_TIMEOUT_MS));
   if (errConteo) {
     return json(500, { error: "no se pudo verificar el límite diario" });
   }
@@ -120,9 +122,12 @@ Deno.serve(async (req) => {
     .from("pase_acceso_temporal")
     .insert({ profile_id, codigo_hash, motivo, generado_por: emisor.id })
     .select("id, expira_at")
+    .abortSignal(AbortSignal.timeout(DB_TIMEOUT_MS))
     .single();
   if (errInsert || !creado) {
-    return json(400, {
+    // Aquí todo lo previo (existencia, rol, límite, forma) ya se validó: un fallo
+    // de insert es de infraestructura, no del cliente → 500.
+    return json(500, {
       error: "no se pudo emitir el pase",
       // Recortado: los mensajes de infra pueden arrastrar contenido de más.
       detalle: errInsert?.message.slice(0, 200),
@@ -140,5 +145,11 @@ Deno.serve(async (req) => {
     }),
   );
 
-  return json(201, { id: creado.id, codigo, expira_at: creado.expira_at });
+  // El código va en claro una sola vez: `no-store` para que ningún intermediario
+  // (proxy, caché) lo retenga.
+  return json(
+    201,
+    { id: creado.id, codigo, expira_at: creado.expira_at },
+    { "Cache-Control": "no-store" },
+  );
 });
