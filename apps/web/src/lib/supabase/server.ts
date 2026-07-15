@@ -6,10 +6,13 @@ import { env } from "@/lib/env";
 
 /**
  * Cliente Supabase para Server Components / Route Handlers. Corre CON el JWT del
- * usuario (vía cookies), así que sus consultas pasan por RLS — que es la
- * seguridad real. Tipado con `Database` (fuente única de las filas).
+ * usuario (vía cookies), así que sus consultas pasan por RLS — la seguridad real.
+ * Tipado con `Database` (fuente única de las filas).
+ *
+ * ("Cliente" aquí es el cliente Supabase de infraestructura, no el `cliente` del
+ * dominio = tenant; por eso el nombre en inglés.)
  */
-export async function crearClienteServidor() {
+export async function createServerSupabaseClient() {
   const cookieStore = await cookies();
   return createServerClient<Database>(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
     cookies: {

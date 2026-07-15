@@ -8,8 +8,10 @@ import { env } from "@/lib/env";
  * Cliente Supabase atado a las cookies del request/response del middleware. El
  * `response` que devuelve arrastra las cookies de sesión refrescadas: hay que
  * devolverlo (o copiar sus cookies) para no perder el refresco del token.
+ *
+ * ("Cliente" = cliente Supabase de infraestructura, no el `cliente` del dominio.)
  */
-export function crearClienteMiddleware(request: NextRequest) {
+export function createMiddlewareSupabaseClient(request: NextRequest) {
   const response = NextResponse.next({ request });
   const supabase = createServerClient<Database>(
     env.SUPABASE_URL,

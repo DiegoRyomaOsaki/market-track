@@ -3,22 +3,22 @@ import { describe, expect, it } from "vitest";
 
 import { puedeAccederA, SEGMENTOS, segmentoDeRuta } from "./authz";
 
+// Los tres roles con sección web (el mercaderista no tiene web).
+const ROLES_WEB = ["admin", "supervisor", "cliente"] as const;
+
 describe("puedeAccederA", () => {
-  it("admin entra a /admin", () => {
-    expect(puedeAccederA("admin", "admin")).toBe(true);
+  it("cada rol web entra SOLO a su propio segmento (matriz completa)", () => {
+    // Cubre explícitamente que admin NO es un super-rol: admin→/supervisor y
+    // admin→/cliente deniegan, igual que cualquier cruce entre roles.
+    for (const rol of ROLES_WEB) {
+      for (const segmento of SEGMENTOS) {
+        expect(puedeAccederA(rol, segmento)).toBe(rol === segmento);
+      }
+    }
   });
 
-  it("un cliente que va a /admin es denegado (403)", () => {
+  it("un cliente que va a /admin es denegado (criterio de aceptación)", () => {
     expect(puedeAccederA("cliente", "admin")).toBe(false);
-  });
-
-  it("el cliente entra a su portal", () => {
-    expect(puedeAccederA("cliente", "cliente")).toBe(true);
-  });
-
-  it("el supervisor entra a /supervisor pero no al portal del cliente", () => {
-    expect(puedeAccederA("supervisor", "supervisor")).toBe(true);
-    expect(puedeAccederA("supervisor", "cliente")).toBe(false);
   });
 
   it("el mercaderista no entra a ninguna sección web", () => {
@@ -50,8 +50,16 @@ describe("segmentoDeRuta", () => {
     expect(segmentoDeRuta("/cliente")).toBe("cliente");
   });
 
+  it("exige coincidencia EXACTA, no por prefijo", () => {
+    // Si esto se rompe (p. ej. un refactor a startsWith), `/administrador` caería
+    // en el gate de admin: un agujero de enrutado silencioso.
+    expect(segmentoDeRuta("/administrador")).toBeNull();
+    expect(segmentoDeRuta("/clientes")).toBeNull();
+  });
+
   it("devuelve null para rutas fuera de control por rol", () => {
     expect(segmentoDeRuta("/")).toBeNull();
+    expect(segmentoDeRuta("")).toBeNull();
     expect(segmentoDeRuta("/login")).toBeNull();
     expect(segmentoDeRuta("/otra-cosa")).toBeNull();
   });

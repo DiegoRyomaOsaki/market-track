@@ -1,3 +1,9 @@
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Iniciar sesión — Market Track",
+};
+
 // Placeholder: existe para que el redirect del middleware (sesión ausente) no
 // caiga en un 404. La pantalla de acceso real —con el segundo factor— llega con
 // el shell del panel y del portal.
