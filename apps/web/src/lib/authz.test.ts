@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   puedeAccederA,
   requiereSegundoFactor,
+  rutaSegura,
   SEGMENTOS,
   segmentoDeRuta,
 } from "./authz";
@@ -79,6 +80,27 @@ describe("requiereSegundoFactor", () => {
 
   it("sin datos de aal no lo declara pendiente (el caller falla cerrado aparte)", () => {
     expect(requiereSegundoFactor(null, null)).toBe(false);
+  });
+});
+
+describe("rutaSegura", () => {
+  it("deja pasar una ruta interna", () => {
+    expect(rutaSegura("/admin/usuarios")).toBe("/admin/usuarios");
+  });
+
+  it("rechaza un destino externo o con esquema", () => {
+    expect(rutaSegura("https://evil.com")).toBe("/");
+    expect(rutaSegura("javascript:alert(1)")).toBe("/");
+  });
+
+  it("rechaza la protocolo-relativa //evil.com (el clásico que se cuela)", () => {
+    // El navegador la resuelve como https://evil.com, aunque empiece por "/".
+    expect(rutaSegura("//evil.com")).toBe("/");
+  });
+
+  it("sin destino usa el default", () => {
+    expect(rutaSegura(undefined)).toBe("/");
+    expect(rutaSegura("", "/admin")).toBe("/admin");
   });
 });
 

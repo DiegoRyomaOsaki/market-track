@@ -36,17 +36,28 @@ export async function conectar(): Promise<Client> {
 /**
  * Corre una consulta SUPLANTANDO a un usuario, igual que haría PostgREST.
  * Siempre en una transacción que se revierte: ningún test ensucia al siguiente.
+ *
+ * El claim `aal` va en los claims porque `app.perfil_efectivo()` exige `aal2`
+ * (ADR-0008): una sesión sin segundo factor no ve nada. Por defecto se suplanta a
+ * un usuario que YA lo completó, que es el caso normal; pasar `aal: "aal1"` sirve
+ * para probar el gate mismo.
  */
 export async function comoUsuario<T>(
   client: Client,
   userId: string,
   fn: (c: Client) => Promise<T>,
+  opciones?: { aal?: "aal1" | "aal2" },
 ): Promise<T> {
   await client.query("begin");
   try {
     await client.query("set local role authenticated");
+    const claims = {
+      sub: userId,
+      role: "authenticated",
+      aal: opciones?.aal ?? "aal2",
+    };
     await client.query(
-      `set local request.jwt.claims = '${JSON.stringify({ sub: userId, role: "authenticated" })}'`,
+      `set local request.jwt.claims = '${JSON.stringify(claims)}'`,
     );
     return await fn(client);
   } finally {

@@ -40,6 +40,21 @@ export function requiereSegundoFactor(
   return nextLevel === "aal2" && currentLevel !== "aal2";
 }
 
+/**
+ * Solo rutas internas. El `redirect` del query lo pone quien arma el enlace, así
+ * que no puede usarse tal cual para navegar: se rechaza cualquier cosa que no sea
+ * una ruta absoluta de este sitio (incluida `//otro.com`, que el navegador lee
+ * como protocolo-relativa y te saca de aquí).
+ */
+export function rutaSegura(
+  destino: string | undefined,
+  porDefecto = "/",
+): string {
+  if (!destino) return porDefecto;
+  if (!destino.startsWith("/") || destino.startsWith("//")) return porDefecto;
+  return destino;
+}
+
 function esSegmento(valor: string): valor is Segmento {
   return (SEGMENTOS as readonly string[]).includes(valor);
 }
