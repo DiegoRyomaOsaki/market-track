@@ -67,6 +67,18 @@ jobs:
     # segundos. Corre EN PARALELO con `verificar` — no depende de él. Si esperase,
     # un error de lint retrasaría el único job que verifica que ningún cliente ve
     # los datos de otro, que es la promesa contractual del producto.
+    env:
+      # RELLENO, no un secreto. El hook `send_sms` (ADR-0008) hace que el CLI
+      # VALIDE el formato de este valor al leer `config.toml`, así que sin él
+      # fallan `start`, `db reset` y `db:types` por igual — y no corre ni un test.
+      # Va a nivel de JOB, no de paso, precisamente por eso: cualquier comando del
+      # CLI que se añada aquí lo necesita, y ponerlo por paso ya se olvidó una vez.
+      # En CI el hook nunca se invoca: el `edge-runtime` está excluido en `start` y
+      # ningún test de aislamiento hace login. Por eso puede estar a la vista — no
+      # protege nada. El de verdad vive en el `.env` de cada quien y en los
+      # secretos del proyecto Supabase.
+      SEND_SMS_HOOK_SECRET: v1,whsec_cmVsbGVuby1kZS1jaS1uby1lcy11bi1zZWNyZXRvLXJlYWw=
+
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -87,15 +99,6 @@ jobs:
         #
         # Solo db y auth: no hacen falta Studio, Realtime ni Storage para probar
         # las políticas, y arrancarlos son minutos de CI regalados.
-        env:
-          # RELLENO, no un secreto. El hook `send_sms` (ADR-0008) hace que
-          # `supabase start` VALIDE el formato de este valor antes de arrancar, así
-          # que sin él el arranque falla y no corre ni un test. En CI el hook nunca
-          # se invoca: el `edge-runtime` está excluido justo abajo y ningún test de
-          # aislamiento hace login. Por eso puede estar a la vista — no protege
-          # nada. El de verdad vive en el `.env` de cada quien y en los secretos
-          # del proyecto Supabase.
-          SEND_SMS_HOOK_SECRET: v1,whsec_cmVsbGVuby1kZS1jaS1uby1lcy11bi1zZWNyZXRvLXJlYWw=
         run: pnpm exec supabase start -x studio,realtime,storage-api,imgproxy,edge-runtime,logflare,vector,supavisor
 
       - name: Aplicar migraciones y seed
