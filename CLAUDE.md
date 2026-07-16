@@ -78,10 +78,8 @@ todos/                task tracker
 
 ## Dev Commands
 
-> El esqueleto del monorepo y el tooling compartido (TypeScript strict, ESLint,
-> Prettier) ya existen. **Todavía no hay ningún workspace**: las tareas de turbo
-> corren solo en la raíz. Las filas marcadas *(pendiente)* aún no son
-> ejecutables — dependen de tickets que no han aterrizado.
+> Workspaces vivos: `apps/web`, `apps/mobile`, `packages/db` y
+> `packages/shared`. Las tareas de turbo corren en la raíz y en cada uno.
 >
 > pnpm está fijado en `packageManager` (10.34.5) y pnpm lo autodescarga: no
 > hace falta que tu pnpm global coincida.
@@ -98,17 +96,18 @@ todos/                task tracker
 | Install | `pnpm install` | activa los hooks de paso (script `prepare`) |
 | Dev (todo) | `pnpm dev` | |
 | Build | `pnpm build` | |
-| Test | `pnpm test` | Vitest. Tests co-locados: `*.test.ts` junto al código. **No necesita Docker** |
+| Test | `pnpm test` | Vitest (web y packages) · Jest/jest-expo (móvil). Tests co-locados: `*.test.ts` junto al código. **No necesita Docker** |
 | **Aislamiento (RLS)** | `pnpm turbo run test:db` | `packages/db/test/` — **exige `supabase start`** |
 | **Lint (todo)** | `pnpm turbo run lint` | raíz + workspaces |
 | **Type check (todo)** | `pnpm turbo run typecheck` | raíz + workspaces |
 | Lint (solo raíz) | `pnpm lint` | `eslint .` |
 | Type check (solo raíz) | `pnpm typecheck` | `tsc --noEmit` |
 | Format | `pnpm format` | escribe; `pnpm format:check` solo verifica |
-| Dev web | `pnpm --filter web dev` | *(pendiente: apps/web)* |
-| Dev mobile | `pnpm --filter mobile start` | *(pendiente: apps/mobile)* |
+| Dev web | `pnpm --filter web dev` | |
+| Dev mobile | `pnpm --filter mobile start` | Metro + QR. Para probar en un teléfono hace falta un build de EAS (`development` o `preview`), no Expo Go: la app usa módulos nativos |
+| **Mapa base (dev)** | `pnpm --filter web tiles:dev` | baja el extracto de Lima (9,4 MiB) a `public/tiles/`. Ver ADR-0009 |
 | DB local | `supabase start` / `supabase db reset` | |
-| Nueva migración | `supabase migration new <nombre>` | *(pendiente: Supabase)* |
+| Nueva migración | `supabase migration new <nombre>` | |
 | Tipos DB | `pnpm db:types` | regenera tras cada migración |
 
 **Prettier no toca el Markdown** (`.prettierignore`): los docs son la fuente de
