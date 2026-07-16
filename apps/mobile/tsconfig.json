@@ -1,0 +1,24 @@
+{
+  // Dos bases encadenadas: la de Expo trae lo de React Native (jsx, tipos del
+  // runtime) y la del repo manda en los flags de rigor (strict,
+  // noUncheckedIndexedAccess…), que tienen un solo dueño y no se copian aquí.
+  // El orden importa: la última gana.
+  "extends": ["expo/tsconfig.base", "../../tsconfig.base.json"],
+  "compilerOptions": {
+    "noEmit": true,
+    "paths": { "@/*": ["./src/*"] }
+  },
+  // `*.js`/`*.mjs` de la raíz del workspace cubren `jest.config.js` y
+  // `eslint.config.mjs`: ESLint (project service) y `tsc` deben ver los MISMOS
+  // archivos, o `pnpm turbo run lint` peta con "not found by the project service"
+  // (el mismo pitfall que en apps/web — ver CLAUDE.md).
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "*.mjs",
+    "*.js",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
+  ],
+  "exclude": ["node_modules"]
+}
