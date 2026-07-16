@@ -6,7 +6,6 @@ export const TABS = [
   { key: "mercaderistas", label: "Mercaderistas" },
   { key: "supervisores", label: "Supervisores" },
   { key: "clientes", label: "Clientes (portal)" },
-  { key: "clientes-marca", label: "Clientes-marca" },
 ] as const;
 
 export type TabUsuarios = (typeof TABS)[number]["key"];

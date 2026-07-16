@@ -64,34 +64,3 @@ export async function crearUsuario(datos: unknown): Promise<ResultadoAccion> {
   revalidatePath("/admin/usuarios");
   return { ok: true };
 }
-
-/**
- * Baja de un cliente-marca: apaga `tenant.activo`. El acceso de sus mercaderistas
- * es DERIVADO (`app.perfil_efectivo()`), así que se revoca solo — no se toca
- * `profile.activo`, para que al reactivar el cliente no vuelva el desvinculado
- * individualmente. La RLS solo deja hacerlo a un admin.
- */
-export async function desactivarCliente(
-  tenantId: string,
-): Promise<ResultadoAccion> {
-  const supabase = await createServerSupabaseClient();
-  // `.select()` devuelve las filas afectadas: un UPDATE bloqueado por RLS o sobre
-  // un id inexistente actualiza 0 filas SIN error, y no debe reportarse como éxito.
-  const { data, error } = await supabase
-    .from("tenant")
-    .update({ activo: false })
-    .eq("id", tenantId)
-    .select("id");
-  if (error) {
-    console.error(
-      "[usuarios] fallo baja de cliente",
-      error.message.slice(0, 200),
-    );
-    return { ok: false, error: "No se pudo dar de baja al cliente" };
-  }
-  if (!data || data.length === 0) {
-    return { ok: false, error: "Cliente no encontrado o sin permiso" };
-  }
-  revalidatePath("/admin/usuarios");
-  return { ok: true };
-}

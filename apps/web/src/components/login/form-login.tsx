@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 
+import { leerCampo } from "@/lib/formulario";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 // El acceso al panel en tres pasos (ADR-0008): contraseña → factor → código.
@@ -23,11 +24,6 @@ const boton =
   "h-[38px] w-full rounded-[9px] bg-primary text-[13px] font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50";
 
 /** Un campo de texto del form; nunca un File, que es lo otro que puede venir. */
-function leerCampo(fd: FormData, clave: string): string {
-  const v = fd.get(clave);
-  return typeof v === "string" ? v.trim() : "";
-}
-
 export function FormLogin({
   destino,
   empiezaEn2fa,
