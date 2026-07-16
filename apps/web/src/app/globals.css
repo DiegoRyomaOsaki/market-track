@@ -2,71 +2,91 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Base neutra de shadcn (new-york) + tokens SEMÁNTICOS del dominio. Los colores
-   son provisionales: el branding final (color de marca, logo, tipografía) se
-   aplica encima más adelante. Lo que NO cambia es el significado de cada token. */
+/* Sistema de diseño del panel (2ª iteración). Paleta zinc + acento indigo, con los
+   tokens SEMÁNTICOS del dominio y sus fondos suaves. Valores del mockup de diseño. */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --radius: 0.55rem;
 
-  /* Dominio: verde = completado/ok · ámbar = en curso/advertencia · rojo = alerta. */
-  --completado: oklch(0.723 0.192 149.6);
-  --completado-foreground: oklch(0.985 0 0);
-  --en-curso: oklch(0.793 0.162 82.6);
-  --en-curso-foreground: oklch(0.205 0 0);
-  --alerta: oklch(0.62 0.235 25.8);
-  --alerta-foreground: oklch(0.985 0 0);
+  --background: #ffffff;
+  --foreground: #18181b;
+  --card: #ffffff;
+  --card-foreground: #18181b;
+  --popover: #18181b; /* tooltips oscuros del diseño (ayuda contextual) */
+  --popover-foreground: #ffffff;
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #18181b;
+  --muted: #f4f4f5;
+  --muted-foreground: #71717a;
+  --accent: #eef2ff;
+  --accent-foreground: #4338ca;
+  --destructive: #dc2626;
+  --border: #e4e4e7;
+  --input: #e4e4e7;
+  --ring: #4f46e5;
+
+  /* Lienzo de la app (fondo tras las superficies blancas). */
+  --canvas: #f4f4f5;
+
+  /* Dominio: completado (verde) · en-curso (ámbar) · alerta (rojo), con su fondo suave. */
+  --completado: #16a34a;
+  --completado-foreground: #ffffff;
+  --completado-suave: #dcfce7;
+  --completado-texto: #15803d;
+  --en-curso: #d97706;
+  --en-curso-foreground: #ffffff;
+  --en-curso-suave: #fef3c7;
+  --en-curso-texto: #b45309;
+  --alerta: #dc2626;
+  --alerta-foreground: #ffffff;
+  --alerta-suave: #fee2e2;
+  --alerta-texto: #b91c1c;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --background: #18181b;
+  --foreground: #fafafa;
+  --card: #1f1f23;
+  --card-foreground: #fafafa;
+  --popover: #09090b;
+  --popover-foreground: #fafafa;
+  --primary: #818cf8;
+  --primary-foreground: #18181b;
+  --secondary: #27272a;
+  --secondary-foreground: #fafafa;
+  --muted: #27272a;
+  --muted-foreground: #a1a1aa;
+  --accent: #312e81;
+  --accent-foreground: #e0e7ff;
+  --destructive: #f87171;
+  --border: #27272a;
+  --input: #3f3f46;
+  --ring: #818cf8;
+  --canvas: #09090b;
 
-  --completado: oklch(0.696 0.17 149.6);
-  --completado-foreground: oklch(0.145 0 0);
-  --en-curso: oklch(0.828 0.162 82.6);
-  --en-curso-foreground: oklch(0.205 0 0);
-  --alerta: oklch(0.704 0.213 25.8);
-  --alerta-foreground: oklch(0.145 0 0);
+  --completado: #22c55e;
+  --completado-foreground: #052e16;
+  --completado-suave: #14311f;
+  --completado-texto: #4ade80;
+  --en-curso: #f59e0b;
+  --en-curso-foreground: #431407;
+  --en-curso-suave: #3a2606;
+  --en-curso-texto: #fbbf24;
+  --alerta: #ef4444;
+  --alerta-foreground: #450a0a;
+  --alerta-suave: #3a1212;
+  --alerta-texto: #fca5a5;
 }
 
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
+
+  --font-sans: var(--font-public-sans), system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), "IBM Plex Mono", monospace;
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -85,12 +105,20 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-canvas: var(--canvas);
+
   --color-completado: var(--completado);
   --color-completado-foreground: var(--completado-foreground);
+  --color-completado-suave: var(--completado-suave);
+  --color-completado-texto: var(--completado-texto);
   --color-en-curso: var(--en-curso);
   --color-en-curso-foreground: var(--en-curso-foreground);
+  --color-en-curso-suave: var(--en-curso-suave);
+  --color-en-curso-texto: var(--en-curso-texto);
   --color-alerta: var(--alerta);
   --color-alerta-foreground: var(--alerta-foreground);
+  --color-alerta-suave: var(--alerta-suave);
+  --color-alerta-texto: var(--alerta-texto);
 }
 
 @layer base {
@@ -98,7 +126,8 @@
     border-color: var(--color-border);
   }
   body {
-    background-color: var(--color-background);
+    background-color: var(--color-canvas);
     color: var(--color-foreground);
+    font-family: var(--font-sans);
   }
 }
