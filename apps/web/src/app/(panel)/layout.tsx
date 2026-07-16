@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 
 import { Header } from "@/components/panel/header";
 import { Sidebar } from "@/components/panel/sidebar";
-import { COOKIE_TENANT } from "@/lib/panel/tenant";
+import { COOKIE_TENANT, type Tenant } from "@/lib/panel/tenant";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 // Shell del panel (admin/supervisor). Server Component: trae el perfil y la lista
@@ -32,10 +32,20 @@ export default async function PanelLayout({
       .order("nombre"),
   ]);
 
+  // Falla visible: un error de la consulta (RLS/PostgREST) no debe confundirse con
+  // "sin sesión". Se registra antes del redirect defensivo.
+  if (perfilRes.error) {
+    console.error(
+      JSON.stringify({
+        evento: "panel_perfil_error",
+        detalle: perfilRes.error.message.slice(0, 200),
+      }),
+    );
+  }
   const perfil = perfilRes.data;
   if (!perfil) redirect("/login");
   const rol: RolUsuario = perfil.rol;
-  const tenants = tenantsRes.data ?? [];
+  const tenants: Tenant[] = tenantsRes.data ?? [];
 
   const cookieStore = await cookies();
   const tenantActualId =

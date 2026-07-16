@@ -1,11 +1,11 @@
 import type { RolUsuario } from "@market-track/shared";
 
+import type { Tenant } from "@/lib/panel/tenant";
+
 import { HeaderTitulo } from "./header-titulo";
 import { HelpPopover } from "./help-popover";
 import { RoleSwitch } from "./role-switch";
 import { TenantSelector } from "./tenant-selector";
-
-type Tenant = { id: string; nombre: string };
 
 // Frame del header en el servidor; los controles (título por ruta, ayuda, cambio
 // de rol, selector de cliente) son leaves de cliente. El role switch solo lo ve el

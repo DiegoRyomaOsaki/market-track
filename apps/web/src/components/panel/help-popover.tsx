@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { itemActivo } from "@/lib/panel/navegacion";
 
@@ -13,12 +13,20 @@ import { useCerrarAlSalir } from "./use-cerrar";
 export function HelpPopover() {
   const [abierto, setAbierto] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const item = itemActivo(usePathname());
-  useCerrarAlSalir(ref, abierto, () => setAbierto(false));
+
+  // Al cerrar, el foco vuelve al disparador: un usuario de teclado no lo pierde.
+  const cerrar = useCallback(() => {
+    setAbierto(false);
+    triggerRef.current?.focus();
+  }, []);
+  useCerrarAlSalir(ref, abierto, cerrar);
 
   return (
     <div className="relative" ref={ref}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setAbierto((v) => !v)}
         aria-expanded={abierto}
@@ -35,13 +43,13 @@ export function HelpPopover() {
           className="absolute right-0 top-11 z-50 w-[340px] rounded-xl bg-popover p-4 text-[12.5px] leading-relaxed text-popover-foreground shadow-2xl"
         >
           <div className="mb-1 font-bold">{item?.titulo ?? "Panel"}</div>
-          <div className="text-white/70">
+          <div className="text-popover-foreground/70">
             La ayuda contextual de esta sección se añade próximamente.
           </div>
           <button
             type="button"
-            onClick={() => setAbierto(false)}
-            className="mt-3 h-[30px] rounded-md bg-white/15 px-3 text-xs font-semibold text-white hover:bg-white/25"
+            onClick={cerrar}
+            className="mt-3 h-[30px] rounded-md bg-popover-foreground/15 px-3 text-xs font-semibold text-popover-foreground hover:bg-popover-foreground/25"
           >
             Entendido
           </button>

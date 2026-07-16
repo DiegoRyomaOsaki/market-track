@@ -32,7 +32,9 @@ export function SidebarNav({ secciones }: { secciones: Seccion[] }) {
                     : "text-foreground hover:bg-muted",
                 )}
               >
-                <span className="w-[18px] text-center">{item.icono}</span>
+                <span aria-hidden="true" className="w-[18px] text-center">
+                  {item.icono}
+                </span>
                 <span className="flex-1 text-left">{item.label}</span>
               </Link>
             );

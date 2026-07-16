@@ -18,12 +18,14 @@ export function RoleSwitch() {
     <div className="flex gap-0.5 rounded-lg bg-muted p-[3px]">
       <Link
         href="/admin"
+        aria-current={enSupervisor ? undefined : "page"}
         className={cn(base, enSupervisor ? inactivo : activo)}
       >
         Admin
       </Link>
       <Link
         href="/supervisor"
+        aria-current={enSupervisor ? "page" : undefined}
         className={cn(base, enSupervisor ? activo : inactivo)}
       >
         Supervisor
