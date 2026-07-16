@@ -25,9 +25,12 @@ describe("itemActivo", () => {
     expect(itemActivo("/cliente")).toBeUndefined();
   });
 
-  it("todo item de NAV tiene título para el header", () => {
+  it("todo item de NAV tiene título y ayuda contextual", () => {
+    // Ninguna sección puede quedarse sin su texto de ayuda (`?`): el popover lo
+    // lee de aquí, que es la fuente única.
     for (const item of NAV) {
       expect(item.titulo.length).toBeGreaterThan(0);
+      expect(item.ayuda.length).toBeGreaterThan(20);
     }
   });
 });

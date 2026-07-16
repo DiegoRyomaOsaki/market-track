@@ -44,7 +44,7 @@ export function HelpPopover() {
         >
           <div className="mb-1 font-bold">{item?.titulo ?? "Panel"}</div>
           <div className="text-popover-foreground/70">
-            La ayuda contextual de esta sección se añade próximamente.
+            {item?.ayuda ?? "Elige una sección para ver su ayuda."}
           </div>
           <button
             type="button"
