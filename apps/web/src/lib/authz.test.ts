@@ -98,6 +98,29 @@ describe("rutaSegura", () => {
     expect(rutaSegura("//evil.com")).toBe("/");
   });
 
+  it("rechaza el disfraz con backslash: /\\evil.com parece interno y NO lo es", () => {
+    // Empieza por UNA barra, así que un guard de prefijos lo deja pasar. Pero el
+    // parser del navegador convierte `\` en `/` y termina en https://evil.com —
+    // justo después de que el usuario puso su contraseña y su OTP.
+    expect(rutaSegura("/\\evil.com")).toBe("/");
+    expect(rutaSegura("\\\\evil.com")).toBe("/");
+  });
+
+  it("una barra invertida CODIFICADA es solo una ruta, y sí pasa", () => {
+    // %5C no se convierte en separador: se queda dentro del path del propio sitio.
+    expect(rutaSegura("/%5Cevil.com")).toBe("/%5Cevil.com");
+  });
+
+  it("conserva query y hash de una ruta interna", () => {
+    expect(rutaSegura("/admin/usuarios?tab=clientes#x")).toBe(
+      "/admin/usuarios?tab=clientes#x",
+    );
+  });
+
+  it("rechaza una ruta relativa (sin barra inicial)", () => {
+    expect(rutaSegura("admin")).toBe("/");
+  });
+
   it("sin destino usa el default", () => {
     expect(rutaSegura(undefined)).toBe("/");
     expect(rutaSegura("", "/admin")).toBe("/admin");
