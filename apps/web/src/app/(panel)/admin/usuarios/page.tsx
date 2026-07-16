@@ -16,6 +16,10 @@ const TH =
   "text-left font-semibold text-muted-foreground px-4 py-2.5 text-[11.5px]";
 const TD = "px-4 py-3 align-middle";
 
+function primero(v: string | string[] | undefined): string | undefined {
+  return Array.isArray(v) ? v[0] : v;
+}
+
 function Avatar({ nombre }: { nombre: string }) {
   return (
     <span
@@ -38,11 +42,15 @@ function Tarjeta({ children }: { children: React.ReactNode }) {
 export default async function UsuariosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; q?: string }>;
+  searchParams: Promise<{
+    tab?: string | string[];
+    q?: string | string[];
+  }>;
 }) {
-  const { tab: tabParam, q } = await searchParams;
+  const params = await searchParams;
+  const tabParam = primero(params.tab);
   const tab: TabUsuarios = esTab(tabParam) ? tabParam : "mercaderistas";
-  const busqueda = (q ?? "").trim();
+  const busqueda = (primero(params.q) ?? "").trim();
 
   const supabase = await createServerSupabaseClient();
 
@@ -106,9 +114,7 @@ async function TablaPersonas({
   if (busqueda) query = query.ilike("nombre", `%${busqueda}%`);
 
   const { data, error } = await query;
-  if (error) {
-    return <Aviso>No se pudieron cargar los usuarios.</Aviso>;
-  }
+  if (error) return <Aviso>No se pudieron cargar los usuarios.</Aviso>;
   const filas = data ?? [];
   if (filas.length === 0) {
     return (
@@ -125,15 +131,33 @@ async function TablaPersonas({
     <Tarjeta>
       <thead>
         <tr className="border-b border-border bg-muted/40">
-          <th className={TH}>
+          <th scope="col" className={TH}>
             {esMerc ? "MERCADERISTA" : esCliente ? "CLIENTE" : "SUPERVISOR"}
           </th>
-          <th className={TH}>DNI</th>
-          <th className={TH}>TELÉFONO</th>
-          {esMerc && <th className={TH}>SUPERVISOR</th>}
-          {esMerc && <th className={TH}>SCTR</th>}
-          {esCliente && <th className={TH}>CLIENTE-MARCA</th>}
-          <th className={TH}>ESTADO</th>
+          <th scope="col" className={TH}>
+            DNI
+          </th>
+          <th scope="col" className={TH}>
+            TELÉFONO
+          </th>
+          {esMerc && (
+            <th scope="col" className={TH}>
+              SUPERVISOR
+            </th>
+          )}
+          {esMerc && (
+            <th scope="col" className={TH}>
+              SCTR
+            </th>
+          )}
+          {esCliente && (
+            <th scope="col" className={TH}>
+              CLIENTE-MARCA
+            </th>
+          )}
+          <th scope="col" className={TH}>
+            ESTADO
+          </th>
         </tr>
       </thead>
       <tbody>
@@ -181,16 +205,19 @@ async function TablaClientesMarca({
     .order("nombre");
   if (busqueda) query = query.ilike("nombre", `%${busqueda}%`);
 
-  const [{ data: tenants, error }, { data: mercs }] = await Promise.all([
-    query,
-    supabase
-      .from("profile")
-      .select("tenant_id")
-      .eq("rol", "mercaderista")
-      .eq("activo", true),
-  ]);
+  const [{ data: tenants, error }, { data: mercs, error: errMercs }] =
+    await Promise.all([
+      query,
+      supabase
+        .from("profile")
+        .select("tenant_id")
+        .eq("rol", "mercaderista")
+        .eq("activo", true),
+    ]);
 
-  if (error) return <Aviso>No se pudieron cargar los clientes-marca.</Aviso>;
+  if (error || errMercs) {
+    return <Aviso>No se pudieron cargar los clientes-marca.</Aviso>;
+  }
   const filas = tenants ?? [];
   if (filas.length === 0) return <Aviso>No hay clientes-marca.</Aviso>;
 
@@ -208,10 +235,18 @@ async function TablaClientesMarca({
     <Tarjeta>
       <thead>
         <tr className="border-b border-border bg-muted/40">
-          <th className={TH}>CLIENTE-MARCA</th>
-          <th className={TH}>MERCADERISTAS ACTIVOS</th>
-          <th className={TH}>ESTADO</th>
-          <th className={TH} />
+          <th scope="col" className={TH}>
+            CLIENTE-MARCA
+          </th>
+          <th scope="col" className={TH}>
+            MERCADERISTAS ACTIVOS
+          </th>
+          <th scope="col" className={TH}>
+            ESTADO
+          </th>
+          <th scope="col" className={TH}>
+            <span className="sr-only">Acciones</span>
+          </th>
         </tr>
       </thead>
       <tbody>

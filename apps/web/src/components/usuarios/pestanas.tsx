@@ -15,11 +15,12 @@ export function esTab(valor: string | undefined): valor is TabUsuarios {
   return TABS.some((t) => t.key === valor);
 }
 
-// Pestañas como enlaces (?tab=): server-rendered, navegación real con prefetch.
+// Pestañas como enlaces (?tab=): cada una es una URL distinta (navegación real
+// con prefetch), así que el patrón correcto es <nav> + aria-current, no el widget
+// ARIA de tabs (que implicaría teclas de flecha que aquí no aplican).
 export function Pestanas({ activa }: { activa: TabUsuarios }) {
   return (
-    <div
-      role="tablist"
+    <nav
       aria-label="Tipo de usuario"
       className="flex gap-1.5 rounded-[10px] bg-muted p-1"
     >
@@ -29,8 +30,7 @@ export function Pestanas({ activa }: { activa: TabUsuarios }) {
           <Link
             key={t.key}
             href={`/admin/usuarios?tab=${t.key}`}
-            role="tab"
-            aria-selected={esActiva}
+            aria-current={esActiva ? "page" : undefined}
             className={cn(
               "rounded-md px-3 py-1.5 text-[13px] font-semibold transition-colors",
               esActiva
@@ -42,6 +42,6 @@ export function Pestanas({ activa }: { activa: TabUsuarios }) {
           </Link>
         );
       })}
-    </div>
+    </nav>
   );
 }

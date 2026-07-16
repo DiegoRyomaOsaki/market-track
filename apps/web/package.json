@@ -14,6 +14,7 @@
   "dependencies": {
     "@market-track/db": "workspace:*",
     "@market-track/shared": "workspace:*",
+    "@radix-ui/react-alert-dialog": "^1.1.19",
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.110.6",
     "clsx": "^2.1.1",

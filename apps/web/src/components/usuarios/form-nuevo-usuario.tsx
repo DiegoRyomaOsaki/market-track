@@ -67,7 +67,7 @@ export function FormNuevoUsuario({
       onSubmit={(e) => void onSubmit(e)}
       className="flex max-w-xl flex-col gap-4 rounded-xl border border-border bg-background p-6"
     >
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <label className="flex flex-col gap-1.5">
           <span className={etiqueta}>Nombre</span>
           <input name="nombre" required className={campo} />
