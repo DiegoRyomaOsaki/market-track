@@ -108,7 +108,7 @@ export const NAV_SUPERVISOR: readonly ItemNav[] = [
     titulo: "Revisión de reportes",
     subtitulo: "Cola de aprobación de levantamientos",
     ayuda:
-      "La cola de levantamientos por aprobar: se revisa la evidencia —fotos antes/después, share of shelf— y se aprueba o se rechaza con un motivo.",
+      "La cola de levantamientos por aprobar: se revisa la evidencia —fotos antes/después, Share of Shelf— y se aprueba o se rechaza con un motivo.",
   },
 ];
 
