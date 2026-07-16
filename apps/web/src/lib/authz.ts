@@ -40,6 +40,35 @@ export function requiereSegundoFactor(
   return nextLevel === "aal2" && currentLevel !== "aal2";
 }
 
+// Un origen reservado (TLD `.invalid`, no resuelve nunca) contra el que probar a
+// resolver el destino.
+const ORIGEN_DE_PRUEBA = "http://interno.invalid";
+
+/**
+ * Solo rutas internas. El `redirect` del query lo pone quien arma el enlace, así
+ * que no puede usarse tal cual para navegar.
+ *
+ * No basta con mirar el prefijo: `/\otro.com` empieza por UNA barra y parece
+ * interno, pero el parser de URL del navegador convierte `\` en `/` y acaba
+ * resolviéndolo a `https://otro.com`. Por eso se RESUELVE igual que lo haría el
+ * navegador y se comprueba que (a) no cambió de origen y (b) sigue siendo la
+ * misma cadena. Lo que no reproduzca su propia ruta, no se usa.
+ */
+export function rutaSegura(
+  destino: string | undefined,
+  porDefecto = "/",
+): string {
+  if (!destino) return porDefecto;
+  try {
+    const url = new URL(destino, ORIGEN_DE_PRUEBA);
+    if (url.origin !== ORIGEN_DE_PRUEBA) return porDefecto;
+    const ruta = `${url.pathname}${url.search}${url.hash}`;
+    return ruta === destino ? ruta : porDefecto;
+  } catch {
+    return porDefecto;
+  }
+}
+
 function esSegmento(valor: string): valor is Segmento {
   return (SEGMENTOS as readonly string[]).includes(valor);
 }

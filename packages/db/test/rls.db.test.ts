@@ -188,8 +188,11 @@ describe("revocación: el acceso es derivado, no una copia", () => {
       ]);
 
       await db.query("set local role authenticated");
+      // `aal2` va explícito: sin él, este test pasaría por el gate del segundo
+      // factor en vez de por la cancelación del cliente — un verde falso que no
+      // probaría nada de lo que dice probar.
       await db.query(
-        `set local request.jwt.claims = '${JSON.stringify({ sub: USUARIOS.mercaderistaMaracumango, role: "authenticated" })}'`,
+        `set local request.jwt.claims = '${JSON.stringify({ sub: USUARIOS.mercaderistaMaracumango, role: "authenticated", aal: "aal2" })}'`,
       );
 
       // Sin esperar a que expire ningún token: la regla se recalcula en cada
@@ -199,5 +202,43 @@ describe("revocación: el acceso es derivado, no una copia", () => {
     } finally {
       await db.query("rollback");
     }
+  });
+});
+
+describe("segundo factor: el gate aal2 protege los DATOS, no solo la pantalla", () => {
+  it("una sesión SIN aal2 no ve nada, ni siendo admin", async () => {
+    // El middleware protege la UI; esto protege la fila. Una petición hecha a mano
+    // contra PostgREST con un token aal1 no puede leer, que es justo el hueco que
+    // el gate del middleware por sí solo dejaba abierto (ADR-0008, punto 4).
+    await comoUsuario(
+      db,
+      USUARIOS.admin,
+      async (c) => {
+        expect(await contarFilas(c, "marca")).toBe(0);
+        expect(await contarFilas(c, "tenant")).toBe(0);
+      },
+      { aal: "aal1" },
+    );
+  });
+
+  it("sin aal2 SÍ ve su propia fila de profile, y tiene que ser así", async () => {
+    // `profile_lee_el_suyo` no pasa por perfil_efectivo a propósito: el middleware
+    // lee el rol con la sesión aal1 —antes del segundo factor— para saber a dónde
+    // mandarte. Si esto se cerrara, no habría forma de llegar al paso de 2FA.
+    await comoUsuario(
+      db,
+      USUARIOS.admin,
+      async (c) => {
+        expect(await contarFilas(c, "profile")).toBe(1);
+      },
+      { aal: "aal1" },
+    );
+  });
+
+  it("el mismo admin CON aal2 sí ve la operación", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      expect(await contarFilas(c, "marca")).toBeGreaterThan(0);
+      expect(await contarFilas(c, "tenant")).toBeGreaterThan(0);
+    });
   });
 });
