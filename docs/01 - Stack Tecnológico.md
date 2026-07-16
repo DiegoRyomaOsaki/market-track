@@ -117,7 +117,7 @@ A volumen, las fotos dominan el costo. Estimación piloto: 40 mercaderistas × 3
 - **Supervisor/Admin** y **Cliente/Brand Manager** comparten base de código; las vistas y permisos se separan por rol (RLS + middleware).
 - **Tailwind CSS + shadcn/ui** — UI rápida y accesible (tu patrón habitual).
 - **TanStack Query** + **Supabase JS client** — fetching y realtime.
-- **Mapas:** **MapLibre GL** (open source) o **Mapbox** — mapa del Perú con pines verdes/rojos en tiempo real.
+- **Mapas:** **MapLibre GL** (renderizador) + **tiles propios**: un extracto de Perú en PMTiles (Protomaps) servido desde **Cloudflare R2** — mapa del Perú con pines verdes/rojos en tiempo real. Ver [[adr/0009-tiles-autohospedados-en-r2]]. El móvil **no lleva mapa**: su geocerca es un cálculo de distancia.
 - **Gráficos/KPIs:** **Tremor** o **Recharts** — dashboards de indicadores.
 - **Exportación:** generación de **Excel/CSV** (SheetJS) y **PDF** (react-pdf) para los reportes del cliente.
 
@@ -199,7 +199,7 @@ Infra      Vercel + EAS + GitHub Actions + Turborepo + Sentry
 ## Decisiones por validar
 
 - ¿PowerSync (managed, paga al crecer) vs WatermelonDB (gratis, más trabajo)? → empezar con **PowerSync**, evaluar migración si el costo molesta.
-- ¿MapLibre (gratis) vs Mapbox (managed, free tier)? → **MapLibre** para evitar costo por carga de mapa.
+- ~~¿MapLibre (gratis) vs Mapbox (managed, free tier)? → **MapLibre** para evitar costo por carga de mapa.~~ **Resuelto y corregido (jul 2026):** la pregunta estaba mal planteada — MapLibre es un renderizador, no un proveedor de mapas, y no evita ningún costo: lo mueve al proveedor de tiles. Decidido autohospedar los tiles (Protomaps/PMTiles en R2) en [[adr/0009-tiles-autohospedados-en-r2]].
 - ¿WhatsApp en el piloto o solo email? → **solo email** salvo que el cliente lo exija por contrato.
 
 Ver arquitectura en [[02 - Arquitectura Técnica]] y modelo de datos en [[03 - Modelo de Datos]].
