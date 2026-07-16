@@ -55,7 +55,7 @@ alguien construirá encima creyendo que está cerrado.
 
 | # | Decisión | Estado | Fecha |
 |---|---|---|---|
-| [0001](0001-motor-offline-dedicado.md) | Offline-first con un motor de sincronización dedicado | **propuesto** | 2026-06-18 |
+| [0001](0001-motor-offline-dedicado.md) | Offline-first con un motor de sincronización dedicado | aceptado | 2026-06-18 |
 | [0002](0002-multi-tenant-por-rls.md) | Multi-tenant por RLS, no por base de datos separada | aceptado | 2026-06-18 |
 | [0003](0003-fotos-en-r2-metadata-en-postgres.md) | Fotos en Cloudflare R2, metadata en Postgres | aceptado | 2026-06-18 |
 | [0004](0004-una-web-por-rol.md) | Una sola app web para los tres roles | aceptado | 2026-06-18 |

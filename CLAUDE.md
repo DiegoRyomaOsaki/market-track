@@ -257,11 +257,18 @@ Aún no hay `.env`. Al scaffoldear, crear `.env.example` por app. Previstas:
 - **En el móvil, RLS protege la escritura pero NO la lectura.** Las subidas van
   por el cliente de Supabase (PostgREST) y sí pasan por RLS. La bajada la
   replica PowerSync con un rol `BYPASSRLS`: lo que el mercaderista se descarga
-  lo deciden **solo las *sync rules***. Es una segunda superficie de seguridad —
-  y un harness que solo pruebe RLS da un **falso verde** para el móvil. Nunca
-  filtrar por *client parameters* en una sync rule (el cliente puede enviar
-  cualquier valor): solo por `request.user_id()` o por tabla. Ver
+  lo deciden **solo las reglas de sincronización**. Es una segunda superficie de
+  seguridad — y un harness que solo pruebe RLS da un **falso verde** para el
+  móvil. Nunca filtrar por parámetros que controle el cliente (puede enviar
+  cualquier valor): solo por `auth.user_id()` o por tabla. El formato vigente es
+  **Sync Streams (edition 3)**; las *sync rules* con `bucket_definitions` y
+  `request.user_id()` son legacy — verificado a la fuerza en el prototipo. Ver
   `docs/adr/0001-motor-offline-dedicado.md`.
+- **El gate `aal2` NO cubre la bajada del móvil.** Vive en
+  `app.perfil_efectivo()`, o sea en la RLS, y la RLS no interviene en lo que
+  PowerSync descarga. **Medido**: un mercaderista con sesión `aal1` (sin segundo
+  factor) recibe sus datos igual. Si se quiere que el 2FA cubra el teléfono, la
+  regla de sincronización tiene que exigir el claim `aal` explícitamente.
 - **La validación de geocerca del cliente es UX, no seguridad** — se re-valida
   en servidor al sincronizar (PostGIS + timestamp de servidor).
 - **Watermark y timestamps se graban al capturar**, nunca al subir — la subida
