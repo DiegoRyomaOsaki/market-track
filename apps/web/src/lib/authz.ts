@@ -25,6 +25,21 @@ export function puedeAccederA(
   return SEGMENTOS_POR_ROL[rol].includes(segmento);
 }
 
+/**
+ * ¿La sesión tiene el segundo factor PENDIENTE? (ADR-0008)
+ *
+ * Se lee del `aal` nativo: `nextLevel` sube a `aal2` solo si el usuario tiene un
+ * factor verificado. Si lo tiene y su sesión sigue en `aal1`, no completó el 2FA.
+ * Quien NO tiene factor (`nextLevel: aal1`) no lo tiene pendiente — forzar el
+ * enrolamiento es trabajo del login, no de este gate.
+ */
+export function requiereSegundoFactor(
+  currentLevel: string | null,
+  nextLevel: string | null,
+): boolean {
+  return nextLevel === "aal2" && currentLevel !== "aal2";
+}
+
 function esSegmento(valor: string): valor is Segmento {
   return (SEGMENTOS as readonly string[]).includes(valor);
 }

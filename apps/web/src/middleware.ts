@@ -1,7 +1,11 @@
 import type { RolUsuario } from "@market-track/shared";
 import { type NextRequest, NextResponse } from "next/server";
 
-import { puedeAccederA, segmentoDeRuta } from "@/lib/authz";
+import {
+  puedeAccederA,
+  requiereSegundoFactor,
+  segmentoDeRuta,
+} from "@/lib/authz";
 import { createMiddlewareSupabaseClient } from "@/lib/supabase/middleware";
 
 // El middleware es la PUERTA (qué sección se renderiza), no la seguridad: la
@@ -80,8 +84,12 @@ export async function middleware(request: NextRequest) {
     // Un usuario SIN factor sí pasa este gate, a propósito: exigir aquí un factor
     // que todavía no existe dejaría fuera a todo el mundo. Forzar el ENROLAMIENTO
     // es trabajo del login; entre los dos, el 2FA queda obligatorio.
-    const { data: aal, error: errAal } =
-      await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    // Acotada como las demás: sin argumento resuelve la sesión y puede disparar un
+    // refresh de red — y una promesa colgada no la rescata el catch de abajo.
+    const { data: aal, error: errAal } = await conDeadline(
+      supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
+      AUTH_TIMEOUT_MS,
+    );
     if (errAal || !aal) {
       console.error(
         JSON.stringify({
@@ -92,7 +100,7 @@ export async function middleware(request: NextRequest) {
       );
       return redirigirALogin(); // fail-closed
     }
-    if (aal.nextLevel === "aal2" && aal.currentLevel !== "aal2") {
+    if (requiereSegundoFactor(aal.currentLevel, aal.nextLevel)) {
       console.warn(
         JSON.stringify({
           evento: "segundo_factor_pendiente",

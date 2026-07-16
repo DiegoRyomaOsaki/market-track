@@ -31,11 +31,27 @@ if (!HOOK_SECRET) {
 }
 
 // La librería espera el secreto en base64, sin el prefijo que usa Supabase.
-const webhook = new Webhook(HOOK_SECRET.replace("v1,whsec_", ""));
+const PREFIJO = "v1,whsec_";
+const webhook = new Webhook(
+  HOOK_SECRET.startsWith(PREFIJO)
+    ? HOOK_SECRET.slice(PREFIJO.length)
+    : HOOK_SECRET,
+);
+
+// El modo sin envío real es una decisión EXPLÍCITA de desarrollo, no "no encontré
+// la API key": esa es justo la condición de una producción mal aprovisionada, y
+// ahí escupir el código en el log mientras se le dice a GoTrue que entregó sería
+// un regalo para quien lea los logs.
+const DRY_RUN = Deno.env.get("OTP_DRY_RUN") === "true";
 
 const hookSchema = z.object({
   user: z.object({ id: z.guid(), email: z.email().nullish() }),
-  sms: z.object({ otp: z.string().min(1), sms_type: z.string().nullish() }),
+  // El OTP viene de Supabase y son dígitos (otp_length en config.toml). Acotarlo
+  // aquí lo hace inofensivo al interpolarlo en el HTML del correo.
+  sms: z.object({
+    otp: z.string().regex(/^\d{4,10}$/),
+    sms_type: z.string().nullish(),
+  }),
 });
 
 /** Recorta a n chars: los mensajes de infra pueden arrastrar contenido de más. */
@@ -133,8 +149,19 @@ Deno.serve(async (req) => {
 
   const habilitados = configRes.data.otp_canales_habilitados;
   const preferido = perfilRes.data.canal_2fa;
-  // Su preferencia solo vale si la outsourcing la habilitó; si no, correo.
-  const canal = habilitados.includes(preferido) ? preferido : "correo";
+  // Su preferencia solo vale si la outsourcing la habilitó; si no, correo — pero
+  // solo si el correo TAMBIÉN está habilitado. Nada se entrega por un canal que la
+  // política global no permite, ni siquiera el default.
+  const canal = habilitados.includes(preferido)
+    ? preferido
+    : habilitados.includes("correo")
+      ? "correo"
+      : null;
+
+  if (!canal) {
+    console.error("[enviar-otp] ningún canal habilitado para este usuario");
+    return json(500, { error: "no hay canal de entrega habilitado" });
+  }
 
   if (canal !== "correo") {
     // SMS y WhatsApp entran en su fase (Twilio). Falla VISIBLE: es preferible que
@@ -156,9 +183,18 @@ Deno.serve(async (req) => {
 <p style="font-size:24px;font-weight:700;letter-spacing:3px">${sms.otp}</p>
 <p>Vence en unos minutos. Si no intentaste entrar, ignora este correo.</p>`;
 
-  // DRY-RUN: sin API key no se manda nada (local/tests). El código queda en el log
-  // de la función para poder probar el flujo en desarrollo.
   if (!apiKey) {
+    // Sin proveedor y sin permiso EXPLÍCITO de dry-run se falla cerrado: una
+    // producción a la que no le llegó la API key no puede fingir que entregó
+    // (GoTrue daría el challenge por bueno y nadie se enteraría).
+    if (!DRY_RUN) {
+      console.error(
+        JSON.stringify({ evento: "otp_sin_proveedor", user_id: user.id }),
+      );
+      return json(500, { error: "no hay proveedor de envío configurado" });
+    }
+    // DRY-RUN (solo desarrollo, con OTP_DRY_RUN=true): el código queda en el log
+    // para poder probar el flujo sin mandar correo.
     console.log(
       JSON.stringify({
         evento: "otp_dry_run",

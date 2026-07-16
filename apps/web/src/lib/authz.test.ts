@@ -1,7 +1,12 @@
 import { Constants } from "@market-track/db";
 import { describe, expect, it } from "vitest";
 
-import { puedeAccederA, SEGMENTOS, segmentoDeRuta } from "./authz";
+import {
+  puedeAccederA,
+  requiereSegundoFactor,
+  SEGMENTOS,
+  segmentoDeRuta,
+} from "./authz";
 
 // Los tres roles con sección web (el mercaderista no tiene web).
 const ROLES_WEB = ["admin", "supervisor", "cliente"] as const;
@@ -56,6 +61,24 @@ describe("puedeAccederA", () => {
     for (const rol of Constants.public.Enums.rol_usuario) {
       expect(typeof puedeAccederA(rol, "admin")).toBe("boolean");
     }
+  });
+});
+
+describe("requiereSegundoFactor", () => {
+  it("con factor verificado y sesión en aal1: el 2FA está PENDIENTE", () => {
+    expect(requiereSegundoFactor("aal1", "aal2")).toBe(true);
+  });
+
+  it("con el 2FA ya completado (aal2) no se vuelve a pedir", () => {
+    expect(requiereSegundoFactor("aal2", "aal2")).toBe(false);
+  });
+
+  it("sin factor enrolado no hay 2FA pendiente (forzarlo es del login)", () => {
+    expect(requiereSegundoFactor("aal1", "aal1")).toBe(false);
+  });
+
+  it("sin datos de aal no lo declara pendiente (el caller falla cerrado aparte)", () => {
+    expect(requiereSegundoFactor(null, null)).toBe(false);
   });
 });
 
