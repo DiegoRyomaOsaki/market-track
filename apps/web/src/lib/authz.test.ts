@@ -6,15 +6,31 @@ import { puedeAccederA, SEGMENTOS, segmentoDeRuta } from "./authz";
 // Los tres roles con sección web (el mercaderista no tiene web).
 const ROLES_WEB = ["admin", "supervisor", "cliente"] as const;
 
+// Acceso esperado por rol: el admin es staff global y cambia de contexto a la
+// vista de supervisor; el supervisor y el cliente, solo lo suyo.
+const ACCESO_ESPERADO: Record<(typeof ROLES_WEB)[number], readonly string[]> = {
+  admin: ["admin", "supervisor"],
+  supervisor: ["supervisor"],
+  cliente: ["cliente"],
+};
+
 describe("puedeAccederA", () => {
-  it("cada rol web entra SOLO a su propio segmento (matriz completa)", () => {
-    // Cubre explícitamente que admin NO es un super-rol: admin→/supervisor y
-    // admin→/cliente deniegan, igual que cualquier cruce entre roles.
+  it("cada rol web entra solo a los segmentos permitidos (matriz completa)", () => {
     for (const rol of ROLES_WEB) {
       for (const segmento of SEGMENTOS) {
-        expect(puedeAccederA(rol, segmento)).toBe(rol === segmento);
+        expect(puedeAccederA(rol, segmento)).toBe(
+          ACCESO_ESPERADO[rol].includes(segmento),
+        );
       }
     }
+  });
+
+  it("el admin cambia de contexto a la vista de supervisor", () => {
+    expect(puedeAccederA("admin", "supervisor")).toBe(true);
+  });
+
+  it("el supervisor NO entra a /admin", () => {
+    expect(puedeAccederA("supervisor", "admin")).toBe(false);
   });
 
   it("un cliente que va a /admin es denegado (criterio de aceptación)", () => {

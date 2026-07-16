@@ -6,10 +6,10 @@ export type Segmento = (typeof SEGMENTOS)[number];
 
 // Qué segmentos ve cada rol. Record EXHAUSTIVO por rol: si una migración añade un
 // rol, este objeto deja de compilar (no un `default` que lo trague en silencio).
-// El cambio de contexto admin↔supervisor y el detalle de cada sección son de
-// tickets del panel; aquí el mapeo es 1:1 más el mercaderista sin acceso web.
+// El admin es staff global y puede cambiar de contexto a la vista de supervisor
+// (role switch del header); el supervisor solo ve lo suyo.
 const SEGMENTOS_POR_ROL: Record<RolUsuario, ReadonlyArray<Segmento>> = {
-  admin: ["admin"],
+  admin: ["admin", "supervisor"],
   supervisor: ["supervisor"],
   cliente: ["cliente"],
   // El mercaderista trabaja en la app móvil: no entra a ninguna sección web.
