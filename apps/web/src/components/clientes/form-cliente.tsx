@@ -6,7 +6,7 @@ import { type FormEvent, useState } from "react";
 import { crearCliente, editarCliente } from "@/lib/clientes/acciones";
 import { leerCampo, leerCasilla } from "@/lib/formulario";
 
-import { campo, Errores, etiqueta, Pie } from "./campos";
+import { campo, Errores, etiqueta, Pie } from "@/components/panel/campos";
 
 type Cliente = { id: string; nombre: string; activo: boolean };
 

@@ -1,29 +1,29 @@
 "use client";
 
+import { Constants } from "@market-track/db";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
-import { crearMarca, editarMarca } from "@/lib/clientes/acciones";
+import { campo, Errores, etiqueta, Pie } from "@/components/panel/campos";
+import { crearCadena, editarCadena } from "@/lib/catalogo/acciones";
 import { leerCampo, leerCasilla } from "@/lib/formulario";
 
-import { campo, Errores, etiqueta, Pie } from "@/components/panel/campos";
-
-type Marca = {
+type Cadena = {
   id: string;
   nombre: string;
   tenant_id: string;
-  tolerancia_precio_pct: number;
+  tipo_tienda: string | null;
   codigo_externo: string | null;
   activo: boolean;
 };
 
 type Cliente = { id: string; nombre: string };
 
-export function FormMarca({
-  marca,
+export function FormCadena({
+  cadena,
   clientes,
 }: {
-  marca?: Marca;
+  cadena?: Cadena;
   clientes: Cliente[];
 }) {
   const [error, setError] = useState<string | null>(null);
@@ -39,31 +39,27 @@ export function FormMarca({
     const datos = {
       nombre: leerCampo(fd, "nombre"),
       tenant_id: leerCampo(fd, "tenant_id"),
-      // El input numérico entrega texto; "" (vacío) no es 0, y mandarlo como 0
-      // apagaría las alertas de la marca en silencio. Se deja pasar NaN para que
-      // Zod lo rechace con su mensaje.
-      tolerancia_precio_pct: Number(leerCampo(fd, "tolerancia_precio_pct")),
+      tipo_tienda: leerCampo(fd, "tipo_tienda") || null,
       codigo_externo: leerCampo(fd, "codigo_externo"),
       activo: leerCasilla(fd, "activo"),
     };
-    const r = marca
-      ? await editarMarca(marca.id, datos)
-      : await crearMarca(datos);
+    const r = cadena
+      ? await editarCadena(cadena.id, datos)
+      : await crearCadena(datos);
 
     setEnviando(false);
     if (!r.ok) {
       setError(r.error);
       return;
     }
-    router.push("/admin");
+    router.push("/admin/catalogo");
     router.refresh();
   }
 
   if (clientes.length === 0) {
     return (
       <p className="rounded-xl border border-dashed border-border bg-background p-10 text-center text-sm text-muted-foreground">
-        Una marca cuelga de un cliente y todavía no hay ninguno. Crea primero el
-        cliente.
+        Una cadena cuelga de un cliente y todavía no hay ninguno.
       </p>
     );
   }
@@ -75,11 +71,11 @@ export function FormMarca({
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <label className="flex flex-col gap-1.5">
-          <span className={etiqueta}>Nombre de la marca</span>
+          <span className={etiqueta}>Nombre de la cadena</span>
           <input
             name="nombre"
             required
-            defaultValue={marca?.nombre}
+            defaultValue={cadena?.nombre}
             className={campo}
           />
         </label>
@@ -89,7 +85,7 @@ export function FormMarca({
           <select
             name="tenant_id"
             required
-            defaultValue={marca?.tenant_id ?? ""}
+            defaultValue={cadena?.tenant_id ?? ""}
             className={campo}
           >
             <option value="" disabled>
@@ -104,33 +100,29 @@ export function FormMarca({
         </label>
 
         <label className="flex flex-col gap-1.5">
-          <span className={etiqueta}>Tolerancia de precio (%)</span>
-          <input
-            name="tolerancia_precio_pct"
-            type="number"
-            required
-            min={0}
-            max={100}
-            step={0.01}
-            defaultValue={marca?.tolerancia_precio_pct ?? 0}
+          <span className={etiqueta}>Tipo de tienda (opcional)</span>
+          {/* Los valores salen del enum de la base, no de una lista a mano. */}
+          <select
+            name="tipo_tienda"
+            defaultValue={cadena?.tipo_tienda ?? ""}
             className={campo}
-          />
-          <span className="text-[12px] text-muted-foreground">
-            Cuánto puede desviarse el precio en piso antes de alertar. Es por
-            marca: 0% alerta ante cualquier desviación.
-          </span>
+          >
+            <option value="">—</option>
+            {Constants.public.Enums.tipo_tienda.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
         </label>
 
         <label className="flex flex-col gap-1.5">
           <span className={etiqueta}>Código externo (opcional)</span>
           <input
             name="codigo_externo"
-            defaultValue={marca?.codigo_externo ?? ""}
+            defaultValue={cadena?.codigo_externo ?? ""}
             className={campo}
           />
-          <span className="text-[12px] text-muted-foreground">
-            El código de esta marca en el Excel del cliente.
-          </span>
         </label>
       </div>
 
@@ -138,14 +130,14 @@ export function FormMarca({
         <input
           type="checkbox"
           name="activo"
-          defaultChecked={marca?.activo ?? true}
+          defaultChecked={cadena?.activo ?? true}
           className="size-4"
         />
         <span className={etiqueta}>Activa</span>
       </label>
 
       <Errores error={error} />
-      <Pie enviando={enviando} editando={!!marca} />
+      <Pie enviando={enviando} editando={!!cadena} volverA="/admin/catalogo" />
     </form>
   );
 }

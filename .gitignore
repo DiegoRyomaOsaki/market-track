@@ -37,3 +37,7 @@ Thumbs.db
 # Generado por Next.js (regenerado en cada build). El typecheck no lo necesita:
 # apps/web/src/styles.d.ts declara los imports de CSS.
 next-env.d.ts
+
+# Mapa base de desarrollo: lo baja `pnpm --filter @market-track/web tiles:dev`
+# (9,4 MiB). No va a git: en producción vive en R2 (ADR-0009).
+apps/web/public/tiles/

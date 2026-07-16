@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 
-// Las piezas que comparten los dos formularios de la sección (cliente y marca).
+// Las piezas que comparten los formularios del panel (cliente, marca, cadena,
+// tienda): mismo campo, mismo error, mismo pie.
 
 export const campo =
   "h-[38px] w-full rounded-[9px] border border-border bg-background px-3 text-[13px]";
@@ -24,9 +25,11 @@ export function Errores({ error }: { error: string | null }) {
 export function Pie({
   enviando,
   editando,
+  volverA = "/admin",
 }: {
   enviando: boolean;
   editando: boolean;
+  volverA?: string;
 }) {
   return (
     <div className="flex items-center gap-3">
@@ -38,7 +41,7 @@ export function Pie({
         {enviando ? "Guardando…" : editando ? "Guardar cambios" : "Crear"}
       </button>
       <Link
-        href="/admin"
+        href={volverA}
         className="text-[13px] font-semibold text-muted-foreground hover:underline"
       >
         Cancelar

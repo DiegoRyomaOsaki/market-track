@@ -101,6 +101,43 @@ describe("parseEnvPublico", () => {
     ).toBe("anon");
   });
 
+  it("acepta la URL de tiles como ruta del sitio o como URL de R2", () => {
+    const base = {
+      SUPABASE_URL: "https://xyz.supabase.co",
+      SUPABASE_ANON_KEY: "anon",
+    };
+    expect(
+      parseEnvPublico({ ...base, TILES_URL: "/tiles/lima.pmtiles" }).TILES_URL,
+    ).toBe("/tiles/lima.pmtiles");
+    expect(
+      parseEnvPublico({
+        ...base,
+        TILES_URL: "https://r2.example.com/peru.pmtiles",
+      }).TILES_URL,
+    ).toBe("https://r2.example.com/peru.pmtiles");
+  });
+
+  it("no acepta como 'ruta' una protocolo-relativa a otro dominio", () => {
+    // `//otro.com/x.pmtiles` empieza por barra y parece interna: el navegador la
+    // resuelve a https://otro.com. El mapa base saldría de un tercero.
+    expect(() =>
+      parseEnvPublico({
+        SUPABASE_URL: "https://xyz.supabase.co",
+        SUPABASE_ANON_KEY: "anon",
+        TILES_URL: "//otro.com/tiles.pmtiles",
+      }),
+    ).toThrow();
+  });
+
+  it("sin TILES_URL sigue valiendo: el móvil no lleva mapa (ADR-0009)", () => {
+    expect(
+      parseEnvPublico({
+        SUPABASE_URL: "https://xyz.supabase.co",
+        SUPABASE_ANON_KEY: "anon",
+      }).TILES_URL,
+    ).toBeUndefined();
+  });
+
   it("también corre el guardarraíl: no deja pasar un secreto expuesto", () => {
     expect(() =>
       parseEnvPublico({

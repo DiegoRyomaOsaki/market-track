@@ -1118,6 +1118,8 @@ export type Database = {
           creado_at: string
           direccion: string | null
           id: string
+          lat: number | null
+          lon: number | null
           nombre: string
           radio_geocerca_m: number
           tenant_id: string
@@ -1131,6 +1133,8 @@ export type Database = {
           creado_at?: string
           direccion?: string | null
           id?: string
+          lat?: number | null
+          lon?: number | null
           nombre: string
           radio_geocerca_m?: number
           tenant_id: string
@@ -1144,6 +1148,8 @@ export type Database = {
           creado_at?: string
           direccion?: string | null
           id?: string
+          lat?: number | null
+          lon?: number | null
           nombre?: string
           radio_geocerca_m?: number
           tenant_id?: string
