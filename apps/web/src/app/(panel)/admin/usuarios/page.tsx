@@ -1,42 +1,25 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { BajaCliente } from "@/components/usuarios/baja-cliente";
+import {
+  Avatar,
+  Aviso,
+  Estado,
+  Tarjeta,
+  TD,
+  TH,
+} from "@/components/panel/tabla";
 import {
   esTab,
   Pestanas,
   type TabUsuarios,
 } from "@/components/usuarios/pestanas";
-import { iniciales } from "@/lib/panel/iniciales";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Usuarios — Market Track" };
 
-const TH =
-  "text-left font-semibold text-muted-foreground px-4 py-2.5 text-[11.5px]";
-const TD = "px-4 py-3 align-middle";
-
 function primero(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
-}
-
-function Avatar({ nombre }: { nombre: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="inline-flex size-[30px] items-center justify-center rounded-full bg-accent text-[11.5px] font-bold text-accent-foreground"
-    >
-      {iniciales(nombre)}
-    </span>
-  );
-}
-
-function Tarjeta({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="overflow-x-auto rounded-xl border border-border bg-background">
-      <table className="w-full border-collapse text-[13px]">{children}</table>
-    </div>
-  );
 }
 
 export default async function UsuariosPage({
@@ -77,11 +60,7 @@ export default async function UsuariosPage({
         </Link>
       </div>
 
-      {tab === "clientes-marca" ? (
-        <TablaClientesMarca supabase={supabase} busqueda={busqueda} />
-      ) : (
-        <TablaPersonas supabase={supabase} tab={tab} busqueda={busqueda} />
-      )}
+      <TablaPersonas supabase={supabase} tab={tab} busqueda={busqueda} />
     </div>
   );
 }
@@ -94,7 +73,7 @@ async function TablaPersonas({
   busqueda,
 }: {
   supabase: Supabase;
-  tab: Exclude<TabUsuarios, "clientes-marca">;
+  tab: TabUsuarios;
   busqueda: string;
 }) {
   const rol =
@@ -189,114 +168,5 @@ async function TablaPersonas({
         ))}
       </tbody>
     </Tarjeta>
-  );
-}
-
-async function TablaClientesMarca({
-  supabase,
-  busqueda,
-}: {
-  supabase: Supabase;
-  busqueda: string;
-}) {
-  let query = supabase
-    .from("tenant")
-    .select("id, nombre, activo")
-    .order("nombre");
-  if (busqueda) query = query.ilike("nombre", `%${busqueda}%`);
-
-  const [{ data: tenants, error }, { data: mercs, error: errMercs }] =
-    await Promise.all([
-      query,
-      supabase
-        .from("profile")
-        .select("tenant_id")
-        .eq("rol", "mercaderista")
-        .eq("activo", true),
-    ]);
-
-  if (error || errMercs) {
-    return <Aviso>No se pudieron cargar los clientes-marca.</Aviso>;
-  }
-  const filas = tenants ?? [];
-  if (filas.length === 0) return <Aviso>No hay clientes-marca.</Aviso>;
-
-  const activosPorTenant = new Map<string, number>();
-  for (const m of mercs ?? []) {
-    if (m.tenant_id) {
-      activosPorTenant.set(
-        m.tenant_id,
-        (activosPorTenant.get(m.tenant_id) ?? 0) + 1,
-      );
-    }
-  }
-
-  return (
-    <Tarjeta>
-      <thead>
-        <tr className="border-b border-border bg-muted/40">
-          <th scope="col" className={TH}>
-            CLIENTE-MARCA
-          </th>
-          <th scope="col" className={TH}>
-            MERCADERISTAS ACTIVOS
-          </th>
-          <th scope="col" className={TH}>
-            ESTADO
-          </th>
-          <th scope="col" className={TH}>
-            <span className="sr-only">Acciones</span>
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {filas.map((t) => {
-          const n = activosPorTenant.get(t.id) ?? 0;
-          return (
-            <tr key={t.id} className="border-b border-border last:border-0">
-              <td className={TD}>
-                <div className="flex items-center gap-2.5">
-                  <Avatar nombre={t.nombre} />
-                  <span className="font-semibold">{t.nombre}</span>
-                </div>
-              </td>
-              <td className={`${TD} font-mono`}>{n}</td>
-              <td className={TD}>
-                <Estado activo={t.activo} />
-              </td>
-              <td className={`${TD} text-right`}>
-                {t.activo && (
-                  <BajaCliente
-                    tenantId={t.id}
-                    nombre={t.nombre}
-                    mercaderistasActivos={n}
-                  />
-                )}
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </Tarjeta>
-  );
-}
-
-function Estado({ activo }: { activo: boolean }) {
-  return activo ? (
-    <span className="inline-flex rounded-full bg-completado-suave px-2.5 py-0.5 text-[11.5px] font-bold text-completado-texto">
-      Activo
-    </span>
-  ) : (
-    <span className="inline-flex rounded-full bg-alerta-suave px-2.5 py-0.5 text-[11.5px] font-bold text-alerta-texto">
-      Inactivo
-    </span>
-  );
-}
-
-function Aviso({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl border border-dashed border-border bg-background p-10 text-center text-sm text-muted-foreground">
-      {children}
-    </div>
   );
 }

@@ -4,6 +4,7 @@ import type { RolUsuario } from "@market-track/shared";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
+import { leerCampo } from "@/lib/formulario";
 import { crearUsuario } from "@/lib/usuarios/acciones";
 
 type Opcion = { id: string; nombre: string };
@@ -39,10 +40,7 @@ export function FormNuevoUsuario({
     setEnviando(true);
     setError(null);
     const fd = new FormData(e.currentTarget);
-    const s = (k: string) => {
-      const v = fd.get(k);
-      return typeof v === "string" ? v.trim() : "";
-    };
+    const s = (k: string) => leerCampo(fd, k);
     const r = await crearUsuario({
       email: s("email"),
       password: s("password"),

@@ -13,7 +13,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { desactivarCliente } from "@/lib/usuarios/acciones";
+import { desactivarCliente } from "@/lib/clientes/acciones";
 
 // Da de baja un cliente-marca mostrando la CONSECUENCIA antes de confirmar: N
 // mercaderistas perderán el acceso (derivado, se revoca solo). El diálogo (Radix)
