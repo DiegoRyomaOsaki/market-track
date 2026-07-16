@@ -1,9 +1,10 @@
 # ADR-0001 — Offline-first con un motor de sincronización dedicado
 
-- **Estado:** **propuesto** — la investigación del spike del motor offline está
-  hecha y no tumba la decisión; falta el **prototipo ejecutable** que la valide
-  (ver "Lo que el prototipo todavía debe probar")
-- **Fecha:** 2026-06-18 · investigación del spike incorporada el 2026-07-13
+- **Estado:** **aceptado** — el prototipo ejecutable corrió contra un PowerSync
+  autohospedado y el Postgres del proyecto; la decisión se sostiene. Ver
+  "Lo que el prototipo probó" (2026-07-16).
+- **Fecha:** 2026-06-18 · investigación del spike incorporada el 2026-07-13 ·
+  prototipo ejecutado el 2026-07-16
 - **Alternativas reevaluadas:** 2026-07-13 — nueve candidatos, ninguno desplaza
   la decisión. Antes de reabrir este debate, lee "Opciones consideradas": lo más
   probable es que la opción que tienes en mente ya esté ahí, con su motivo de
@@ -207,15 +208,97 @@ plan **Pro arranca en USD 49/mes** (30 GB sincronizados, 10 GB alojados, 1.000
 conexiones). El ticket del spike y `docs/06` decían "~USD 35/mes": está
 desactualizado.
 
-**Lo que el prototipo todavía debe probar** (y por lo que este ADR sigue en
-`propuesto`):
+## Lo que el prototipo probó (2026-07-16)
 
-- Que el ciclo **escribir-offline → reconectar → sincronizar** sobrevive sin
-  pérdidas ni duplicados, y que reintentar el mismo payload es **idempotente**.
-- Qué hace el motor ante un **conflicto** real (misma fila editada en servidor y
-  en cliente).
-- El **volumen de datos por mercaderista/mes**, para saber si 30 GB del plan Pro
-  sobran o se quedan cortos.
+Se levantó el servicio autohospedado (`journeyapps/powersync-service:1.23.3`)
+contra el Postgres del proyecto y se conectó un cliente real (`@powersync/node`
+0.19.4) autenticado como el mercaderista del seed. **Las cuatro preguntas que
+dejaban este ADR en `propuesto` están respondidas, medidas, no supuestas:**
+
+| Pregunta | Resultado |
+|---|---|
+| ¿Pierde o duplica al reconectar? | **No.** 5 visitas escritas sin conexión → reconectar → 5 de 5 en Postgres, en un solo lote |
+| ¿El reintento del mismo payload es idempotente? | **Sí.** Se forzó el peor caso —el servidor aplica la escritura y la red muere **antes del ack**— y el reintento dejó **1 fila, no 2** |
+| ¿Qué hace ante un conflicto? | **Convergen, y gana el cliente.** Misma fila y misma columna cambiadas en servidor y en cliente offline: al sincronizar, ambos lados quedan con el valor del cliente (last-write-wins) |
+| ¿Volumen por mercaderista/mes? | **785 kB** (110 visitas · 220 levantamientos · 4.400 filas de SKU). El piloto entero (40 mercaderistas): **31 MB/mes** |
+
+**El volumen no es la restricción.** Los 30 GB del plan Pro son ~1.000× lo que
+el piloto genera. Lo que descalifica al plan gratuito son las **50 conexiones
+concurrentes** y la desactivación por inactividad, no los datos.
+
+**Cuando la subida falla, la cola aguanta.** Se observó el reintento indefinido
+del mismo lote (una FK rechazada por Postgres, 5 reintentos, cero filas
+perdidas): el batch solo se marca completo tras el éxito. Ese es el motivo de que
+**el backend deba ser idempotente** — la propia doc lo exige: *"the backend may
+receive the same operation multiple times… and must handle that appropriately"*.
+Nuestro camino de subida usa `upsert` por el id que genera el cliente, que lo es.
+
+**Una regla mal escrita no sincroniza de más: revienta el arranque.** Con una
+sync rule inválida el servicio sale con exit 1 y no replica nada. Falla cerrado.
+
+## ⚠️ El hallazgo que no estaba en el guion: el 2FA no protege la bajada
+
+El gate `aal2` de [ADR-0008](0008-segundo-factor-multicanal-sobre-mfa-nativo.md)
+vive dentro de `app.perfil_efectivo()`, o sea **en la RLS**. Y la RLS no
+interviene en la bajada del móvil.
+
+Medido: un mercaderista con sesión **`aal1`** (contraseña sí, segundo factor
+**no**) conectó su cliente y **recibió su tienda y sus visitas**. La subida, en
+cambio, sí quedó bloqueada por la RLS hasta completar el 2FA — la asimetría de
+este ADR, ahora con evidencia en las dos direcciones.
+
+No es un fallo de PowerSync: las *sync rules* filtran por `auth.user_id()`, que
+existe en cuanto hay contraseña correcta. **El `aal` es un claim del JWT y hay
+que exigirlo explícitamente en la regla** si se quiere que el segundo factor
+cubra también los datos que se descargan al teléfono. Queda para MAR-26, que es
+quien escribe `packages/sync`.
+
+## Corrección: las *sync rules* de este ADR son el formato legacy
+
+El ejemplo de `bucket_definitions` + `parameters:` + `request.user_id()` que
+aparece arriba **es sintaxis legacy**. La documentación vigente (jul 2026) titula
+esa página *"Sync Rules (Legacy)"* y recomienda **Sync Streams (edition 3)** para
+proyectos nuevos. Verificado a la fuerza: con `edition: 3`, `request.user_id()`
+se rechaza con `Invalid schema in function name`.
+
+El equivalente correcto es **`auth.user_id()`**:
+
+```yaml
+config:
+  edition: 3
+streams:
+  mi_tenant:
+    auto_subscribe: true
+    queries:
+      - SELECT * FROM visita WHERE tenant_id IN
+          (SELECT tenant_id FROM profile WHERE id = auth.user_id())
+```
+
+**La trampa se mueve, no desaparece.** El aviso literal *"client parameters…
+should not be used for access control purposes"* solo está en la página legacy.
+En Streams se reformula como un flag por stream,
+`accept_potentially_dangerous_queries: false` (el default), que avisa cuando una
+query usa parámetros que el cliente controla. La regla de `CLAUDE.md` sigue
+siendo la correcta: filtrar **solo** por `auth.user_id()` o por tabla.
+
+Y ojo con el ejemplo multi-tenant oficial: usa `auth.parameter('org_id')`, o sea
+**un claim del JWT**. Ese patrón choca con este proyecto — un claim es una copia
+rancia y el mercaderista de un cliente cancelado seguiría dentro hasta que expire
+el token. El patrón bueno (también oficial) es la **subconsulta a la tabla de
+pertenencia**, que es el de arriba.
+
+## Lo que el prototipo NO probó
+
+- **Nada en un teléfono real.** Corrió con `@powersync/node`, que habla el mismo
+  protocolo, pero la integración de React Native (módulo nativo de SQLite, nueva
+  arquitectura, ciclo de vida en Android) está sin verificar. Es MAR-26/MAR-33.
+- **El bucket storage en Postgres.** La doc lo anuncia desde la 1.3.8; en la
+  1.23.3 no consiguió arrancar (muere creando su propio esquema, sin error del
+  lado de Postgres). Con MongoDB arrancó a la primera. **Autohospedar exige, en
+  la práctica, un MongoDB con replica set.** Si algún día se autohospeda de
+  verdad, hay que contarlo en el coste.
+- **El límite de buckets por usuario** (≤1.000): con una visita por marca y por
+  tienda conviene medirlo antes de modelar los streams.
 
 **Cómo lo sabríamos si nos equivocamos.** Si el prototipo pierde o duplica filas
 al reconectar; si el aislamiento por `tenant_id` en las sync rules resulta no ser
