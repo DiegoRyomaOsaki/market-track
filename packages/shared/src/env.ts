@@ -72,6 +72,25 @@ export const envPublicoSchema = z.object({
   SUPABASE_URL: z.url(),
   SUPABASE_ANON_KEY: z.string().min(1),
   SENTRY_DSN: z.url().optional(),
+  /**
+   * El archivo PMTiles del mapa base (ADR-0009). Es público: un mapa base de
+   * OpenStreetMap, no un secreto.
+   *
+   * Opcional porque **el móvil no lleva mapa**: su geocerca es un cálculo de
+   * distancia. Exigirla obligaría a la app del mercaderista a declarar una URL
+   * que nunca usa. Quien sí la necesita (la web) muestra un error explícito si
+   * falta, en vez de un mapa gris sin explicación.
+   *
+   * Admite URL absoluta (el bucket de R2 en producción) o una ruta del propio
+   * sitio (`/tiles/lima.pmtiles` en desarrollo). Lo que NO admite es `//host`:
+   * eso es una URL protocolo-relativa a otro dominio disfrazada de ruta.
+   */
+  TILES_URL: z
+    .union([
+      z.url(),
+      z.string().regex(/^\/[^/]/, "Ruta del sitio (/tiles/…) o URL absoluta"),
+    ])
+    .optional(),
 });
 
 /**

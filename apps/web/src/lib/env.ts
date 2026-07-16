@@ -7,4 +7,5 @@ import { parseEnvPublico } from "@market-track/shared";
 export const env = parseEnvPublico({
   SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
   SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  TILES_URL: process.env.NEXT_PUBLIC_TILES_URL,
 });

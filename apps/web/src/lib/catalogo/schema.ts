@@ -1,0 +1,67 @@
+import { Constants } from "@market-track/db";
+import { z } from "zod";
+
+import { puntoEwkt } from "@/lib/mapa/geo";
+
+// Validación del catálogo (cadenas y tiendas) en la frontera del formulario.
+
+/** Texto opcional que en la base es NULL cuando no se llena. */
+const textoOpcional = z
+  .string()
+  .trim()
+  .transform((v) => (v === "" ? null : v))
+  .nullable()
+  .optional()
+  .transform((v) => v ?? null);
+
+const nombre = z.string().trim().min(1, "Requerido");
+
+// El enum sale de la base (`Constants`), nunca escrito a mano: una segunda lista
+// se queda vieja en silencio cuando una migración añade un tipo.
+export const altaCadenaSchema = z.object({
+  nombre,
+  tenant_id: z.guid("Elige un cliente"),
+  tipo_tienda: z
+    .enum(Constants.public.Enums.tipo_tienda)
+    .nullable()
+    .optional()
+    .transform((v) => v ?? null),
+  codigo_externo: textoOpcional,
+  activo: z.boolean().default(true),
+});
+
+export type AltaCadena = z.infer<typeof altaCadenaSchema>;
+
+export const altaTiendaSchema = z.object({
+  nombre,
+  tenant_id: z.guid("Elige un cliente"),
+  cadena_id: z.guid("Elige una cadena"),
+  direccion: textoOpcional,
+  // Sin punto no hay geocerca: el mercaderista no podría hacer check-in.
+  lat: z.number("Marca la tienda en el mapa").min(-90).max(90),
+  lon: z.number("Marca la tienda en el mapa").min(-180).max(180),
+  // La base exige `radio_geocerca_m > 0` y la columna es integer. El default de
+  // 100 m es el de la propuesta (subió desde 50), editable por tienda.
+  radio_geocerca_m: z
+    .number("Escribe un radio en metros")
+    .int("Metros enteros")
+    .positive("Tiene que ser mayor que 0")
+    .default(100),
+  cluster: textoOpcional,
+  codigo_externo: textoOpcional,
+  activo: z.boolean().default(true),
+});
+
+export type AltaTienda = z.infer<typeof altaTiendaSchema>;
+
+/**
+ * La fila que va a PostgREST: lat/lon se funden en `ubicacion` (EWKT).
+ *
+ * `lat` y `lon` son columnas GENERADAS — mandarlas revienta en runtime aunque
+ * los tipos de Supabase las ofrezcan en `Insert`. Por eso esta función existe:
+ * es el único sitio donde se decide qué viaja.
+ */
+export function aFilaTienda(t: AltaTienda) {
+  const { lat, lon, ...resto } = t;
+  return { ...resto, ubicacion: puntoEwkt(lat, lon) };
+}

@@ -11,16 +11,18 @@
     "plugins": [{ "name": "next" }],
     "paths": { "@/*": ["./src/*"] }
   },
-  // `**/*.ts` cubre `vitest.config.ts`, y `*.mjs` cubre `eslint.config.mjs` /
-  // `postcss.config.mjs`: ESLint (project service) y `tsc` deben ver los MISMOS
-  // archivos, o `pnpm turbo run lint` peta con "not found by the project service"
-  // (pitfall del primer workspace con config propia — ver CLAUDE.md).
+  // `**/*.ts` cubre `vitest.config.ts`; `*.mjs` cubre `eslint.config.mjs` /
+  // `postcss.config.mjs`, y `scripts/**/*.mjs` las herramientas de desarrollo
+  // (tiles-dev). ESLint (project service) y `tsc` deben ver los MISMOS archivos,
+  // o `pnpm turbo run lint` peta con "not found by the project service" (pitfall
+  // del primer workspace con config propia — ver CLAUDE.md).
   "include": [
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    "*.mjs"
+    "*.mjs",
+    "scripts/**/*.mjs"
   ],
   "exclude": ["node_modules"]
 }
