@@ -19,6 +19,10 @@ coverage/
 # Generado por pnpm, que lo reescribe a su manera.
 pnpm-lock.yaml
 
+# Generado por Next.js en cada arranque/build: Prettier lo reescribiría y el
+# check quedaría en rojo por un archivo que nadie edita a mano.
+**/next-env.d.ts
+
 # Generado por `pnpm db:types`. Ignorarlo NO es cosmético: el CLI de Supabase no
 # pone punto y coma y nuestra config sí, así que Prettier reescribiría 449 líneas.
 # El archivo commiteado dejaría de coincidir con la salida del generador, y el
