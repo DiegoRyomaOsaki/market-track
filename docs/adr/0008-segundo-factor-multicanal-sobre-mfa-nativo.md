@@ -1,8 +1,10 @@
 # ADR-0008 — Segundo factor multicanal sobre el MFA nativo de Supabase
 
-- **Estado:** **propuesto** — la investigación del spike está hecha y confirma
-  que el requisito se cubre sin salir de Supabase; falta la **implementación que
-  lo valide** (ver "Lo que la implementación todavía debe probar").
+- **Estado:** **aceptado** (2026-07-16) — la implementación validó la Opción A de
+  punta a punta: el hook entrega el OTP en un challenge de MFA real y GoTrue lo
+  acepta. Quedan dos cabos, ambos con dueño: el canje del pase → `aal2` (MAR-66,
+  sin API nativa para elevar) y encender el gate `aal2` en la RLS (va con el login
+  del panel). Ver "Lo que la implementación todavía debe probar".
 - **Fecha:** 2026-07-14
 - **Reemplaza a:** —
 
@@ -109,11 +111,31 @@ que la implementación debe probar, antes de construir ninguna pantalla.
    login), el `sms.otp`, y el `user` completo **con su email** — así el hook puede
    entregar por correo o enrutar a SMS/WhatsApp. Devolver `{}` = "entrega manejada
    por el hook". La Opción A queda validada; no hace falta la Opción B.
+   **Re-confirmado de punta a punta (2026-07-16)** ya con la Edge Function real
+   `enviar-otp`: `POST /auth/v1/factors/{id}/challenge` → el hook se invoca con
+   `sms.sms_type = "mfa"`, la función resuelve el canal y entrega, y GoTrue acepta
+   el `{}` devolviendo **200** con el challenge. La cadena completa funciona.
 2. **El canje del pase de acceso temporal elevando a `aal2`** desde una Edge
    Function con `service_role`, sin abrir un segundo camino de enforcement.
-3. **La persistencia de la sesión**: `docs/04` fija que el 2FA "no se repite cada
-   día". Confirmar el recordado de dispositivo / duración de `aal2` para no pedir
-   OTP en cada apertura — clave en una app de campo con conectividad intermitente.
-4. **El gate en la RLS**: hoy `app.perfil_efectivo()` no mira `aal`. Decidir si el
-   segundo factor se exige en la RLS (leyendo el claim `aal` con el mismo patrón
-   `(select ...)`), en el middleware, o en ambos.
+   **SIGUE ABIERTO** — y se agravó: se verificó (2026-07-15) que **no existe API
+   admin/`service_role` que emita o eleve una sesión a `aal2`** (solo se alcanza
+   con `challenge`+`verify`). Se decide en MAR-66.
+3. ~~**La persistencia de la sesión**~~ — **RESUELTO (2026-07-16).** No hace falta
+   un "recordado de dispositivo" propio: `aal2` es una propiedad de la SESIÓN, y
+   sobrevive a los refrescos del token. Basta con no forzar el cierre: por eso
+   `[auth.sessions]` (`timebox`, `inactivity_timeout`) se queda **apagado** a
+   propósito, con el motivo escrito en `config.toml`. Un timebox de 24 h pediría el
+   OTP en medio de una visita, justo donde el mercaderista no puede recibirlo.
+4. ~~**El gate en la RLS**~~ — **DECIDIDO (2026-07-16): por ahora, middleware.**
+   El gate vive en el middleware de Next.js leyendo el `aal` nativo
+   (`getAuthenticatorAssuranceLevel`), sobre la misma sesión.
+
+   **Lo que eso NO cubre, y hay que decir en voz alta:** el middleware protege la
+   UI, no los datos. Una sesión `aal1` que hable **directo con PostgREST** seguiría
+   leyendo lo que su RLS le permita. Cerrar eso es de una línea —exigir
+   `aal = 'aal2'` dentro de `app.perfil_efectivo()`, que es el dueño único de la
+   regla— pero **no se activa todavía** por dos razones concretas: (a) dejaría sin
+   datos a toda sesión sin factor enrolado, es decir a todo el mundo hasta que
+   exista el login con enrolamiento; y (b) rompería el harness de aislamiento
+   (sus sesiones de prueba son `aal1`), que tendría que aprender a autenticar con
+   `aal2`. Se enciende junto con el login del panel, no antes.
