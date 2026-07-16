@@ -39,6 +39,7 @@ Tipo de cambio de referencia: **USD 1 ≈ COP 3.150** (jun 2026).
 | **PowerSync Pro** (el free tier **no sirve** en producción — ver abajo) | **desde 49** |
 | Vercel | 0 |
 | Cloudflare R2 (fotos, crece) | 5–20 |
+| **Tiles de los mapas** (Perú entero en R2, ~0,8 GB — ver ADR-0009) | **~0** |
 | Email / push | 0–20 |
 | **OTP por SMS / WhatsApp** (canales nuevos, jul 2026) | **a estimar** |
 | **Total operación** | **~79–114 USD/mes** + OTP |
