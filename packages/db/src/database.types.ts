@@ -1313,7 +1313,12 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      correos_clientes_del_tenant: {
+        Args: { p_tenant: string }
+        Returns: {
+          correo: string
+        }[]
+      }
     }
     Enums: {
       canal_alerta: "dashboard" | "email" | "whatsapp"

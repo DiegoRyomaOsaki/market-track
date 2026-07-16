@@ -385,6 +385,13 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# La invoca un Database Webhook (pg_net), que no manda un JWT de Supabase: su
+# puerta es el secreto compartido (x-webhook-secret), verificado dentro de la
+# función. Sin esto, el gate de JWT de la plataforma la 401-earía y el email
+# nunca se enviaría.
+[functions.enviar-alerta-email]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327
