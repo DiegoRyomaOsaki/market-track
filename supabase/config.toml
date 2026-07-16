@@ -269,10 +269,14 @@ max_frequency = "5s"
 # 4152127777 = "123456"
 
 # Configure logged in session timeouts.
+#
+# OJO: `timebox` e `inactivity_timeout` se quedan APAGADOS a propósito. El
+# mercaderista pasa la jornada en campo, a veces sin señal: un cierre de sesión
+# forzado le exigiría el segundo factor en medio de una visita, justo donde no
+# tiene cómo recibir el OTP. Con la sesión viva, el `aal2` persiste entre
+# refrescos y el 2FA no se re-pide cada día (docs/04, ADR-0008).
 # [auth.sessions]
-# Force log out after the specified duration.
 # timebox = "24h"
-# Force log out if the user has been inactive longer than the specified duration.
 # inactivity_timeout = "8h"
 
 # This hook runs before a new user is created and allows developers to reject the request based on the incoming user object.
@@ -284,6 +288,16 @@ max_frequency = "5s"
 # [auth.hook.custom_access_token]
 # enabled = true
 # uri = "pg-functions://<database>/<schema>/<hook_name>"
+
+# Entrega del OTP del segundo factor (ADR-0008). GoTrue llama a esta función con
+# el usuario y el código; ella elige el canal —correo por defecto vía Resend; SMS
+# o WhatsApp solo si están habilitados globalmente— y devuelve {} = "entrega
+# manejada por el hook". Su puerta es la FIRMA del hook (Standard Webhooks): el
+# secreto es obligatorio, la función no arranca sin él.
+[auth.hook.send_sms]
+enabled = true
+uri = "http://host.docker.internal:54321/functions/v1/enviar-otp"
+secrets = "env(SEND_SMS_HOOK_SECRET)"
 
 # Configure one of the supported SMS providers: `twilio`, `twilio_verify`, `messagebird`, `textlocal`, `vonage`.
 [auth.sms.twilio]
@@ -304,11 +318,16 @@ enroll_enabled = false
 verify_enabled = false
 
 # Configure MFA via Phone Messaging
+#
+# El segundo factor del proyecto (ADR-0008): un ÚNICO factor "Teléfono" nativo por
+# usuario. "Teléfono" es el mecanismo, no el medio: la entrega la reescribe el hook
+# `send_sms` de arriba, que normalmente manda el código por CORREO. Es la rareza
+# que el ADR documenta — Supabase no tiene un factor "email".
 [auth.mfa.phone]
-enroll_enabled = false
-verify_enabled = false
+enroll_enabled = true
+verify_enabled = true
 otp_length = 6
-template = "Your code is {{ `{{ .Code }}` }}"
+template = "Tu código de Market Track es {{ `{{ .Code }}` }}"
 max_frequency = "5s"
 
 # Configure MFA via WebAuthn
@@ -390,6 +409,11 @@ deno_version = 2
 # función. Sin esto, el gate de JWT de la plataforma la 401-earía y el email
 # nunca se enviaría.
 [functions.enviar-alerta-email]
+verify_jwt = false
+
+# La invoca GoTrue como hook `send_sms`, no un cliente con JWT de Supabase: su
+# puerta es la firma del hook (Standard Webhooks), verificada dentro de la función.
+[functions.enviar-otp]
 verify_jwt = false
 
 [analytics]

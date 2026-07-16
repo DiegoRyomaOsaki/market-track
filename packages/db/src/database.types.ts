@@ -832,6 +832,7 @@ export type Database = {
       profile: {
         Row: {
           activo: boolean
+          canal_2fa: Database["public"]["Enums"]["canal_otp"]
           creado_at: string
           desactivado_at: string | null
           dni: string | null
@@ -846,6 +847,7 @@ export type Database = {
         }
         Insert: {
           activo?: boolean
+          canal_2fa?: Database["public"]["Enums"]["canal_otp"]
           creado_at?: string
           desactivado_at?: string | null
           dni?: string | null
@@ -860,6 +862,7 @@ export type Database = {
         }
         Update: {
           activo?: boolean
+          canal_2fa?: Database["public"]["Enums"]["canal_otp"]
           creado_at?: string
           desactivado_at?: string | null
           dni?: string | null
