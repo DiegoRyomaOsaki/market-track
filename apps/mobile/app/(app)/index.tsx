@@ -1,8 +1,16 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { supabase } from "@/lib/supabase";
+import { olvidarDispositivo } from "@/lib/recordar-dispositivo";
 import { useSesion } from "@/sesion";
 import { colores, espacio, radio } from "@/tema";
+
+async function cerrarSesion() {
+  // Salir a propósito olvida el dispositivo: el próximo acceso vuelve a pedir el
+  // segundo factor, aunque quedaran días en la ventana de "recordar".
+  await olvidarDispositivo();
+  await supabase.auth.signOut();
+}
 
 /**
  * La pantalla autenticada mínima de este ticket: prueba que la sesión persiste y
@@ -18,7 +26,7 @@ export default function Inicio() {
       <Text style={e.nota}>Tu rutero aparecerá aquí cuando esté listo.</Text>
 
       <Pressable
-        onPress={() => void supabase.auth.signOut()}
+        onPress={() => void cerrarSesion()}
         accessibilityRole="button"
         style={({ pressed }) => [e.boton, pressed && { opacity: 0.7 }]}
       >
