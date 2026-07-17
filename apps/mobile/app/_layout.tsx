@@ -4,6 +4,11 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, StatusBar, View } from "react-native";
 
 import { supabase } from "@/lib/supabase";
+import {
+  dispositivoVigente,
+  leerVentana,
+  olvidarDispositivo,
+} from "@/lib/recordar-dispositivo";
 import { colores } from "@/tema";
 import { SesionContexto } from "@/sesion";
 
@@ -14,10 +19,25 @@ export default function LayoutRaiz() {
   useEffect(() => {
     // Al abrir la app: la sesión sale del almacén cifrado del teléfono, no de la
     // red. El mercaderista abre la app sin señal y tiene que entrar igual.
-    void supabase.auth.getSession().then(({ data }) => {
-      setSesion(data.session);
+    //
+    // Pero solo si el dispositivo sigue dentro de la ventana de "recordar 30
+    // días": pasada, se cierra la sesión para forzar de nuevo el segundo factor.
+    // La sesión persistida retiene el aal2, así que sin este corte valdría para
+    // siempre.
+    void (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (
+        data.session &&
+        !dispositivoVigente(await leerVentana(), Date.now())
+      ) {
+        await olvidarDispositivo();
+        await supabase.auth.signOut();
+        setSesion(null);
+      } else {
+        setSesion(data.session);
+      }
       setCargando(false);
-    });
+    })();
 
     const { data } = supabase.auth.onAuthStateChange((_evento, s) => {
       setSesion(s);
