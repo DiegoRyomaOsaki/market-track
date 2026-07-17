@@ -65,3 +65,34 @@ export function aFilaTienda(t: AltaTienda) {
   const { lat, lon, ...resto } = t;
   return { ...resto, ubicacion: puntoEwkt(lat, lon) };
 }
+
+// El SKU cuelga de la MARCA, no del cliente: una tienda vende varias marcas del
+// mismo cliente y cada SKU pertenece a una.
+export const altaSkuSchema = z.object({
+  nombre,
+  tenant_id: z.guid("Elige un cliente"),
+  marca_id: z.guid("Elige una marca"),
+  codigo: z.string().trim().min(1, "Requerido"),
+  presentacion: textoOpcional,
+  codigo_barras: textoOpcional,
+  codigo_externo: textoOpcional,
+  activo: z.boolean().default(true),
+});
+
+export type AltaSku = z.infer<typeof altaSkuSchema>;
+
+// Una celda de la matriz de codificados: qué SKU está autorizado en qué tienda.
+// `activo` es explícito a propósito — codificar y descodificar son dos acciones
+// distintas, no la presencia o ausencia de una casilla.
+//
+// El `tenant_id` NO viaja aquí: lo re-deriva el servidor de la tienda. La
+// política de escritura de `tienda_sku` solo comprueba que quien escribe es
+// admin (staff, sin tenant), así que el aislamiento de esa fila lo sostiene la
+// FK compuesta — y el tenant no puede venir del cliente.
+export const codificadoSchema = z.object({
+  tienda_id: z.guid(),
+  sku_id: z.guid(),
+  activo: z.boolean(),
+});
+
+export type Codificado = z.infer<typeof codificadoSchema>;
