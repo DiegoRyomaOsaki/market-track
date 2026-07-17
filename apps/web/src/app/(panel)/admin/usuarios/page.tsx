@@ -11,7 +11,7 @@ import {
 } from "@/components/panel/tabla";
 import {
   esTab,
-  Pestanas,
+  PestanasUsuarios,
   type TabUsuarios,
 } from "@/components/usuarios/pestanas";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -40,7 +40,7 @@ export default async function UsuariosPage({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <Pestanas activa={tab} />
+        <PestanasUsuarios activa={tab} />
         <div className="flex-1" />
         <form className="relative" action="/admin/usuarios">
           <input type="hidden" name="tab" value={tab} />
