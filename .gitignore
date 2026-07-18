@@ -41,3 +41,8 @@ next-env.d.ts
 # Mapa base de desarrollo: lo baja `pnpm --filter @market-track/web tiles:dev`
 # (9,4 MiB). No va a git: en producción vive en R2 (ADR-0009).
 apps/web/public/tiles/
+
+# Bases temporales del harness de aislamiento de packages/sync
+packages/sync/*.db
+packages/sync/*.db-wal
+packages/sync/*.db-shm
