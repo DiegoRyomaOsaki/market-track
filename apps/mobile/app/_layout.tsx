@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, StatusBar, View } from "react-native";
 
 import { supabase } from "@/lib/supabase";
+import { esAal2 } from "@/lib/aal";
 import {
   dispositivoVigente,
   leerVentana,
@@ -59,6 +60,11 @@ export default function LayoutRaiz() {
     );
   }
 
+  // La app SOLO entra con aal2. Una sesión de solo contraseña (aal1) se queda en
+  // el login para completar el segundo factor: con aal1 la RLS no deja leer nada,
+  // así que dejarla pasar sería una pantalla vacía y un falso "dentro".
+  const dentro = esAal2(sesion?.access_token);
+
   return (
     <SesionContexto.Provider value={sesion}>
       <StatusBar barStyle="light-content" backgroundColor={colores.fondo} />
@@ -68,10 +74,10 @@ export default function LayoutRaiz() {
           contentStyle: { backgroundColor: colores.fondo },
         }}
       >
-        <Stack.Protected guard={sesion !== null}>
+        <Stack.Protected guard={dentro}>
           <Stack.Screen name="(app)" />
         </Stack.Protected>
-        <Stack.Protected guard={sesion === null}>
+        <Stack.Protected guard={!dentro}>
           <Stack.Screen name="login" />
         </Stack.Protected>
       </Stack>
