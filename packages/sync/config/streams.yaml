@@ -1,0 +1,53 @@
+# Reglas de sincronización del móvil — Sync Streams, edición 3 (ADR-0001).
+#
+# Esto decide QUÉ se descarga al teléfono, y es una superficie de seguridad
+# APARTE de la RLS: PowerSync replica con un rol BYPASSRLS, así que la bajada NO
+# pasa por las políticas de Postgres. Un harness que solo pruebe RLS da un falso
+# verde para el móvil (ver test/aislamiento.sync.test.ts).
+#
+# Formato: edición 3. Las "sync rules" legacy (con bucket_definitions y la
+# función de usuario legacy) están obsoletas; en edición 3 se usa `auth.user_id()`.
+# Verificado a la fuerza en el prototipo de MAR-17: la función legacy se rechaza
+# con "Invalid schema in function name".
+
+config:
+  edition: 3
+
+streams:
+  # UN solo stream para el mercaderista. El acceso vive en el CTE `mi_tenant`:
+  # devuelve el tenant del usuario SOLO si sigue teniendo acceso efectivo —él
+  # activo, su cliente activo— Y su sesión llegó a aal2. Si algo de eso falla, el
+  # CTE no devuelve nada y NO se replica ni una fila. Un solo dueño de la regla,
+  # como `app.perfil_efectivo()` lo es para la RLS.
+  mercaderista:
+    auto_subscribe: true
+    with:
+      mi_tenant: |
+        SELECT p.tenant_id AS tenant_id
+        FROM profile p
+        JOIN tenant t ON t.id = p.tenant_id
+        WHERE p.id = auth.user_id()
+          AND p.activo = true
+          AND t.activo = true
+          AND auth.parameter('aal') = 'aal2'
+    queries:
+      # El maestro comercial con el que trabaja: solo el de su cliente.
+      - SELECT * FROM cadena WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
+      - SELECT * FROM tienda WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
+      - SELECT * FROM marca WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
+      - SELECT * FROM sku WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
+      - SELECT * FROM tienda_sku WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
+      - SELECT * FROM precio_regular WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
+      - SELECT * FROM promocion WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
+
+      # Su perfil y su rutero personal.
+      - SELECT * FROM profile WHERE id = auth.user_id()
+      - SELECT * FROM rutero WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND mercaderista_id = auth.user_id()
+      - SELECT * FROM rutero_parada WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
+
+      # Su trabajo de campo. La visita y el rutero se acotan además al propio
+      # mercaderista (menos volumen y nada de ver visitas ajenas); el
+      # levantamiento cuelga de la visita y se acota por tenant.
+      - SELECT * FROM visita WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND mercaderista_id = auth.user_id()
+      - SELECT * FROM levantamiento WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
+      - SELECT * FROM levantamiento_sku WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)

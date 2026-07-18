@@ -1,0 +1,30 @@
+# Config del servicio PowerSync autohospedado (ADR-0001).
+#
+# El origen es el Postgres del proyecto. En local es el del Supabase local,
+# alcanzable desde el contenedor por host.docker.internal:54322. En producción
+# apuntará al Postgres de Supabase Cloud (MAR-63).
+replication:
+  connections:
+    - type: postgresql
+      uri: !env PS_POSTGRES_URI
+      sslmode: disable
+
+# El bucket storage va en MongoDB (replica set de un nodo en dev). La doc anuncia
+# Postgres como storage desde la 1.3.8, pero en la 1.23.3 no arranca —muere
+# creando su propio esquema, verificado en MAR-17—; con Mongo arranca a la
+# primera. Autohospedar exige, en la práctica, un Mongo.
+storage:
+  type: mongodb
+  uri: !env PS_MONGO_URI
+
+port: 8080
+
+sync_config:
+  path: /config/streams.yaml
+
+# Valida el JWT de Supabase por su JWKS. En local es el del Supabase local; no
+# vale `supabase: true`, que apunta al JWKS de un proyecto en la nube.
+client_auth:
+  jwks_uri: !env PS_JWKS_URI
+  audience:
+    - authenticated
