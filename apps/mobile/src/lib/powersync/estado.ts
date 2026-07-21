@@ -15,13 +15,12 @@ export type EstadoSync = {
   pendientesRegistros: number;
 };
 
-async function contarPendientes(): Promise<number> {
-  // `ps_crud` es la cola de subida interna de PowerSync sobre la réplica local:
-  // contarla es la forma verificable de saber cuántas ops faltan por subir.
-  const filas = await db.getAll<{ n: number }>(
-    "SELECT COUNT(*) AS n FROM ps_crud",
-  );
-  return filas[0]?.n ?? 0;
+export async function contarPendientes(): Promise<number> {
+  // La API pública del SDK para la cola de subida. Antes se consultaba la tabla
+  // interna `ps_crud` a mano, pero es un detalle de implementación que puede
+  // cambiar de versión: si su forma cambia, el conteo mentiría sin avisar.
+  const { count } = await db.getUploadQueueStats();
+  return count;
 }
 
 export function useEstadoSync(): EstadoSync {
@@ -37,7 +36,16 @@ export function useEstadoSync(): EstadoSync {
 
     async function refrescar() {
       const s = db.currentStatus;
-      const pendientes = await contarPendientes().catch(() => 0);
+      // Si el conteo falla no se puede mostrar un número real, pero tampoco se
+      // calla: un "0 pendientes" silencioso haría creer que todo subió. Se
+      // registra el fallo y se muestra 0 como último recurso.
+      const pendientes = await contarPendientes().catch((error: unknown) => {
+        console.warn(
+          "No se pudo contar la cola de subida: " +
+            (error instanceof Error ? error.message : String(error)),
+        );
+        return 0;
+      });
       if (!vivo) return;
       setEstado({
         conectado: s.connected,

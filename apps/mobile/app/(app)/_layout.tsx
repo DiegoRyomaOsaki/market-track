@@ -12,7 +12,12 @@ import { colores } from "@/tema";
 // sincroniza mientras el mercaderista está dentro, y se desconecta al salir.
 export default function LayoutApp() {
   useEffect(() => {
-    void db.connect(new ConectorSupabase());
+    db.connect(new ConectorSupabase()).catch((error: unknown) => {
+      console.error(
+        "PowerSync no pudo conectar: " +
+          (error instanceof Error ? error.message : String(error)),
+      );
+    });
     return () => {
       void db.disconnect();
     };
