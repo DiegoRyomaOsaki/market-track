@@ -39,6 +39,13 @@
     "onlyBuiltDependencies": [
       "@op-engineering/op-sqlite",
       "better-sqlite3"
-    ]
+    ],
+    "packageExtensions": {
+      "@powersync/shared-internals": {
+        "dependencies": {
+          "@powersync/common": "2.0.0"
+        }
+      }
+    }
   }
 }

@@ -4,6 +4,8 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+packageExtensionsChecksum: sha256-9JJe04EueEwtrhlZc5DRObj6U2HIGkJia99iRgqhOs8=
+
 importers:
 
   .:
@@ -6965,7 +6967,9 @@ snapshots:
       '@powersync/common': 2.0.0
       react: 19.2.3
 
-  '@powersync/shared-internals@1.0.1': {}
+  '@powersync/shared-internals@1.0.1':
+    dependencies:
+      '@powersync/common': 2.0.0
 
   '@protomaps/basemaps@5.7.2': {}
 
