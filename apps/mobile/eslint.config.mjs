@@ -7,7 +7,13 @@ import tseslint from "typescript-eslint";
 // de React Native (no hay DOM: el móvil no tiene `window` ni `document`).
 export default tseslint.config(
   {
-    ignores: ["**/.expo/**", "**/android/**", "**/ios/**", "expo-env.d.ts", "babel.config.js"],
+    ignores: [
+      "**/.expo/**",
+      "**/android/**",
+      "**/ios/**",
+      "expo-env.d.ts",
+      "babel.config.js",
+    ],
   },
   js.configs.recommended,
   tseslint.configs.recommendedTypeChecked,
