@@ -53,7 +53,7 @@ const SQL = `
   JOIN rutero r ON r.id = rp.rutero_id
   JOIN tienda t ON t.id = rp.tienda_id
   LEFT JOIN visita v ON v.rutero_parada_id = rp.id
-  WHERE r.fecha = ?
+  WHERE r.fecha = ? AND r.estado <> 'borrador'
   ORDER BY rp.orden
 `;
 
