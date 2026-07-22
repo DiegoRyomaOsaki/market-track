@@ -91,6 +91,14 @@ export const envPublicoSchema = z.object({
       z.string().regex(/^\/[^/]/, "Ruta del sitio (/tiles/…) o URL absoluta"),
     ])
     .optional(),
+  /**
+   * El endpoint del servicio PowerSync (ADR-0001). Es público: solo el endpoint;
+   * quién ve qué lo deciden las sync rules validando el JWT.
+   *
+   * Opcional porque solo el móvil sincroniza — la web no. Exigirla obligaría a la
+   * web a declarar una URL que nunca usa.
+   */
+  POWERSYNC_URL: z.url().optional(),
 });
 
 /**

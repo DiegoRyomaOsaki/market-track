@@ -1,7 +1,12 @@
+// Debe cargar ANTES que PowerSync: sus watched queries usan async iterators, que
+// Hermes no trae por defecto.
+import "@azure/core-asynciterator-polyfill";
+
 import type { Session } from "@supabase/supabase-js";
 import { Stack } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, StatusBar, View } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { supabase } from "@/lib/supabase";
 import { esAal2 } from "@/lib/aal";
@@ -66,21 +71,23 @@ export default function LayoutRaiz() {
   const dentro = esAal2(sesion?.access_token);
 
   return (
-    <SesionContexto.Provider value={sesion}>
-      <StatusBar barStyle="light-content" backgroundColor={colores.fondo} />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: colores.fondo },
-        }}
-      >
-        <Stack.Protected guard={dentro}>
-          <Stack.Screen name="(app)" />
-        </Stack.Protected>
-        <Stack.Protected guard={!dentro}>
-          <Stack.Screen name="login" />
-        </Stack.Protected>
-      </Stack>
-    </SesionContexto.Provider>
+    <SafeAreaProvider>
+      <SesionContexto.Provider value={sesion}>
+        <StatusBar barStyle="light-content" backgroundColor={colores.fondo} />
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: colores.fondo },
+          }}
+        >
+          <Stack.Protected guard={dentro}>
+            <Stack.Screen name="(app)" />
+          </Stack.Protected>
+          <Stack.Protected guard={!dentro}>
+            <Stack.Screen name="login" />
+          </Stack.Protected>
+        </Stack>
+      </SesionContexto.Provider>
+    </SafeAreaProvider>
   );
 }

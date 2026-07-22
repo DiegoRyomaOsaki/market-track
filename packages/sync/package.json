@@ -12,16 +12,12 @@
     "test:sync": "vitest run --dir test"
   },
   "devDependencies": {
+    "@powersync/common": "^1.57.2",
     "@powersync/node": "^0.19.4",
-    "better-sqlite3": "^12.11.0",
     "@supabase/supabase-js": "^2.110.6",
-    "pg": "^8.13.0",
     "@types/pg": "^8.11.0",
+    "better-sqlite3": "^12.11.0",
+    "pg": "^8.13.0",
     "vitest": "^4.1.10"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "better-sqlite3"
-    ]
   }
 }
