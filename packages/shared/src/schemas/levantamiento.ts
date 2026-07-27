@@ -167,6 +167,7 @@ export const exhibicionUploadSchema = z
     },
   );
 
+export type PuntoGeo = z.infer<typeof puntoGeoSchema>;
 export type VisitaUpload = z.infer<typeof visitaUploadSchema>;
 export type LevantamientoUpload = z.infer<typeof levantamientoUploadSchema>;
 export type LevantamientoSkuUpload = z.infer<

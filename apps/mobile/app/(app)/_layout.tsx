@@ -1,3 +1,4 @@
+import { PowerSyncContext } from "@powersync/react-native";
 import { Stack } from "expo-router";
 import { useEffect } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -53,17 +54,19 @@ export default function LayoutApp() {
   }, [userId]);
 
   return (
-    <SafeAreaView
-      style={{ flex: 1, backgroundColor: colores.fondo }}
-      edges={["top"]}
-    >
-      <IndicadorConexion />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: colores.fondo },
-        }}
-      />
-    </SafeAreaView>
+    <PowerSyncContext.Provider value={db}>
+      <SafeAreaView
+        style={{ flex: 1, backgroundColor: colores.fondo }}
+        edges={["top"]}
+      >
+        <IndicadorConexion />
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: colores.fondo },
+          }}
+        />
+      </SafeAreaView>
+    </PowerSyncContext.Provider>
   );
 }

@@ -98,6 +98,11 @@ const visita = new Table({
   tienda_id: column.text,
   check_in_at: column.text,
   check_out_at: column.text,
+  // Las coordenadas de captura, en EWKT (`SRID=4326;POINT(lon lat)`). Se guardan
+  // aquí para que suban por el CRUD de PowerSync; el servidor re-valida la
+  // geocerca con PostGIS (MAR-30) y llena los `*_geocerca_ok`.
+  check_in_geo: column.text,
+  check_out_geo: column.text,
   estado: column.text,
   bitacora: column.text,
   tiempo_traslado_min: column.integer,
@@ -135,6 +140,17 @@ const levantamiento_sku = new Table({
   sos_foto_id: column.text,
 });
 
+const contingencia = new Table({
+  tenant_id: column.text,
+  visita_id: column.text,
+  levantamiento_id: column.text,
+  paso: column.text,
+  motivo: column.text,
+  comentario: column.text,
+  registrada_at: column.text,
+  foto_id: column.text,
+});
+
 const profile = new Table({
   rol: column.text,
   tenant_id: column.text,
@@ -153,5 +169,6 @@ export const AppSchema = new Schema({
   visita,
   levantamiento,
   levantamiento_sku,
+  contingencia,
   profile,
 });
