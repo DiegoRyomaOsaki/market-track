@@ -196,9 +196,12 @@ auditoría, y una sesión iniciada con pase queda marcada como tal.
 | cadena_id, tenant_id | uuid FK | |
 | nombre | text | "Plaza Vea Higuereta" |
 | direccion | text | |
+| departamento | text | ubicación administrativa (Perú) — 2ª revisión jul 2026 |
+| provincia | text | "ciudad" en el pedido del cliente; **provincia** en la jerarquía peruana |
+| distrito | text | 2ª revisión jul 2026 |
 | ubicacion | geography(Point) | **PostGIS** — centro de geocerca |
 | radio_geocerca_m | int | **default 100** (revisión con el cliente, jul 2026); editable por tienda |
-| cluster | text | para promociones por cluster |
+| cluster | text | nivel del PDV (AAA/AA/A/B…); usado para promos por cluster. Los **valores son configurables por cliente** (catálogo `cluster_tienda`, 2ª revisión jul 2026) |
 
 **`sku`** — producto. Cuelga de una **marca**, no del cliente: `id, marca_id, tenant_id, codigo, nombre, presentacion, ean/codigo_barras, activo`.
 
@@ -379,6 +382,37 @@ cliente* a nuestros campos, guardado para no repetir el trabajo en cada carga.
 - **`comunicado`** — mensajes a equipo, `confirmacion_lectura` por usuario.
 - **`capacitacion`** — material formativo móvil.
 - **`jornada`** — derivada de check-in/out para el corte automático 8h/48h y la **aprobación de horas extra** (candado SUNAFIL).
+
+### Entidades añadidas tras la 2ª revisión con el cliente (jul 2026)
+
+Cinco peticiones nuevas del cliente que entran al piloto (ver
+[[04 - Módulos y Funcionalidades]], "Segunda revisión con el cliente"). El
+diseño fino de cada tabla vive en su ticket de Linear; aquí queda el esbozo.
+
+**`solicitud_cambio_ruta`** — el mercaderista pide un cambio en su rutero; el
+supervisor lo ve y resuelve. `id, tenant_id, mercaderista_id, rutero_id (o
+fecha), tipo (cambio_tienda|cambio_dia|no_visita|otro), motivo (obligatorio),
+estado (nueva|vista|resuelta|rechazada), resuelta_por, resuelta_at,
+comentario_resolucion, creada_at`. RLS: el mercaderista ve las suyas; el
+supervisor, las de sus reportes. La sync rule replica al teléfono **solo las
+propias** (`request.user_id()`).
+
+**`cluster_tienda`** — catálogo de niveles de PDV **por cliente**, para que los
+valores del `tienda.cluster` sean configurables. `id, tenant_id, codigo, nombre,
+orden, activo`. Se siembran AAA/AA/A/B pero cada cliente los edita.
+
+**`formulario_levantamiento` + `formulario_version`** — definición
+**schema-driven** del wizard que ven los mercaderistas, editable por el admin y
+**versionada** (publicar deja una versión inmutable). Los campos con lógica de
+negocio (quiebre/diferencia, SOS por frentes, precio/promo) **siguen calculados
+por la base**: el formulario configura presentación y campos libres, no reescribe
+reglas. La app **renderiza la definición publicada** en vez de pasos codificados
+— reformula el wizard fijo actual.
+
+**`portal_modulo_habilitado`** — qué secciones del portal cliente ve cada
+cliente. `tenant_id, modulo, habilitado`. Default: todas habilitadas. Solo el
+admin escribe; el portal lo respeta server-side (una sección deshabilitada no se
+muestra ni es accesible por URL).
 
 ---
 
