@@ -14,6 +14,7 @@ import { colaFotos } from "@/lib/cola-fotos-instancia";
 import { type FotoProcesada } from "@/lib/foto-captura";
 import { dentroDeGeocerca, distanciaMetros } from "@/lib/geo";
 import { useParada } from "@/lib/rutero";
+import { leerTransito, limpiarTransito, minutosDeTraslado } from "@/lib/transito";
 import { type ResultadoUbicacion, ubicacionActual } from "@/lib/ubicacion";
 import { crearVisitaCheckIn } from "@/lib/visita";
 import { useSesion } from "@/sesion";
@@ -93,6 +94,13 @@ export default function CheckIn() {
         hash: foto.hash,
         encolada_at: ahora,
       });
+      // Cierra el cronómetro de tránsito de la tienda anterior: sus minutos son
+      // el traslado HACIA esta visita.
+      const trasladoDesde = await leerTransito();
+      const tiempoTraslado = trasladoDesde
+        ? minutosDeTraslado(trasladoDesde, ahora)
+        : null;
+      if (trasladoDesde) await limpiarTransito();
       const visitaId = await crearVisitaCheckIn({
         tenant_id: parada.tenant_id,
         rutero_parada_id: parada.parada_id,
@@ -101,6 +109,7 @@ export default function CheckIn() {
         punto: ubic.punto,
         capturado_at: ahora,
         selfie_foto_id: null,
+        tiempo_traslado_min: tiempoTraslado,
       });
       // El levantamiento por marca es el siguiente paso; `replace` deja el
       // check-in fuera de la pila (volver desde el selector regresa a Mi día).

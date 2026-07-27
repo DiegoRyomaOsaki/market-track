@@ -20,6 +20,9 @@ export type DatosCheckIn = {
   punto: PuntoGeo;
   capturado_at: string;
   selfie_foto_id: string | null;
+  // Minutos de traslado desde la tienda anterior (modo tránsito). Null si es la
+  // primera visita del día o no venía un cronómetro en curso.
+  tiempo_traslado_min: number | null;
 };
 
 /** Crea la visita del check-in y devuelve su id. */
@@ -28,8 +31,8 @@ export async function crearVisitaCheckIn(d: DatosCheckIn): Promise<string> {
   await db.execute(
     `INSERT INTO visita
        (id, tenant_id, rutero_parada_id, tienda_id, mercaderista_id,
-        check_in_at, check_in_geo, estado, selfie_foto_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'en_curso', ?)`,
+        check_in_at, check_in_geo, estado, selfie_foto_id, tiempo_traslado_min)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'en_curso', ?, ?)`,
     [
       id,
       d.tenant_id,
@@ -39,7 +42,28 @@ export async function crearVisitaCheckIn(d: DatosCheckIn): Promise<string> {
       d.capturado_at,
       puntoAEwkt(d.punto),
       d.selfie_foto_id,
+      d.tiempo_traslado_min,
     ],
   );
   return id;
+}
+
+/**
+ * Cierra la visita con el check-out. `estado = 'completada'`; el servidor
+ * re-valida la geocerca de salida y sella la hora autoritativa (MAR-30). No
+ * espera a que suban las fotos: la cola a R2 sigue su curso aparte.
+ */
+export async function cerrarVisitaCheckOut(d: {
+  visita_id: string;
+  punto: PuntoGeo;
+  capturado_at: string;
+  bitacora: string | null;
+}): Promise<void> {
+  await db.execute(
+    `UPDATE visita
+        SET check_out_at = ?, check_out_geo = ?, estado = 'completada',
+            bitacora = ?
+      WHERE id = ?`,
+    [d.capturado_at, puntoAEwkt(d.punto), d.bitacora, d.visita_id],
+  );
 }

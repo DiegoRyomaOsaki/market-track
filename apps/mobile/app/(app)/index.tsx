@@ -1,4 +1,5 @@
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -16,6 +17,7 @@ import {
   type ParadaDeHoy,
   useRuteroDeHoy,
 } from "@/lib/rutero";
+import { leerTransito } from "@/lib/transito";
 import { colores, espacio, radio } from "@/tema";
 
 async function cerrarSesion() {
@@ -40,6 +42,19 @@ function fechaLarga(iso: string): string {
 export default function MiDia() {
   const router = useRouter();
   const { paradas, cargando, fecha } = useRuteroDeHoy();
+  const [transitoDesde, setTransitoDesde] = useState<string | null>(null);
+
+  // Al volver a Mi día (p. ej. tras un check-out) se relee el cronómetro de
+  // tránsito: se cierra en el siguiente check-in.
+  useFocusEffect(
+    useCallback(() => {
+      let vivo = true;
+      void leerTransito().then((d) => vivo && setTransitoDesde(d));
+      return () => {
+        vivo = false;
+      };
+    }, []),
+  );
 
   const completadas = paradas.filter(
     (p) => estadoVisual(p.visita_estado) === "completada",
@@ -68,6 +83,8 @@ export default function MiDia() {
         </Text>
       )}
 
+      {transitoDesde ? <BannerTransito desde={transitoDesde} /> : null}
+
       {cargando ? (
         <View style={e.centro}>
           <ActivityIndicator color={colores.marca} />
@@ -92,6 +109,25 @@ export default function MiDia() {
           )}
         />
       )}
+    </View>
+  );
+}
+
+function BannerTransito({ desde }: { desde: string }) {
+  const [ahora, setAhora] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setAhora(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const seg = Math.max(0, Math.floor((ahora - new Date(desde).getTime()) / 1000));
+  const mm = String(Math.floor(seg / 60)).padStart(2, "0");
+  const ss = String(seg % 60).padStart(2, "0");
+  return (
+    <View style={e.transito} accessibilityRole="summary">
+      <Text style={e.transitoTexto}>
+        En tránsito · {mm}:{ss}
+      </Text>
+      <Text style={e.transitoNota}>Se registra al hacer check-in</Text>
     </View>
   );
 }
@@ -175,6 +211,21 @@ const e = StyleSheet.create({
     paddingHorizontal: espacio.m,
     marginTop: espacio.s,
   },
+  transito: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginHorizontal: espacio.m,
+    marginTop: espacio.s,
+    paddingHorizontal: espacio.m,
+    paddingVertical: espacio.s,
+    borderRadius: radio.m,
+    borderWidth: 1,
+    borderColor: colores.marca,
+    backgroundColor: colores.superficie,
+  },
+  transitoTexto: { color: colores.texto, fontSize: 14, fontWeight: "700" },
+  transitoNota: { color: colores.textoSuave, fontSize: 12 },
   centro: {
     flex: 1,
     alignItems: "center",

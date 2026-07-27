@@ -1,7 +1,11 @@
 import * as FileSystem from "expo-file-system/legacy";
 import { useEffect, useState } from "react";
 
-import { type AlmacenManifiesto, ColaFotos } from "./cola-fotos";
+import {
+  type AlmacenManifiesto,
+  ColaFotos,
+  type FotoPendiente,
+} from "./cola-fotos";
 
 // La cola de fotos de la app, con el manifiesto persistido en el directorio de
 // documentos. Persistir importa: una foto encolada sin señal tiene que seguir
@@ -37,4 +41,23 @@ export function useCountFotos(): number {
   }, []);
 
   return n;
+}
+
+/** La lista de fotos pendientes, reactiva. Para la pantalla de sincronización. */
+export function useFotosPendientes(): FotoPendiente[] {
+  const [fotos, setFotos] = useState<FotoPendiente[]>([]);
+
+  useEffect(() => {
+    let vivo = true;
+    const refrescar = () =>
+      void colaFotos.listarPendientes().then((f) => vivo && setFotos(f));
+    refrescar();
+    const quitar = colaFotos.suscribir(() => refrescar());
+    return () => {
+      vivo = false;
+      quitar();
+    };
+  }, []);
+
+  return fotos;
 }

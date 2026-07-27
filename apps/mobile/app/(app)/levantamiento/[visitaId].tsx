@@ -59,6 +59,13 @@ export default function SelectorMarcas() {
             ✓ Todas las marcas listas
           </Text>
           <Text style={e.nota}>Puedes continuar con el check-out.</Text>
+          <Pressable
+            onPress={() => router.push(`/check-out/${visitaId}`)}
+            style={e.boton}
+            accessibilityRole="button"
+          >
+            <Text style={e.botonTexto}>Ir al check-out</Text>
+          </Pressable>
         </View>
       ) : null}
 
@@ -154,6 +161,15 @@ const e = StyleSheet.create({
   },
   estado: { fontSize: 18, fontWeight: "700" },
   nota: { color: colores.textoSuave, fontSize: 14, lineHeight: 20 },
+  boton: {
+    height: 48,
+    borderRadius: radio.m,
+    backgroundColor: colores.marca,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: espacio.xs,
+  },
+  botonTexto: { color: colores.marcaTexto, fontSize: 16, fontWeight: "700" },
   centro: {
     flex: 1,
     alignItems: "center",

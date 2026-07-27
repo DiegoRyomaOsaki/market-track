@@ -12,6 +12,7 @@ import { type FrenteCompetidor } from "./share-of-shelf";
 export type ContextoVisita = {
   tenant_id: string;
   tienda_id: string;
+  tienda_nombre: string;
   estado: string;
 };
 
@@ -19,7 +20,9 @@ export type ContextoVisita = {
  * crearse (`tenant_id` es not-null sin default: lo pone el cliente). */
 export function useVisita(visitaId: string) {
   const { data, isLoading } = useQuery<ContextoVisita>(
-    `SELECT tenant_id, tienda_id, estado FROM visita WHERE id = ?`,
+    `SELECT v.tenant_id, v.tienda_id, v.estado, t.nombre AS tienda_nombre
+     FROM visita v JOIN tienda t ON t.id = v.tienda_id
+     WHERE v.id = ?`,
     [visitaId],
   );
   return { visita: data?.[0] ?? null, cargando: isLoading };
@@ -61,6 +64,22 @@ export function useContingencias(levantamientoId: string | null) {
   const { data } = useQuery<ContingenciaLocal>(
     `SELECT paso, motivo FROM contingencia WHERE levantamiento_id = ?`,
     [levantamientoId ?? ""],
+  );
+  return data ?? [];
+}
+
+export type ContingenciaResumen = {
+  paso: string;
+  motivo: string;
+  levantamiento_id: string | null;
+};
+
+/** Todas las contingencias de una visita, para el resumen del check-out. */
+export function useContingenciasDeVisita(visitaId: string) {
+  const { data } = useQuery<ContingenciaResumen>(
+    `SELECT paso, motivo, levantamiento_id FROM contingencia
+     WHERE visita_id = ? ORDER BY registrada_at`,
+    [visitaId],
   );
   return data ?? [];
 }
