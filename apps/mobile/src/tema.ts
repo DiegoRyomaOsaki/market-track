@@ -11,6 +11,7 @@ export const colores = {
   marca: "#4f46e5",
   marcaTexto: "#ffffff",
   alerta: "#dc2626",
+  ambar: "#d97706",
   completado: "#16a34a",
 } as const;
 
