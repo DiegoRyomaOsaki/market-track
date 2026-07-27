@@ -10,6 +10,10 @@ import {
 
 import { ContingenciaModal } from "@/componentes/contingencia-modal";
 import { PasoAntesSos } from "@/componentes/paso-antes-sos";
+import { PasoDespues } from "@/componentes/paso-despues";
+import { PasoExhibiciones } from "@/componentes/paso-exhibiciones";
+import { PasoPrecios } from "@/componentes/paso-precios";
+import { PasoQuiebres } from "@/componentes/paso-quiebres";
 import {
   completarLevantamiento,
   crearLevantamiento,
@@ -18,22 +22,18 @@ import {
   useMarcasDeVisita,
   useVisita,
 } from "@/lib/levantamiento";
-import {
-  levantamientoCompleto,
-  type PasoWizard,
-  PASOS,
-} from "@/lib/pasos-levantamiento";
+import { levantamientoCompleto, PASOS } from "@/lib/pasos-levantamiento";
 import { useSesion } from "@/sesion";
 import { colores, espacio, radio } from "@/tema";
 
 // El shell del wizard de levantamiento de una marca: navegación secuencial de
-// los 5 pasos, barra de progreso y contingencia (bypass) en cada paso.
+// los 5 pasos, barra de progreso y contingencia (bypass) en cada paso. Cada
+// paso lo implementa su propio componente (PasoActivo despacha por id).
 //
-// Paso 1 "Antes + Share of Shelf" ya es real (MAR-37, PasoAntesSos) y su avance
-// se DERIVA de datos persistidos. Los pasos 2–5 (quiebres, precios,
-// exhibiciones, Después) siguen como marcador provisional hasta MAR-38, con el
-// avance en estado de sesión. Los pasos omitidos por contingencia se persisten
-// (tabla `contingencia`).
+// "Antes + Share of Shelf" (MAR-37) deriva su avance de datos persistidos; los
+// pasos de quiebres/precios/exhibiciones/Después (MAR-38) avanzan en sesión al
+// completar. Los pasos omitidos por contingencia se persisten (tabla
+// `contingencia`).
 
 export default function WizardLevantamiento() {
   const router = useRouter();
@@ -156,24 +156,18 @@ export default function WizardLevantamiento() {
 
       {activo ? (
         <View style={e.contenido}>
-          {activo.id === "antes" ? (
-            <PasoAntesSos
-              visitaId={visitaId}
-              marcaId={marcaId}
-              levantamientoId={levantamientoId}
-              tenantId={visita.tenant_id}
-              usuario={sesion?.user.email ?? "Mercaderista"}
-              onContingencia={() => setMostrarContingencia(true)}
-            />
-          ) : (
-            <PasoPlaceholder
-              paso={activo}
-              onCompletar={() =>
-                setHechosSesion((prev) => new Set(prev).add(activo.id))
-              }
-              onContingencia={() => setMostrarContingencia(true)}
-            />
-          )}
+          <PasoActivo
+            id={activo.id}
+            visitaId={visitaId}
+            marcaId={marcaId}
+            levantamientoId={levantamientoId}
+            tenantId={visita.tenant_id}
+            usuario={sesion?.user.email ?? "Mercaderista"}
+            onCompletar={() =>
+              setHechosSesion((prev) => new Set(prev).add(activo.id))
+            }
+            onContingencia={() => setMostrarContingencia(true)}
+          />
         </View>
       ) : null}
 
@@ -194,41 +188,67 @@ export default function WizardLevantamiento() {
   );
 }
 
-// Los pasos aún sin contenido real (quiebres/precios/exhibiciones/Después) los
-// implementa MAR-38. Hasta entonces, "Completar" avanza en sesión y la
-// contingencia sigue disponible.
-function PasoPlaceholder({
-  paso,
+// Despacha al componente de cada paso. "antes" no usa onCompletar: su avance se
+// deriva de datos persistidos; los demás avanzan en sesión al completar.
+function PasoActivo({
+  id,
+  visitaId,
+  marcaId,
+  levantamientoId,
+  tenantId,
+  usuario,
   onCompletar,
   onContingencia,
 }: {
-  paso: PasoWizard;
+  id: string;
+  visitaId: string;
+  marcaId: string;
+  levantamientoId: string;
+  tenantId: string;
+  usuario: string;
   onCompletar: () => void;
   onContingencia: () => void;
 }) {
+  const comun = { visitaId, marcaId, levantamientoId, tenantId };
+  if (id === "antes") {
+    return (
+      <PasoAntesSos {...comun} usuario={usuario} onContingencia={onContingencia} />
+    );
+  }
+  if (id === "quiebres") {
+    return (
+      <PasoQuiebres
+        {...comun}
+        onCompletar={onCompletar}
+        onContingencia={onContingencia}
+      />
+    );
+  }
+  if (id === "precios") {
+    return (
+      <PasoPrecios
+        {...comun}
+        onCompletar={onCompletar}
+        onContingencia={onContingencia}
+      />
+    );
+  }
+  if (id === "exhibiciones") {
+    return (
+      <PasoExhibiciones
+        {...comun}
+        usuario={usuario}
+        onCompletar={onCompletar}
+        onContingencia={onContingencia}
+      />
+    );
+  }
   return (
-    <>
-      <Text style={e.pasoTitulo}>{paso.titulo}</Text>
-      <Text style={e.pasoDescripcion}>{paso.descripcion}</Text>
-
-      <View style={e.placeholder}>
-        <Text style={e.placeholderTexto}>
-          El contenido de este paso llega en MAR-38.
-        </Text>
-      </View>
-
-      <Pressable onPress={onCompletar} style={e.boton} accessibilityRole="button">
-        <Text style={e.botonTexto}>Completar paso</Text>
-      </Pressable>
-
-      <Pressable
-        onPress={onContingencia}
-        style={e.contingencia}
-        accessibilityRole="button"
-      >
-        <Text style={e.contingenciaTexto}>No puedo completar este paso</Text>
-      </Pressable>
-    </>
+    <PasoDespues
+      usuario={usuario}
+      onCompletar={onCompletar}
+      onContingencia={onContingencia}
+    />
   );
 }
 
@@ -278,30 +298,6 @@ const e = StyleSheet.create({
     marginTop: espacio.s,
   },
   contenido: { marginTop: espacio.l, flex: 1 },
-  pasoTitulo: { color: colores.texto, fontSize: 20, fontWeight: "700" },
-  pasoDescripcion: {
-    color: colores.textoSuave,
-    fontSize: 15,
-    lineHeight: 21,
-    marginTop: espacio.xs,
-  },
-  placeholder: {
-    flex: 1,
-    minHeight: 120,
-    borderRadius: radio.m,
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: colores.borde,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: espacio.l,
-    padding: espacio.l,
-  },
-  placeholderTexto: {
-    color: colores.textoSuave,
-    fontSize: 14,
-    textAlign: "center",
-  },
   tarjeta: {
     backgroundColor: colores.superficie,
     borderRadius: radio.m,
@@ -311,20 +307,4 @@ const e = StyleSheet.create({
     marginTop: espacio.l,
   },
   estado: { fontSize: 18, fontWeight: "700" },
-  boton: {
-    height: 52,
-    borderRadius: radio.m,
-    backgroundColor: colores.marca,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: espacio.l,
-  },
-  botonTexto: { color: colores.marcaTexto, fontSize: 16, fontWeight: "700" },
-  contingencia: { alignItems: "center", paddingVertical: espacio.m },
-  contingenciaTexto: {
-    color: colores.textoSuave,
-    fontSize: 14,
-    fontWeight: "600",
-    textDecorationLine: "underline",
-  },
 });

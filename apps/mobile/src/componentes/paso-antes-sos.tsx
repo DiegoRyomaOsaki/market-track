@@ -11,6 +11,12 @@ import {
 } from "react-native";
 
 import { CamaraFoto } from "@/componentes/camara-foto";
+import {
+  ContingenciaLink,
+  pasoEstilos as p,
+  Seccion,
+  Stepper,
+} from "@/componentes/paso-comun";
 import { colaFotos } from "@/lib/cola-fotos-instancia";
 import { type FotoProcesada } from "@/lib/foto-captura";
 import {
@@ -25,7 +31,7 @@ import {
   sumaCompetencia,
 } from "@/lib/share-of-shelf";
 import { ubicacionActual } from "@/lib/ubicacion";
-import { colores, espacio, radio } from "@/tema";
+import { colores, espacio } from "@/tema";
 
 // Paso 4.1 + 4.2 del levantamiento: foto "Antes" de la góndola y Share of Shelf
 // (agregado + detalle por SKU). "Frentes", nunca "caras". El detalle por SKU se
@@ -158,36 +164,37 @@ export function PasoAntesSos({
 
   return (
     <ScrollView
-      style={{ flex: 1 }}
-      contentContainerStyle={{ paddingBottom: espacio.xl }}
+      style={p.scroll}
+      contentContainerStyle={p.scrollContenido}
       keyboardShouldPersistTaps="handled"
     >
       <Seccion titulo="Foto Antes">
-        <Fila>
-          <Punto color={fotoAntes ? colores.completado : colores.textoSuave} />
-          <Text style={e.filaTexto}>
+        <View style={p.fila}>
+          <View
+            style={[
+              e.punto,
+              { backgroundColor: fotoAntes ? colores.completado : colores.textoSuave },
+            ]}
+          />
+          <Text style={p.filaTexto}>
             {fotoAntes ? "Foto tomada" : "Toma la foto de la góndola (obligatoria)"}
           </Text>
-        </Fila>
+        </View>
         <Pressable
           onPress={() => void abrirCamara({ tipo: "antes" })}
-          style={e.botonSec}
+          style={p.botonSec}
           accessibilityRole="button"
         >
-          <Text style={e.botonSecTexto}>
+          <Text style={p.botonSecTexto}>
             {fotoAntes ? "Repetir foto" : "Abrir cámara"}
           </Text>
         </Pressable>
       </Seccion>
 
       <Seccion titulo="Share of Shelf — góndola">
-        <View style={e.filaStepper}>
-          <Text style={e.filaTexto}>Frentes propios</Text>
-          <Stepper
-            valor={propios}
-            onCambio={setPropios}
-            etiqueta="Frentes propios"
-          />
+        <View style={p.filaEntre}>
+          <Text style={p.filaTexto}>Frentes propios</Text>
+          <Stepper valor={propios} onCambio={setPropios} etiqueta="Frentes propios" />
         </View>
 
         {competidores.map((c, i) => (
@@ -201,7 +208,7 @@ export function PasoAntesSos({
               }
               placeholder="Competidor"
               placeholderTextColor={colores.textoSuave}
-              style={e.competidorInput}
+              style={[p.input, { flex: 1 }]}
               accessibilityLabel={`Nombre del competidor ${i + 1}`}
             />
             <Stepper
@@ -230,10 +237,10 @@ export function PasoAntesSos({
           onPress={() =>
             setCompetidores((prev) => [...prev, { competidor: "", frentes: 0 }])
           }
-          style={e.botonSec}
+          style={p.botonSec}
           accessibilityRole="button"
         >
-          <Text style={e.botonSecTexto}>Añadir competidor</Text>
+          <Text style={p.botonSecTexto}>Añadir competidor</Text>
         </Pressable>
 
         <View style={e.share}>
@@ -243,10 +250,10 @@ export function PasoAntesSos({
 
         <Pressable
           onPress={() => void abrirCamara({ tipo: "sos" })}
-          style={e.botonSec}
+          style={p.botonSec}
           accessibilityRole="button"
         >
-          <Text style={e.botonSecTexto}>
+          <Text style={p.botonSecTexto}>
             {fotoSos ? "Repetir foto (opcional)" : "Foto de la góndola (opcional)"}
           </Text>
         </Pressable>
@@ -256,7 +263,7 @@ export function PasoAntesSos({
         {cargando ? (
           <ActivityIndicator color={colores.marca} />
         ) : skus.length === 0 ? (
-          <Text style={e.nota}>Sin SKU codificados para esta marca.</Text>
+          <Text style={p.nota}>Sin SKU codificados para esta marca.</Text>
         ) : (
           skus.map((s) => (
             <View key={s.sku_id} style={e.skuFila}>
@@ -303,23 +310,17 @@ export function PasoAntesSos({
       <Pressable
         onPress={() => void continuar()}
         disabled={!fotoAntes || guardando}
-        style={[e.boton, (!fotoAntes || guardando) && e.botonInactivo]}
+        style={[p.boton, (!fotoAntes || guardando) && p.botonInactivo]}
         accessibilityRole="button"
       >
         {guardando ? (
           <ActivityIndicator color={colores.marcaTexto} />
         ) : (
-          <Text style={e.botonTexto}>Continuar</Text>
+          <Text style={p.botonTexto}>Continuar</Text>
         )}
       </Pressable>
 
-      <Pressable
-        onPress={onContingencia}
-        style={e.contingencia}
-        accessibilityRole="button"
-      >
-        <Text style={e.contingenciaTexto}>No puedo completar este paso</Text>
-      </Pressable>
+      <ContingenciaLink onPress={onContingencia} />
     </ScrollView>
   );
 }
@@ -334,100 +335,9 @@ function parseCompetidores(raw: string | null): FrenteCompetidor[] {
   }
 }
 
-function Stepper({
-  valor,
-  onCambio,
-  etiqueta,
-}: {
-  valor: number;
-  onCambio: (n: number) => void;
-  etiqueta: string;
-}) {
-  return (
-    <View style={e.stepper}>
-      <Pressable
-        onPress={() => onCambio(Math.max(0, valor - 1))}
-        style={e.stepperBoton}
-        accessibilityRole="button"
-        accessibilityLabel={`Restar a ${etiqueta}`}
-      >
-        <Text style={e.stepperSigno}>−</Text>
-      </Pressable>
-      <Text style={e.stepperValor}>{valor}</Text>
-      <Pressable
-        onPress={() => onCambio(valor + 1)}
-        style={e.stepperBoton}
-        accessibilityRole="button"
-        accessibilityLabel={`Sumar a ${etiqueta}`}
-      >
-        <Text style={e.stepperSigno}>+</Text>
-      </Pressable>
-    </View>
-  );
-}
-
-function Seccion({
-  titulo,
-  children,
-}: {
-  titulo: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={e.seccion}>
-      <Text style={e.seccionTitulo}>{titulo}</Text>
-      {children}
-    </View>
-  );
-}
-
-const Fila = ({ children }: { children: React.ReactNode }) => (
-  <View style={e.fila}>{children}</View>
-);
-
-const Punto = ({ color }: { color: string }) => (
-  <View style={[e.punto, { backgroundColor: color }]} />
-);
-
 const e = StyleSheet.create({
-  seccion: {
-    backgroundColor: colores.superficie,
-    borderRadius: radio.m,
-    borderWidth: 1,
-    borderColor: colores.borde,
-    padding: espacio.m,
-    marginTop: espacio.m,
-    gap: espacio.s,
-  },
-  seccionTitulo: {
-    color: colores.textoSuave,
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  fila: { flexDirection: "row", alignItems: "center", gap: espacio.s },
-  filaTexto: { color: colores.texto, fontSize: 15, flex: 1 },
-  filaStepper: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: espacio.s,
-  },
   punto: { width: 10, height: 10, borderRadius: 5 },
-  nota: { color: colores.textoSuave, fontSize: 14, lineHeight: 20 },
   competidor: { flexDirection: "row", alignItems: "center", gap: espacio.s },
-  competidorInput: {
-    flex: 1,
-    backgroundColor: colores.fondo,
-    borderRadius: radio.s,
-    borderWidth: 1,
-    borderColor: colores.borde,
-    color: colores.texto,
-    fontSize: 14,
-    paddingHorizontal: espacio.s,
-    height: 40,
-  },
   quitar: { color: colores.textoSuave, fontSize: 18, paddingHorizontal: 4 },
   share: {
     flexDirection: "row",
@@ -453,51 +363,5 @@ const e = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     marginTop: espacio.s,
-  },
-  stepper: { flexDirection: "row", alignItems: "center", gap: espacio.s },
-  stepperBoton: {
-    width: 36,
-    height: 36,
-    borderRadius: radio.s,
-    borderWidth: 1,
-    borderColor: colores.borde,
-    backgroundColor: colores.fondo,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stepperSigno: { color: colores.texto, fontSize: 20, fontWeight: "700" },
-  stepperValor: {
-    color: colores.texto,
-    fontSize: 17,
-    fontWeight: "700",
-    minWidth: 28,
-    textAlign: "center",
-  },
-  boton: {
-    height: 52,
-    borderRadius: radio.m,
-    backgroundColor: colores.marca,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: espacio.l,
-  },
-  botonInactivo: { opacity: 0.4 },
-  botonTexto: { color: colores.marcaTexto, fontSize: 16, fontWeight: "700" },
-  botonSec: {
-    height: 46,
-    borderRadius: radio.m,
-    borderWidth: 1,
-    borderColor: colores.borde,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: espacio.xs,
-  },
-  botonSecTexto: { color: colores.texto, fontSize: 15, fontWeight: "600" },
-  contingencia: { alignItems: "center", paddingVertical: espacio.m },
-  contingenciaTexto: {
-    color: colores.textoSuave,
-    fontSize: 14,
-    fontWeight: "600",
-    textDecorationLine: "underline",
   },
 });

@@ -140,6 +140,29 @@ const levantamiento_sku = new Table({
   sos_foto_id: column.text,
 });
 
+const exhibicion_negociada = new Table({
+  tenant_id: column.text,
+  marca_id: column.text,
+  tienda_id: column.text,
+  tipo: column.text,
+  sku_ids: column.text,
+  cantidad_sugerida: column.integer,
+  fecha_inicio: column.text,
+  fecha_fin: column.text,
+});
+
+const exhibicion = new Table({
+  tenant_id: column.text,
+  levantamiento_id: column.text,
+  exhibicion_negociada_id: column.text,
+  tipo_adicional: column.text,
+  instalada: column.integer,
+  unidades: column.integer,
+  completa: column.integer,
+  vigente: column.integer,
+  foto_id: column.text,
+});
+
 const contingencia = new Table({
   tenant_id: column.text,
   visita_id: column.text,
@@ -169,6 +192,8 @@ export const AppSchema = new Schema({
   visita,
   levantamiento,
   levantamiento_sku,
+  exhibicion_negociada,
+  exhibicion,
   contingencia,
   profile,
 });

@@ -112,11 +112,17 @@ export type SkuDeLevantamiento = {
   codigo: string;
   ls_id: string | null;
   frentes_propios: number | null;
+  stock_sistema: number | null;
+  stock_piso: number | null;
+  precio_registrado: number | null;
+  hay_promo: number | null;
+  promo_comunicada: number | null;
 };
 
 /**
  * Los SKU codificados de la marca en la tienda (derivados de `tienda_sku`), con
- * lo ya registrado por SKU. La tienda sale de la propia visita.
+ * lo ya registrado por SKU (frentes, stock, precio). La tienda sale de la propia
+ * visita. Lo comparten los pasos de SOS, quiebres y precios.
  */
 export function useSkusDeLevantamiento(
   visitaId: string,
@@ -125,7 +131,10 @@ export function useSkusDeLevantamiento(
 ) {
   const { data, isLoading } = useQuery<SkuDeLevantamiento>(
     `SELECT s.id AS sku_id, s.nombre AS nombre, s.codigo AS codigo,
-            ls.id AS ls_id, ls.frentes_propios AS frentes_propios
+            ls.id AS ls_id, ls.frentes_propios AS frentes_propios,
+            ls.stock_sistema AS stock_sistema, ls.stock_piso AS stock_piso,
+            ls.precio_registrado AS precio_registrado,
+            ls.hay_promo AS hay_promo, ls.promo_comunicada AS promo_comunicada
      FROM visita v
      JOIN tienda_sku ts ON ts.tienda_id = v.tienda_id AND ts.activo = 1
      JOIN sku s ON s.id = ts.sku_id AND s.marca_id = ? AND s.activo = 1
@@ -136,6 +145,37 @@ export function useSkusDeLevantamiento(
     [marcaId, levantamientoId ?? "", visitaId],
   );
   return { skus: data ?? [], cargando: isLoading };
+}
+
+/**
+ * Upsert de una fila `levantamiento_sku` por (levantamiento, sku), escribiendo
+ * solo las columnas de `campos` y conservando el resto (cada paso llena las
+ * suyas: SOS los frentes, quiebres el stock, precios el precio). Las CLAVES de
+ * `campos` son literales de nuestro código, nunca entrada externa: interpolarlas
+ * es seguro; los VALORES siempre van parametrizados.
+ */
+async function upsertLevantamientoSku(d: {
+  ls_id: string | null;
+  tenant_id: string;
+  levantamiento_id: string;
+  sku_id: string;
+  campos: Record<string, number | string | null>;
+}): Promise<void> {
+  const cols = Object.keys(d.campos);
+  const vals = Object.values(d.campos);
+  if (d.ls_id) {
+    await db.execute(
+      `UPDATE levantamiento_sku SET ${cols.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`,
+      [...vals, d.ls_id],
+    );
+  } else {
+    await db.execute(
+      `INSERT INTO levantamiento_sku
+         (id, tenant_id, levantamiento_id, sku_id, ${cols.join(", ")})
+       VALUES (?, ?, ?, ?, ${cols.map(() => "?").join(", ")})`,
+      [Crypto.randomUUID(), d.tenant_id, d.levantamiento_id, d.sku_id, ...vals],
+    );
+  }
 }
 
 /**
@@ -170,25 +210,69 @@ export async function guardarAntesSos(d: {
     ],
   );
   for (const s of d.skus) {
-    if (s.ls_id) {
-      await db.execute(
-        `UPDATE levantamiento_sku SET frentes_propios = ? WHERE id = ?`,
-        [s.frentes_propios, s.ls_id],
-      );
-    } else {
-      await db.execute(
-        `INSERT INTO levantamiento_sku
-           (id, tenant_id, levantamiento_id, sku_id, frentes_propios)
-         VALUES (?, ?, ?, ?, ?)`,
-        [
-          Crypto.randomUUID(),
-          d.tenant_id,
-          d.levantamiento_id,
-          s.sku_id,
-          s.frentes_propios,
-        ],
-      );
-    }
+    await upsertLevantamientoSku({
+      ls_id: s.ls_id,
+      tenant_id: d.tenant_id,
+      levantamiento_id: d.levantamiento_id,
+      sku_id: s.sku_id,
+      campos: { frentes_propios: s.frentes_propios },
+    });
+  }
+}
+
+/**
+ * Paso 4.3 "Quiebres y diferencias": guarda el stock de sistema y piso por SKU.
+ * NO escribe `quiebre` ni `diferencia` — esos flags los DERIVA la base
+ * (trigger/vista); el badge del paso es solo feedback en vivo (ver quiebres.ts).
+ */
+export async function guardarQuiebres(d: {
+  levantamiento_id: string;
+  tenant_id: string;
+  skus: readonly {
+    sku_id: string;
+    ls_id: string | null;
+    stock_sistema: number;
+    stock_piso: number;
+  }[];
+}): Promise<void> {
+  for (const s of d.skus) {
+    await upsertLevantamientoSku({
+      ls_id: s.ls_id,
+      tenant_id: d.tenant_id,
+      levantamiento_id: d.levantamiento_id,
+      sku_id: s.sku_id,
+      campos: { stock_sistema: s.stock_sistema, stock_piso: s.stock_piso },
+    });
+  }
+}
+
+/**
+ * Paso 4.4 "Precios": guarda el precio digitado y las banderas de promo por SKU.
+ * La alerta de desviación la calcula el motor del servidor (MAR-28), no la app.
+ */
+export async function guardarPrecios(d: {
+  levantamiento_id: string;
+  tenant_id: string;
+  skus: readonly {
+    sku_id: string;
+    ls_id: string | null;
+    precio_registrado: number | null;
+    hay_promo: boolean;
+    promo_comunicada: boolean;
+  }[];
+}): Promise<void> {
+  for (const s of d.skus) {
+    await upsertLevantamientoSku({
+      ls_id: s.ls_id,
+      tenant_id: d.tenant_id,
+      levantamiento_id: d.levantamiento_id,
+      sku_id: s.sku_id,
+      campos: {
+        precio_registrado: s.precio_registrado,
+        hay_promo: s.hay_promo ? 1 : 0,
+        promo_comunicada: s.hay_promo && s.promo_comunicada ? 1 : 0,
+      },
+    });
   }
 }
 
@@ -224,4 +308,125 @@ export async function registrarContingencia(d: {
       d.foto_id,
     ],
   );
+}
+
+export type ExhibicionNegociadaAuditada = {
+  negociada_id: string;
+  tipo: string;
+  cantidad_sugerida: number | null;
+  ex_id: string | null;
+  instalada: number | null;
+  unidades: number | null;
+};
+
+export type ExhibicionAdicional = {
+  ex_id: string;
+  tipo: string;
+  unidades: number | null;
+  vigente: number | null;
+};
+
+/**
+ * Las exhibiciones del paso 4.5: las **negociadas** (pre-carga que se audita) de
+ * la marca en esta tienda, con su fila de auditoría si ya existe, y las
+ * **adicionales/conseguidas** que el mercaderista ya creó en este levantamiento.
+ */
+export function useExhibiciones(
+  visitaId: string,
+  marcaId: string,
+  levantamientoId: string | null,
+) {
+  const negociadas = useQuery<ExhibicionNegociadaAuditada>(
+    `SELECT en.id AS negociada_id, en.tipo AS tipo,
+            en.cantidad_sugerida AS cantidad_sugerida,
+            ex.id AS ex_id, ex.instalada AS instalada, ex.unidades AS unidades
+     FROM visita v
+     JOIN exhibicion_negociada en
+       ON en.tienda_id = v.tienda_id AND en.marca_id = ?
+     LEFT JOIN exhibicion ex
+       ON ex.exhibicion_negociada_id = en.id AND ex.levantamiento_id = ?
+     WHERE v.id = ?
+     ORDER BY en.tipo`,
+    [marcaId, levantamientoId ?? "", visitaId],
+  );
+  const adicionales = useQuery<ExhibicionAdicional>(
+    `SELECT id AS ex_id, tipo_adicional AS tipo, unidades, vigente
+     FROM exhibicion
+     WHERE levantamiento_id = ? AND exhibicion_negociada_id IS NULL`,
+    [levantamientoId ?? ""],
+  );
+  return {
+    negociadas: negociadas.data ?? [],
+    adicionales: adicionales.data ?? [],
+    cargando: negociadas.isLoading || adicionales.isLoading,
+  };
+}
+
+/**
+ * Paso 4.5: guarda la auditoría de exhibiciones. Upsert de las negociadas por
+ * (levantamiento, negociada) y alta/edición de las adicionales conseguidas por
+ * el mercaderista. Las fotos (opcionales) se encolan aparte; su FK queda null
+ * hasta que MAR-39 cree la fila `foto` y la enlace.
+ */
+export async function guardarExhibiciones(d: {
+  levantamiento_id: string;
+  tenant_id: string;
+  negociadas: readonly {
+    negociada_id: string;
+    ex_id: string | null;
+    instalada: boolean;
+    unidades: number;
+  }[];
+  adicionales: readonly {
+    ex_id: string | null;
+    tipo: string;
+    unidades: number;
+    vigente: boolean;
+  }[];
+}): Promise<void> {
+  for (const n of d.negociadas) {
+    if (n.ex_id) {
+      await db.execute(
+        `UPDATE exhibicion SET instalada = ?, unidades = ? WHERE id = ?`,
+        [n.instalada ? 1 : 0, n.unidades, n.ex_id],
+      );
+    } else {
+      await db.execute(
+        `INSERT INTO exhibicion
+           (id, tenant_id, levantamiento_id, exhibicion_negociada_id,
+            instalada, unidades)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          Crypto.randomUUID(),
+          d.tenant_id,
+          d.levantamiento_id,
+          n.negociada_id,
+          n.instalada ? 1 : 0,
+          n.unidades,
+        ],
+      );
+    }
+  }
+  for (const a of d.adicionales) {
+    if (a.ex_id) {
+      await db.execute(
+        `UPDATE exhibicion SET tipo_adicional = ?, unidades = ?, vigente = ? WHERE id = ?`,
+        [a.tipo, a.unidades, a.vigente ? 1 : 0, a.ex_id],
+      );
+    } else {
+      await db.execute(
+        `INSERT INTO exhibicion
+           (id, tenant_id, levantamiento_id, tipo_adicional, unidades, vigente)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          Crypto.randomUUID(),
+          d.tenant_id,
+          d.levantamiento_id,
+          a.tipo,
+          a.unidades,
+          a.vigente ? 1 : 0,
+        ],
+      );
+    }
+  }
 }
