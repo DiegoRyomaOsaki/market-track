@@ -3,6 +3,7 @@ import { useQuery } from "@powersync/react-native";
 import * as Crypto from "expo-crypto";
 
 import { db } from "./powersync/db";
+import { type FrenteCompetidor } from "./share-of-shelf";
 
 // La lectura y escritura del levantamiento por marca, sobre la réplica local
 // (ADR-0001). Igual que la visita, `tenant_id` lo pone el cliente (columna
@@ -83,6 +84,112 @@ export async function completarLevantamiento(id: string): Promise<void> {
   await db.execute(`UPDATE levantamiento SET estado = 'completado' WHERE id = ?`, [
     id,
   ]);
+}
+
+export type LevantamientoRow = {
+  foto_antes_id: string | null;
+  foto_despues_id: string | null;
+  sos_frentes_propios: number | null;
+  sos_frentes_competencia: string | null;
+  sos_foto_id: string | null;
+  estado: string;
+};
+
+/** El levantamiento en curso, para hidratar los pasos con lo ya capturado. */
+export function useLevantamiento(id: string | null) {
+  const { data } = useQuery<LevantamientoRow>(
+    `SELECT foto_antes_id, foto_despues_id, sos_frentes_propios,
+            sos_frentes_competencia, sos_foto_id, estado
+     FROM levantamiento WHERE id = ?`,
+    [id ?? ""],
+  );
+  return data?.[0] ?? null;
+}
+
+export type SkuDeLevantamiento = {
+  sku_id: string;
+  nombre: string;
+  codigo: string;
+  ls_id: string | null;
+  frentes_propios: number | null;
+};
+
+/**
+ * Los SKU codificados de la marca en la tienda (derivados de `tienda_sku`), con
+ * lo ya registrado por SKU. La tienda sale de la propia visita.
+ */
+export function useSkusDeLevantamiento(
+  visitaId: string,
+  marcaId: string,
+  levantamientoId: string | null,
+) {
+  const { data, isLoading } = useQuery<SkuDeLevantamiento>(
+    `SELECT s.id AS sku_id, s.nombre AS nombre, s.codigo AS codigo,
+            ls.id AS ls_id, ls.frentes_propios AS frentes_propios
+     FROM visita v
+     JOIN tienda_sku ts ON ts.tienda_id = v.tienda_id AND ts.activo = 1
+     JOIN sku s ON s.id = ts.sku_id AND s.marca_id = ? AND s.activo = 1
+     LEFT JOIN levantamiento_sku ls
+            ON ls.sku_id = s.id AND ls.levantamiento_id = ?
+     WHERE v.id = ?
+     ORDER BY s.nombre`,
+    [marcaId, levantamientoId ?? "", visitaId],
+  );
+  return { skus: data ?? [], cargando: isLoading };
+}
+
+/**
+ * Persiste el paso "Antes + Share of Shelf": el SOS agregado en `levantamiento`
+ * y los frentes por SKU en `levantamiento_sku` (upsert por (levantamiento, sku),
+ * conservando las columnas que llena MAR-38: stock, precio).
+ *
+ * Las fotos (Antes y SOS) ya se encolaron por la cola de disco; sus FK
+ * (`foto_antes_id`, `sos_foto_id`) quedan en null: crear la fila `foto` y
+ * enlazarla tras subir a R2 es MAR-39 (igual que la selfie de check-in). Poner
+ * aquí un id sin fila `foto` rompería la FK al sincronizar.
+ */
+export async function guardarAntesSos(d: {
+  levantamiento_id: string;
+  tenant_id: string;
+  frentes_propios: number;
+  frentes_competencia: readonly FrenteCompetidor[];
+  skus: readonly {
+    sku_id: string;
+    ls_id: string | null;
+    frentes_propios: number;
+  }[];
+}): Promise<void> {
+  await db.execute(
+    `UPDATE levantamiento
+        SET sos_frentes_propios = ?, sos_frentes_competencia = ?
+      WHERE id = ?`,
+    [
+      d.frentes_propios,
+      JSON.stringify(d.frentes_competencia),
+      d.levantamiento_id,
+    ],
+  );
+  for (const s of d.skus) {
+    if (s.ls_id) {
+      await db.execute(
+        `UPDATE levantamiento_sku SET frentes_propios = ? WHERE id = ?`,
+        [s.frentes_propios, s.ls_id],
+      );
+    } else {
+      await db.execute(
+        `INSERT INTO levantamiento_sku
+           (id, tenant_id, levantamiento_id, sku_id, frentes_propios)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          Crypto.randomUUID(),
+          d.tenant_id,
+          d.levantamiento_id,
+          s.sku_id,
+          s.frentes_propios,
+        ],
+      );
+    }
+  }
 }
 
 /**
