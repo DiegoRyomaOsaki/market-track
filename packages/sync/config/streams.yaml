@@ -51,3 +51,7 @@ streams:
       - SELECT * FROM visita WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND mercaderista_id = auth.user_id()
       - SELECT * FROM levantamiento WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
       - SELECT * FROM levantamiento_sku WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
+      # La contingencia (bypass) cuelga de la visita/levantamiento; se acota por
+      # tenant como ellos. La app la ESCRIBE (el trigger de MAR-28 dispara la
+      # alerta al supervisor) y la relee para mostrar los pasos "⚠ Omitido".
+      - SELECT * FROM contingencia WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)

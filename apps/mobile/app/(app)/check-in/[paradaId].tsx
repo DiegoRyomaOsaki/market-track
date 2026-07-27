@@ -9,7 +9,7 @@ import {
   View,
 } from "react-native";
 
-import { CamaraSelfie } from "@/componentes/camara-selfie";
+import { CamaraFoto } from "@/componentes/camara-foto";
 import { colaFotos } from "@/lib/cola-fotos-instancia";
 import { type FotoProcesada } from "@/lib/foto-captura";
 import { dentroDeGeocerca, distanciaMetros } from "@/lib/geo";
@@ -66,10 +66,11 @@ export default function CheckIn() {
 
   if (paso === "camara" && sesion) {
     return (
-      <CamaraSelfie
+      <CamaraFoto
         usuario={sesion.user.email ?? "Mercaderista"}
         lat={ubic?.ok ? ubic.punto.lat : 0}
         lng={ubic?.ok ? ubic.punto.lng : 0}
+        etiqueta="Tomar selfie"
         onListo={(f) => {
           setFoto(f);
           setPaso("form");
@@ -92,7 +93,7 @@ export default function CheckIn() {
         hash: foto.hash,
         encolada_at: ahora,
       });
-      await crearVisitaCheckIn({
+      const visitaId = await crearVisitaCheckIn({
         tenant_id: parada.tenant_id,
         rutero_parada_id: parada.parada_id,
         tienda_id: parada.tienda_id,
@@ -101,7 +102,9 @@ export default function CheckIn() {
         capturado_at: ahora,
         selfie_foto_id: null,
       });
-      router.back();
+      // El levantamiento por marca es el siguiente paso; `replace` deja el
+      // check-in fuera de la pila (volver desde el selector regresa a Mi día).
+      router.replace(`/levantamiento/${visitaId}`);
     } finally {
       setGuardando(false);
     }
@@ -146,6 +149,13 @@ export default function CheckIn() {
           <Text style={e.nota}>
             El levantamiento por marca es el siguiente paso.
           </Text>
+          <Pressable
+            onPress={() => router.push(`/levantamiento/${parada.visita_id}`)}
+            style={e.boton}
+            accessibilityRole="button"
+          >
+            <Text style={e.botonTexto}>Ir al levantamiento</Text>
+          </Pressable>
         </View>
       ) : (
         <>

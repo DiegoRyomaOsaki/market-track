@@ -26,14 +26,18 @@ type Props = {
   usuario: string;
   lat: number;
   lng: number;
+  facing?: "front" | "back";
+  etiqueta?: string;
   onListo: (foto: FotoProcesada) => void;
   onCancelar: () => void;
 };
 
-export function CamaraSelfie({
+export function CamaraFoto({
   usuario,
   lat,
   lng,
+  facing = "front",
+  etiqueta = "Tomar foto",
   onListo,
   onCancelar,
 }: Props) {
@@ -56,7 +60,7 @@ export function CamaraSelfie({
     return (
       <View style={e.centro}>
         <Text style={e.aviso}>
-          Market Track necesita la cámara para la selfie de check-in.
+          Market Track necesita la cámara para tomar la foto.
         </Text>
         <Pressable
           onPress={() => void pedirPermiso()}
@@ -111,7 +115,7 @@ export function CamaraSelfie({
           </View>
         </View>
       ) : (
-        <CameraView ref={camaraRef} style={e.preview} facing="front" />
+        <CameraView ref={camaraRef} style={e.preview} facing={facing} />
       )}
 
       <View style={e.barra}>
@@ -152,7 +156,7 @@ export function CamaraSelfie({
               style={e.boton}
               accessibilityRole="button"
             >
-              <Text style={e.botonTexto}>Tomar selfie</Text>
+              <Text style={e.botonTexto}>{etiqueta}</Text>
             </Pressable>
           </>
         )}

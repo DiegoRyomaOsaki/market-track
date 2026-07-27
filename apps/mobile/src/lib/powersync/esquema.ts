@@ -140,6 +140,17 @@ const levantamiento_sku = new Table({
   sos_foto_id: column.text,
 });
 
+const contingencia = new Table({
+  tenant_id: column.text,
+  visita_id: column.text,
+  levantamiento_id: column.text,
+  paso: column.text,
+  motivo: column.text,
+  comentario: column.text,
+  registrada_at: column.text,
+  foto_id: column.text,
+});
+
 const profile = new Table({
   rol: column.text,
   tenant_id: column.text,
@@ -158,5 +169,6 @@ export const AppSchema = new Schema({
   visita,
   levantamiento,
   levantamiento_sku,
+  contingencia,
   profile,
 });
