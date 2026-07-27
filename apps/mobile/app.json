@@ -8,6 +8,12 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/3f7751c7-3c77-456f-b27d-f4e8111ea403"
+    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "pe.markettrack.app"

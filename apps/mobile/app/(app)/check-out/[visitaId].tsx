@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 
+import { AyudaBoton } from "@/componentes/ayuda-boton";
 import { visitaListaParaCheckOut } from "@/lib/check-out";
 import {
   useContingenciasDeVisita,
@@ -100,7 +101,10 @@ export default function CheckOut() {
       >
         <Text style={e.volverTexto}>‹ Marcas</Text>
       </Pressable>
-      <Text style={e.titulo}>Check-out</Text>
+      <View style={e.tituloFila}>
+        <Text style={e.titulo}>Check-out</Text>
+        <AyudaBoton clave="check_out" />
+      </View>
       {visita ? <Text style={e.tienda}>{visita.tienda_nombre}</Text> : null}
 
       {yaCerrada ? (
@@ -259,11 +263,16 @@ const e = StyleSheet.create({
   },
   volver: { paddingVertical: espacio.s },
   volverTexto: { color: colores.textoSuave, fontSize: 15, fontWeight: "600" },
+  tituloFila: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: espacio.s,
+  },
   titulo: {
     color: colores.texto,
     fontSize: 24,
     fontWeight: "800",
-    marginTop: espacio.s,
   },
   tienda: { color: colores.textoSuave, fontSize: 14, marginTop: 2 },
   seccion: {
