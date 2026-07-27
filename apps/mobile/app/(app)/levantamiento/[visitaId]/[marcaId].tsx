@@ -9,25 +9,31 @@ import {
 } from "react-native";
 
 import { ContingenciaModal } from "@/componentes/contingencia-modal";
+import { PasoAntesSos } from "@/componentes/paso-antes-sos";
 import {
   completarLevantamiento,
   crearLevantamiento,
   useContingencias,
+  useLevantamiento,
   useMarcasDeVisita,
   useVisita,
 } from "@/lib/levantamiento";
-import { levantamientoCompleto, PASOS } from "@/lib/pasos-levantamiento";
+import {
+  levantamientoCompleto,
+  type PasoWizard,
+  PASOS,
+} from "@/lib/pasos-levantamiento";
 import { useSesion } from "@/sesion";
 import { colores, espacio, radio } from "@/tema";
 
-// El SHELL del wizard de levantamiento de una marca (MAR-36): navegación
-// secuencial de los 5 pasos, barra de progreso y contingencia (bypass) en cada
-// paso. El CONTENIDO de cada paso lo implementan MAR-37 (Antes + Share of Shelf)
-// y MAR-38 (quiebres, precios, exhibiciones, Después): aquí cada paso es un
-// marcador provisional con el botón "Completar" que esas tickets reemplazan por
-// la captura real. Los pasos omitidos por contingencia SÍ se persisten (tabla
-// `contingencia`); los "hechos" son de sesión hasta que MAR-37/38 den datos que
-// derivar.
+// El shell del wizard de levantamiento de una marca: navegación secuencial de
+// los 5 pasos, barra de progreso y contingencia (bypass) en cada paso.
+//
+// Paso 1 "Antes + Share of Shelf" ya es real (MAR-37, PasoAntesSos) y su avance
+// se DERIVA de datos persistidos. Los pasos 2–5 (quiebres, precios,
+// exhibiciones, Después) siguen como marcador provisional hasta MAR-38, con el
+// avance en estado de sesión. Los pasos omitidos por contingencia se persisten
+// (tabla `contingencia`).
 
 export default function WizardLevantamiento() {
   const router = useRouter();
@@ -42,8 +48,11 @@ export default function WizardLevantamiento() {
   const marca = marcas.find((m) => m.id === marcaId) ?? null;
   const levantamientoId = marca?.levantamiento_id ?? null;
   const contingencias = useContingencias(levantamientoId);
+  const lev = useLevantamiento(levantamientoId);
 
-  const [hechos, setHechos] = useState<ReadonlySet<string>>(new Set());
+  const [hechosSesion, setHechosSesion] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
   const [mostrarContingencia, setMostrarContingencia] = useState(false);
   const creando = useRef(false);
   const completando = useRef(false);
@@ -64,6 +73,15 @@ export default function WizardLevantamiento() {
     const pasosOmitidos = new Set(contingencias.map((c) => c.paso));
     return new Set(PASOS.filter((p) => pasosOmitidos.has(p.paso)).map((p) => p.id));
   }, [contingencias]);
+
+  // "antes" se deriva de datos persistidos (el SOS quedó guardado): así el paso
+  // sobrevive a un cierre de la app. Los pasos aún sin implementar usan estado de
+  // sesión hasta que MAR-38 dé datos que derivar.
+  const hechos = useMemo(() => {
+    const s = new Set(hechosSesion);
+    if (lev?.sos_frentes_propios != null) s.add("antes");
+    return s;
+  }, [hechosSesion, lev]);
 
   const completo = levantamientoCompleto(hechos, omitidos);
   const yaCompletado =
@@ -138,32 +156,24 @@ export default function WizardLevantamiento() {
 
       {activo ? (
         <View style={e.contenido}>
-          <Text style={e.pasoTitulo}>{activo.titulo}</Text>
-          <Text style={e.pasoDescripcion}>{activo.descripcion}</Text>
-
-          <View style={e.placeholder}>
-            <Text style={e.placeholderTexto}>
-              El contenido de este paso llega en MAR-37/MAR-38.
-            </Text>
-          </View>
-
-          <Pressable
-            onPress={() =>
-              setHechos((prev) => new Set(prev).add(activo.id))
-            }
-            style={e.boton}
-            accessibilityRole="button"
-          >
-            <Text style={e.botonTexto}>Completar paso</Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => setMostrarContingencia(true)}
-            style={e.contingencia}
-            accessibilityRole="button"
-          >
-            <Text style={e.contingenciaTexto}>No puedo completar este paso</Text>
-          </Pressable>
+          {activo.id === "antes" ? (
+            <PasoAntesSos
+              visitaId={visitaId}
+              marcaId={marcaId}
+              levantamientoId={levantamientoId}
+              tenantId={visita.tenant_id}
+              usuario={sesion?.user.email ?? "Mercaderista"}
+              onContingencia={() => setMostrarContingencia(true)}
+            />
+          ) : (
+            <PasoPlaceholder
+              paso={activo}
+              onCompletar={() =>
+                setHechosSesion((prev) => new Set(prev).add(activo.id))
+              }
+              onContingencia={() => setMostrarContingencia(true)}
+            />
+          )}
         </View>
       ) : null}
 
@@ -181,6 +191,44 @@ export default function WizardLevantamiento() {
         />
       ) : null}
     </View>
+  );
+}
+
+// Los pasos aún sin contenido real (quiebres/precios/exhibiciones/Después) los
+// implementa MAR-38. Hasta entonces, "Completar" avanza en sesión y la
+// contingencia sigue disponible.
+function PasoPlaceholder({
+  paso,
+  onCompletar,
+  onContingencia,
+}: {
+  paso: PasoWizard;
+  onCompletar: () => void;
+  onContingencia: () => void;
+}) {
+  return (
+    <>
+      <Text style={e.pasoTitulo}>{paso.titulo}</Text>
+      <Text style={e.pasoDescripcion}>{paso.descripcion}</Text>
+
+      <View style={e.placeholder}>
+        <Text style={e.placeholderTexto}>
+          El contenido de este paso llega en MAR-38.
+        </Text>
+      </View>
+
+      <Pressable onPress={onCompletar} style={e.boton} accessibilityRole="button">
+        <Text style={e.botonTexto}>Completar paso</Text>
+      </Pressable>
+
+      <Pressable
+        onPress={onContingencia}
+        style={e.contingencia}
+        accessibilityRole="button"
+      >
+        <Text style={e.contingenciaTexto}>No puedo completar este paso</Text>
+      </Pressable>
+    </>
   );
 }
 
