@@ -75,6 +75,43 @@ piloto y ya están reflejados en las tablas de abajo, en
 
 ---
 
+## Segunda revisión con el cliente — julio 2026
+
+Ocho peticiones nuevas del cliente, posteriores a la primera revisión. Cinco son
+alcance nuevo (fuera de la propuesta aceptada) que **entra al piloto** por
+decisión del cliente; tres son refinamientos de alcance ya comprometido. Todas
+están en Linear y reflejadas en las tablas de abajo.
+
+| # | Petición | Disposición | Dónde impacta |
+|---|---|---|---|
+| 1 | **Solicitud de cambio de ruta** desde la app (con motivo) que el supervisor ve y resuelve en el panel | ✅ nuevo al piloto | nueva tabla `solicitud_cambio_ruta` · app · panel supervisor |
+| 2 | **Fotos ≤ 2 MB** (tope duro) | ✅ refinamiento | compresión ya prevista; el objetivo sigue en ~300 KB |
+| 3 | El admin **edita el formulario** que ven los mercaderistas — *constructor completo* (schema-driven) | ✅ nuevo al piloto | reformula el wizard fijo · modelo de formularios versionados · panel · app |
+| 4 | **Cluster** configurable por cliente (AAA/AA/A/B…) | ✅ refinamiento | es clasificación de **tienda**; `tienda.cluster` ya existe → catálogo editable por cliente |
+| 5 | **Departamento, ciudad, distrito, dirección** en el alta de tienda | ✅ refinamiento | `tienda` (faltan departamento/provincia/distrito) · panel · importador |
+| 6 | El mercaderista **registra exhibiciones conseguidas** por él | ✅ pasa de 🟡 a piloto | `exhibicion.tipo_adicional` ya lo soporta · paso 2.4 del wizard |
+| 7 | Planeación de rutas **mensual**, no solo semanal | ✅ refinamiento | vista de calendario sobre los ruteros diarios · panel |
+| 8 | Activar/desactivar **módulos del portal cliente** por cada cliente | ✅ nuevo al piloto | config por tenant · panel (toggle) · portal (enforcement) |
+
+> **Cluster (4):** el cliente lo describió como "tipo de marca/cliente", pero
+> AAA/AA/A/B es el estándar de clasificación del **punto de venta** por nivel —
+> justo lo que ya modela `tienda.cluster`. Se implementa sobre la tienda con la
+> lista de valores editable por cliente. (Pendiente de confirmar si además
+> querían clasificar la marca/cliente.)
+>
+> **Dirección (5):** la jerarquía administrativa oficial de Perú es
+> departamento > provincia > distrito. Se modela `provincia` y se etiqueta
+> "Ciudad/Provincia" en la UI (pendiente de confirmar con el cliente si
+> prefieren un campo "ciudad" literal).
+>
+> **Editor de formulario (3):** el "constructor completo" reformula el wizard hoy
+> fijo y secuencial. La secuencia obligatoria, la contingencia (bypass) y los
+> campos derivados (quiebre/diferencia/SOS) siguen siendo del núcleo — el
+> formulario configura presentación y campos libres, no reescribe reglas de
+> negocio.
+
+---
+
 ## App móvil (mercaderista)
 
 > Disponible en **Android e iOS** (mismo código React Native + Expo; builds vía EAS). Distribución del piloto: APK por **enlace directo desde el panel de gestión** (Android) y **TestFlight** (iOS) — la publicación en tiendas depende de sus tiempos de aprobación y no está garantizada.
@@ -100,7 +137,7 @@ piloto y ya están reflejados en las tablas de abajo, en
 | 2.3 | **Motor de alertas de precio** (regular/promo, comunicada, tolerancia) | ✅ |
 | 2.4 | Exhibiciones negociadas (instalada, unidades, foto) | ✅ |
 | 2.4 | Material POP | ✅ |
-| 2.4 | Exhibiciones adicionales (crear, tipo, foto, vigencia) | 🟡 |
+| 2.4 | Exhibiciones adicionales / **conseguidas por el mercaderista** (crear, tipo, foto, vigencia) | ✅ |
 | 2.5 | Foto "Después" | ✅ |
 | — | **Mecanismo de contingencia (bypass)**: si un paso no se puede completar por causa externa (sin acceso al almacén, información no disponible), el mercaderista registra el hallazgo y continúa; se genera una **alerta en tiempo real** al supervisor en el panel | ✅ |
 
@@ -118,8 +155,10 @@ piloto y ya están reflejados en las tablas de abajo, en
 | Función | MVP |
 |---|---|
 | **Modo offline** (operar sin señal, sync diferida) | ✅ **crítico** |
-| Compresión de fotos en cliente | ✅ |
+| Compresión de fotos en cliente (**≤ 2 MB por foto**, tope duro; objetivo ~300 KB) | ✅ |
 | Push de tareas nuevas del supervisor | ✅ |
+| **Solicitud de cambio de ruta** (con motivo, offline) al supervisor | ✅ |
+| **Wizard de levantamiento configurable** (render del formulario editado en el panel) | ✅ |
 | App para **Android e iOS** (mismo código base) | ✅ |
 | **Distribución por enlace directo** desde el panel (APK Android; TestFlight en iOS) | ✅ |
 | **Ayuda contextual** (`?`) en cada paso del levantamiento y en check-in/check-out | ✅ |
@@ -175,10 +214,15 @@ piloto y ya están reflejados en las tablas de abajo, en
 | Función | MVP |
 |---|---|
 | Alta de **clientes**, sus **marcas**, cadenas, tiendas, SKUs, precios, promos (pre-carga) | ✅ |
+| Alta de tienda con **departamento, ciudad, distrito y dirección** | ✅ |
+| **Cluster de tienda** configurable por cliente (catálogo de niveles editable) | ✅ |
 | **Importación del Excel del cliente** — plantilla propia, vista previa con errores fila por fila, y aplicación transaccional (todo o nada) | ✅ |
 | **Mapeador de columnas** — el cliente sube SU Excel y el admin mapea sus columnas una vez; el mapeo queda guardado | ✅ ⚠️ **alcance nuevo, fuera de la propuesta** |
 | **Baja de un cliente** → sus mercaderistas pierden el acceso automáticamente (y la réplica local de sus teléfonos se purga al sincronizar) | ✅ |
-| Diseño de **ruteros** y asignación a mercaderistas | ✅ |
+| Diseño de **ruteros** (**semanal y mensual**) y asignación a mercaderistas | ✅ |
+| **Bandeja de solicitudes de cambio de ruta** del mercaderista (ver, resolver, ajustar la planeación) | ✅ |
+| **Editor de formularios del levantamiento** (constructor schema-driven que la app renderiza) | ✅ |
+| **Módulos del portal cliente** activables/desactivables por cada cliente | ✅ |
 | Asignación de tareas y seguimiento en tiempo real | ✅ |
 | Aprobar / rechazar reportes de visitas | ✅ |
 | Ver todas las visitas, evidencia fotográfica | ✅ |
@@ -201,6 +245,7 @@ piloto y ya están reflejados en las tablas de abajo, en
 | **Alertas automáticas por email** (quiebre, desviación de precio) | ✅ |
 | Exportación de reportes (Excel/CSV/PDF) | ✅ |
 | **Ayuda contextual** (`?`) en cada sección | ✅ |
+| Secciones del portal **habilitadas por cliente** (según la configuración del panel) | ✅ |
 | Alertas por **WhatsApp** | 🔵 |
 | KPIs por mercaderista / supervisor / tienda (cortes avanzados) | ✅ básicos · 🟡 avanzados |
 
