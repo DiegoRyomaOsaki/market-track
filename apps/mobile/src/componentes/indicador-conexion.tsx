@@ -1,4 +1,5 @@
-import { StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useCountFotos } from "@/lib/cola-fotos-instancia";
 import { useEstadoSync } from "@/lib/powersync/estado";
@@ -10,6 +11,7 @@ import { colores, espacio, radio } from "@/tema";
 // fotos siguen esperando señal.
 
 export function IndicadorConexion() {
+  const router = useRouter();
   const { conectado, subiendo, bajando, pendientesRegistros } = useEstadoSync();
   const pendientesFotos = useCountFotos();
 
@@ -21,7 +23,12 @@ export function IndicadorConexion() {
     : colores.textoSuave;
 
   return (
-    <View style={e.barra} accessibilityRole="summary">
+    <Pressable
+      onPress={() => router.push("/sincronizacion")}
+      style={e.barra}
+      accessibilityRole="button"
+      accessibilityLabel="Ver estado de sincronización"
+    >
       <View style={e.estado}>
         <View style={[e.punto, { backgroundColor: colorPunto }]} />
         <Text style={e.textoEstado}>
@@ -45,7 +52,7 @@ export function IndicadorConexion() {
           accesible="fotos pendientes de subir"
         />
       </View>
-    </View>
+    </Pressable>
   );
 }
 

@@ -58,6 +58,11 @@ export class ColaFotos {
     return (await this.manifiesto()).length;
   }
 
+  /** Las fotos pendientes de subir, para la pantalla de sincronización. */
+  async listarPendientes(): Promise<FotoPendiente[]> {
+    return this.manifiesto();
+  }
+
   async encolar(foto: FotoPendiente): Promise<void> {
     const fotos = await this.manifiesto();
     // Idempotente por id: encolar dos veces la misma foto no la duplica.
