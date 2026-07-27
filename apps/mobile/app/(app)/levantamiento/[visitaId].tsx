@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 
+import { AyudaBoton } from "@/componentes/ayuda-boton";
 import { type MarcaAuditable, useMarcasDeVisita } from "@/lib/levantamiento";
 import { colores, espacio, radio } from "@/tema";
 
@@ -50,7 +51,10 @@ export default function SelectorMarcas() {
       <Pressable onPress={() => router.back()} hitSlop={8} style={e.volver}>
         <Text style={e.volverTexto}>‹ Mi día</Text>
       </Pressable>
-      <Text style={e.titulo}>Levantamiento</Text>
+      <View style={e.tituloFila}>
+        <Text style={e.titulo}>Levantamiento</Text>
+        <AyudaBoton clave="seleccion_marca" />
+      </View>
       <Text style={e.subtitulo}>Una auditoría por marca en esta tienda.</Text>
 
       {todasListas ? (
@@ -143,11 +147,16 @@ const e = StyleSheet.create({
   pantalla: { flex: 1, backgroundColor: colores.fondo, padding: espacio.m },
   volver: { paddingVertical: espacio.s },
   volverTexto: { color: colores.textoSuave, fontSize: 15, fontWeight: "600" },
+  tituloFila: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: espacio.s,
+  },
   titulo: {
     color: colores.texto,
     fontSize: 24,
     fontWeight: "800",
-    marginTop: espacio.s,
   },
   subtitulo: { color: colores.textoSuave, fontSize: 14, marginTop: 2 },
   tarjeta: {

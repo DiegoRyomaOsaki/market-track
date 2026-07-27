@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 
+import { AyudaBoton } from "@/componentes/ayuda-boton";
 import { CamaraFoto } from "@/componentes/camara-foto";
 import { colaFotos } from "@/lib/cola-fotos-instancia";
 import { type FotoProcesada } from "@/lib/foto-captura";
@@ -145,10 +146,15 @@ export default function CheckIn() {
         <Text style={e.volverTexto}>‹ Mi día</Text>
       </Pressable>
 
-      <Text style={e.tienda}>{parada.tienda_nombre}</Text>
-      {parada.tienda_direccion ? (
-        <Text style={e.direccion}>{parada.tienda_direccion}</Text>
-      ) : null}
+      <View style={e.tituloFila}>
+        <View style={{ flex: 1 }}>
+          <Text style={e.tienda}>{parada.tienda_nombre}</Text>
+          {parada.tienda_direccion ? (
+            <Text style={e.direccion}>{parada.tienda_direccion}</Text>
+          ) : null}
+        </View>
+        <AyudaBoton clave="check_in" />
+      </View>
 
       {yaHizoCheckIn ? (
         <View style={e.tarjeta}>
@@ -280,11 +286,17 @@ const e = StyleSheet.create({
   },
   volver: { paddingVertical: espacio.s },
   volverTexto: { color: colores.textoSuave, fontSize: 15, fontWeight: "600" },
+  tituloFila: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: espacio.s,
+    marginTop: espacio.s,
+  },
   tienda: {
     color: colores.texto,
     fontSize: 24,
     fontWeight: "800",
-    marginTop: espacio.s,
   },
   direccion: { color: colores.textoSuave, fontSize: 14, marginTop: 2 },
   tarjeta: {

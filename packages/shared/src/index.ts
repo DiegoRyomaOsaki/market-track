@@ -12,6 +12,7 @@
 //   entra por una Edge Function, lo que llega en un webhook. Esos payloads NO son
 //   la fila: omiten los campos derivados y los que decide el servidor.
 
+export * from "./ayuda-mercaderista";
 export * from "./enums";
 export * from "./env";
 export * from "./schemas/levantamiento";

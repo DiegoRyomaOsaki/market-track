@@ -1,3 +1,4 @@
+import { type ClaveAyuda } from "@market-track/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -8,6 +9,7 @@ import {
   View,
 } from "react-native";
 
+import { AyudaBoton } from "@/componentes/ayuda-boton";
 import { ContingenciaModal } from "@/componentes/contingencia-modal";
 import { PasoAntesSos } from "@/componentes/paso-antes-sos";
 import { PasoDespues } from "@/componentes/paso-despues";
@@ -130,6 +132,9 @@ export default function WizardLevantamiento() {
     <View style={e.pantalla}>
       <Encabezado
         nombre={marca.nombre}
+        // Los ids de PASOS (antes/quiebres/precios/exhibiciones/despues) son un
+        // subconjunto de ClaveAyuda; por eso la conversión es segura.
+        clave={activo ? (activo.id as ClaveAyuda) : undefined}
         onVolver={() => router.replace(`/levantamiento/${visitaId}`)}
       />
 
@@ -254,9 +259,11 @@ function PasoActivo({
 
 function Encabezado({
   nombre,
+  clave,
   onVolver,
 }: {
   nombre: string;
+  clave?: ClaveAyuda;
   onVolver: () => void;
 }) {
   return (
@@ -264,7 +271,10 @@ function Encabezado({
       <Pressable onPress={onVolver} hitSlop={8} style={e.volver}>
         <Text style={e.volverTexto}>‹ Marcas</Text>
       </Pressable>
-      <Text style={e.titulo}>{nombre}</Text>
+      <View style={e.tituloFila}>
+        <Text style={e.titulo}>{nombre}</Text>
+        {clave ? <AyudaBoton clave={clave} /> : null}
+      </View>
     </>
   );
 }
@@ -279,11 +289,17 @@ const e = StyleSheet.create({
   },
   volver: { paddingVertical: espacio.s },
   volverTexto: { color: colores.textoSuave, fontSize: 15, fontWeight: "600" },
+  tituloFila: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: espacio.s,
+  },
   titulo: {
     color: colores.texto,
     fontSize: 24,
     fontWeight: "800",
-    marginTop: espacio.s,
+    flex: 1,
   },
   barra: { flexDirection: "row", gap: 6, marginTop: espacio.l },
   segmento: {
