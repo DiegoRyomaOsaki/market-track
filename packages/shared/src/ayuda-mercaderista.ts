@@ -11,7 +11,8 @@ export type ClaveAyuda =
   | "precios"
   | "exhibiciones"
   | "despues"
-  | "check_out";
+  | "check_out"
+  | "solicitar_cambio_ruta";
 
 export type Ayuda = { titulo: string; cuerpo: string[] };
 
@@ -74,6 +75,13 @@ export const AYUDA_MERCADERISTA: Record<ClaveAyuda, Ayuda> = {
       "Cierra la visita. Antes de salir, la app valida que hayas auditado todas las marcas; si falta alguna, tócala para completarla o registra una contingencia con su motivo.",
       "No hace falta esperar a que suban las fotos: se envían solas cuando haya señal.",
       "Deja tu salida con GPS y, si quieres, una nota en la bitácora. Al salir arranca el cronómetro de traslado a la siguiente tienda.",
+    ],
+  },
+  solicitar_cambio_ruta: {
+    titulo: "Solicitar cambio de ruta",
+    cuerpo: [
+      "Si necesitas un ajuste en tu ruta —cambiar una tienda, mover una visita de día o avisar que no podrás visitar—, díselo aquí a tu supervisor con un motivo.",
+      "Funciona sin señal: tu solicitud se envía sola cuando vuelva la conexión. Abajo ves el estado de cada una y la respuesta del supervisor.",
     ],
   },
 };

@@ -85,6 +85,14 @@ export default function MiDia() {
 
       {transitoDesde ? <BannerTransito desde={transitoDesde} /> : null}
 
+      <Pressable
+        onPress={() => router.push("/solicitar-cambio-ruta")}
+        style={e.enlaceSolicitud}
+        accessibilityRole="button"
+      >
+        <Text style={e.enlaceSolicitudTexto}>Solicitar cambio de ruta ›</Text>
+      </Pressable>
+
       {cargando ? (
         <View style={e.centro}>
           <ActivityIndicator color={colores.marca} />
@@ -226,6 +234,16 @@ const e = StyleSheet.create({
   },
   transitoTexto: { color: colores.texto, fontSize: 14, fontWeight: "700" },
   transitoNota: { color: colores.textoSuave, fontSize: 12 },
+  enlaceSolicitud: {
+    marginHorizontal: espacio.m,
+    marginTop: espacio.s,
+    paddingVertical: espacio.xs,
+  },
+  enlaceSolicitudTexto: {
+    color: colores.marca,
+    fontSize: 14,
+    fontWeight: "600",
+  },
   centro: {
     flex: 1,
     alignItems: "center",

@@ -174,6 +174,20 @@ const contingencia = new Table({
   foto_id: column.text,
 });
 
+const solicitud_cambio_ruta = new Table({
+  tenant_id: column.text,
+  mercaderista_id: column.text,
+  rutero_id: column.text,
+  fecha: column.text,
+  tipo: column.text,
+  motivo: column.text,
+  estado: column.text,
+  comentario_resolucion: column.text,
+  resuelta_por: column.text,
+  resuelta_at: column.text,
+  creada_at: column.text,
+});
+
 const profile = new Table({
   rol: column.text,
   tenant_id: column.text,
@@ -195,5 +209,6 @@ export const AppSchema = new Schema({
   exhibicion_negociada,
   exhibicion,
   contingencia,
+  solicitud_cambio_ruta,
   profile,
 });
