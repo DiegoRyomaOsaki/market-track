@@ -22,6 +22,8 @@ const IDS = {
   nuevaVisita: "e0000010-0000-0000-0000-000000000099",
   nuevoPase: "e0000020-0000-0000-0000-000000000099",
   nuevaSolicitud: "e0000030-0000-0000-0000-000000000099",
+  nuevoFormulario: "e0000040-0000-0000-0000-000000000099",
+  nuevaVersionForm: "e0000041-0000-0000-0000-000000000099",
 } as const;
 
 // Los tests de "no puede escribir en el tenant ajeno" y "revocación en la
@@ -300,6 +302,43 @@ describe("solicitud_cambio_ruta — el mercaderista pide, el staff resuelve", ()
         [IDS.nuevaSolicitud],
       );
       expect(r.rowCount).toBe(0);
+    });
+  });
+});
+
+describe("formulario de levantamiento — config del admin, publicar congela", () => {
+  it("una versión PUBLICADA es inmutable (trigger)", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await c.query(
+        `insert into public.formulario_levantamiento (id, tenant_id, nombre)
+         values ($1, $2, 'Formulario piloto')`,
+        [IDS.nuevoFormulario, TENANTS.maracumango],
+      );
+      await c.query(
+        `insert into public.formulario_version
+           (id, tenant_id, formulario_id, version, definicion, publicada)
+         values ($1, $2, $3, 1, '{"pasos":[]}'::jsonb, true)`,
+        [IDS.nuevaVersionForm, TENANTS.maracumango, IDS.nuevoFormulario],
+      );
+      // Editar una versión ya publicada dispara el trigger de inmutabilidad.
+      await esRechazado(() =>
+        c.query(
+          `update public.formulario_version set definicion = '{"pasos":[1]}'::jsonb where id = $1`,
+          [IDS.nuevaVersionForm],
+        ),
+      );
+    });
+  });
+
+  it("el mercaderista no puede crear un formulario (solo el admin)", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await esRechazado(() =>
+        c.query(
+          `insert into public.formulario_levantamiento (id, tenant_id, nombre)
+           values ($1, $2, 'Intruso')`,
+          [IDS.nuevoFormulario, TENANTS.maracumango],
+        ),
+      );
     });
   });
 });
