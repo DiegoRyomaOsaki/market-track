@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 
+import { AyudaBoton } from "@/componentes/ayuda-boton";
 import {
   etiquetaEstado,
   type SolicitudLocal,
@@ -66,7 +67,10 @@ export default function SolicitarCambioRuta() {
       <Pressable onPress={() => router.back()} hitSlop={8} style={e.volver}>
         <Text style={e.volverTexto}>‹ Mi día</Text>
       </Pressable>
-      <Text style={e.titulo}>Solicitar cambio de ruta</Text>
+      <View style={e.tituloFila}>
+        <Text style={e.titulo}>Solicitar cambio de ruta</Text>
+        <AyudaBoton clave="solicitar_cambio_ruta" />
+      </View>
       <Text style={e.subtitulo}>
         Tu supervisor lo revisa y ajusta la planeación.
       </Text>
@@ -173,11 +177,17 @@ const e = StyleSheet.create({
   pantalla: { flex: 1, backgroundColor: colores.fondo },
   volver: { paddingVertical: espacio.s },
   volverTexto: { color: colores.textoSuave, fontSize: 15, fontWeight: "600" },
+  tituloFila: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: espacio.s,
+  },
   titulo: {
     color: colores.texto,
     fontSize: 24,
     fontWeight: "800",
-    marginTop: espacio.s,
+    flex: 1,
   },
   subtitulo: { color: colores.textoSuave, fontSize: 14, marginTop: 2 },
   seccion: {

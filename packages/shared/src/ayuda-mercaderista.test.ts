@@ -13,6 +13,7 @@ const CLAVES: ClaveAyuda[] = [
   "exhibiciones",
   "despues",
   "check_out",
+  "solicitar_cambio_ruta",
 ];
 
 describe("AYUDA_MERCADERISTA", () => {
