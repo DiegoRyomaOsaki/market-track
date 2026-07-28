@@ -354,6 +354,106 @@ export type Database = {
           },
         ]
       }
+      formulario_levantamiento: {
+        Row: {
+          activo: boolean
+          creado_at: string
+          id: string
+          marca_id: string | null
+          nombre: string
+          tenant_id: string
+        }
+        Insert: {
+          activo?: boolean
+          creado_at?: string
+          id?: string
+          marca_id?: string | null
+          nombre: string
+          tenant_id: string
+        }
+        Update: {
+          activo?: boolean
+          creado_at?: string
+          id?: string
+          marca_id?: string | null
+          nombre?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "formulario_levantamiento_marca_id_fkey"
+            columns: ["marca_id"]
+            isOneToOne: false
+            referencedRelation: "marca"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "formulario_levantamiento_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      formulario_version: {
+        Row: {
+          creada_at: string
+          definicion: Json
+          formulario_id: string
+          id: string
+          publicada: boolean
+          publicada_at: string | null
+          publicada_por: string | null
+          tenant_id: string
+          version: number
+        }
+        Insert: {
+          creada_at?: string
+          definicion: Json
+          formulario_id: string
+          id?: string
+          publicada?: boolean
+          publicada_at?: string | null
+          publicada_por?: string | null
+          tenant_id: string
+          version: number
+        }
+        Update: {
+          creada_at?: string
+          definicion?: Json
+          formulario_id?: string
+          id?: string
+          publicada?: boolean
+          publicada_at?: string | null
+          publicada_por?: string | null
+          tenant_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "formulario_version_formulario_id_fkey"
+            columns: ["formulario_id"]
+            isOneToOne: false
+            referencedRelation: "formulario_levantamiento"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "formulario_version_publicada_por_fkey"
+            columns: ["publicada_por"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "formulario_version_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       foto: {
         Row: {
           capturada_at: string

@@ -15,4 +15,5 @@
 export * from "./ayuda-mercaderista";
 export * from "./enums";
 export * from "./env";
+export * from "./schemas/formulario";
 export * from "./schemas/levantamiento";

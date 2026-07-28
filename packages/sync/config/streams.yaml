@@ -64,3 +64,8 @@ streams:
       # cliente): la RLS deja al staff verlas todas, pero al teléfono solo bajan
       # las suyas.
       - SELECT * FROM solicitud_cambio_ruta WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND mercaderista_id = auth.user_id()
+      # El formulario configurable del levantamiento (ADR-0010): el móvil baja el
+      # formulario ACTIVO de su cliente y solo su versión PUBLICADA (la que
+      # renderiza el wizard). Las versiones borrador no salen del panel.
+      - SELECT * FROM formulario_levantamiento WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND activo = true
+      - SELECT * FROM formulario_version WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND publicada = true
