@@ -1088,6 +1088,80 @@ export type Database = {
           },
         ]
       }
+      solicitud_cambio_ruta: {
+        Row: {
+          comentario_resolucion: string | null
+          creada_at: string
+          estado: Database["public"]["Enums"]["estado_solicitud_ruta"]
+          fecha: string | null
+          id: string
+          mercaderista_id: string
+          motivo: string
+          resuelta_at: string | null
+          resuelta_por: string | null
+          rutero_id: string | null
+          tenant_id: string
+          tipo: Database["public"]["Enums"]["tipo_solicitud_ruta"]
+        }
+        Insert: {
+          comentario_resolucion?: string | null
+          creada_at?: string
+          estado?: Database["public"]["Enums"]["estado_solicitud_ruta"]
+          fecha?: string | null
+          id?: string
+          mercaderista_id: string
+          motivo: string
+          resuelta_at?: string | null
+          resuelta_por?: string | null
+          rutero_id?: string | null
+          tenant_id: string
+          tipo: Database["public"]["Enums"]["tipo_solicitud_ruta"]
+        }
+        Update: {
+          comentario_resolucion?: string | null
+          creada_at?: string
+          estado?: Database["public"]["Enums"]["estado_solicitud_ruta"]
+          fecha?: string | null
+          id?: string
+          mercaderista_id?: string
+          motivo?: string
+          resuelta_at?: string | null
+          resuelta_por?: string | null
+          rutero_id?: string | null
+          tenant_id?: string
+          tipo?: Database["public"]["Enums"]["tipo_solicitud_ruta"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "solicitud_cambio_ruta_mercaderista_id_fkey"
+            columns: ["mercaderista_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "solicitud_cambio_ruta_resuelta_por_fkey"
+            columns: ["resuelta_por"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "solicitud_cambio_ruta_rutero_id_fkey"
+            columns: ["rutero_id"]
+            isOneToOne: false
+            referencedRelation: "rutero"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "solicitud_cambio_ruta_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant: {
         Row: {
           activo: boolean
@@ -1342,6 +1416,7 @@ export type Database = {
       estado_levantamiento: "pendiente" | "en_curso" | "completado" | "omitido"
       estado_parada: "pendiente" | "en_curso" | "completada"
       estado_rutero: "borrador" | "publicado" | "en_curso" | "completado"
+      estado_solicitud_ruta: "nueva" | "vista" | "resuelta" | "rechazada"
       estado_visita: "en_curso" | "completada" | "bloqueada"
       paso_levantamiento:
         | "checkin"
@@ -1370,6 +1445,7 @@ export type Database = {
         | "exhibicion"
         | "precio"
         | "contingencia"
+      tipo_solicitud_ruta: "cambio_tienda" | "cambio_dia" | "no_visita" | "otro"
       tipo_tienda: "hiper" | "super" | "express"
     }
     CompositeTypes: {
@@ -1514,6 +1590,7 @@ export const Constants = {
       estado_levantamiento: ["pendiente", "en_curso", "completado", "omitido"],
       estado_parada: ["pendiente", "en_curso", "completada"],
       estado_rutero: ["borrador", "publicado", "en_curso", "completado"],
+      estado_solicitud_ruta: ["nueva", "vista", "resuelta", "rechazada"],
       estado_visita: ["en_curso", "completada", "bloqueada"],
       paso_levantamiento: [
         "checkin",
@@ -1545,6 +1622,7 @@ export const Constants = {
         "precio",
         "contingencia",
       ],
+      tipo_solicitud_ruta: ["cambio_tienda", "cambio_dia", "no_visita", "otro"],
       tipo_tienda: ["hiper", "super", "express"],
     },
   },

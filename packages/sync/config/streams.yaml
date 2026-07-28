@@ -59,3 +59,8 @@ streams:
       # tenant como ellos. La app la ESCRIBE (el trigger de MAR-28 dispara la
       # alerta al supervisor) y la relee para mostrar los pasos "⚠ Omitido".
       - SELECT * FROM contingencia WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
+      # Solicitudes de cambio de ruta: la app las ESCRIBE y las relee para mostrar
+      # su estado. Solo las PROPIAS (acotadas al usuario, no por parámetro del
+      # cliente): la RLS deja al staff verlas todas, pero al teléfono solo bajan
+      # las suyas.
+      - SELECT * FROM solicitud_cambio_ruta WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND mercaderista_id = auth.user_id()

@@ -21,6 +21,7 @@ const IDS = {
   alertaMrc: "a0000016-0000-0000-0000-000000000001",
   nuevaVisita: "e0000010-0000-0000-0000-000000000099",
   nuevoPase: "e0000020-0000-0000-0000-000000000099",
+  nuevaSolicitud: "e0000030-0000-0000-0000-000000000099",
 } as const;
 
 // Los tests de "no puede escribir en el tenant ajeno" y "revocación en la
@@ -212,6 +213,93 @@ describe("pase de acceso temporal — el camino más sensible del auth", () => {
           ],
         ),
       );
+    });
+  });
+});
+
+describe("solicitud_cambio_ruta — el mercaderista pide, el staff resuelve", () => {
+  const insertar = (
+    id: string,
+    tenantId: string,
+    mercaderistaId: string,
+  ): [string, unknown[]] => [
+    `insert into public.solicitud_cambio_ruta (id, tenant_id, mercaderista_id, tipo, motivo)
+     values ($1, $2, $3, 'no_visita', 'La tienda está cerrada por inventario')`,
+    [id, tenantId, mercaderistaId],
+  ];
+
+  it("el mercaderista pide SU cambio de ruta", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const r = await c.query(
+        ...insertar(
+          IDS.nuevaSolicitud,
+          TENANTS.maracumango,
+          USUARIOS.mercaderistaMaracumango,
+        ),
+      );
+      expect(r.rowCount).toBe(1);
+    });
+  });
+
+  it("no puede pedir a nombre de otro mercaderista", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      // tenant propio, pero mercaderista_id = otro → el WITH CHECK
+      // (mercaderista_id = auth.uid()) lo rechaza.
+      await esRechazado(() =>
+        c.query(
+          ...insertar(
+            IDS.nuevaSolicitud,
+            TENANTS.maracumango,
+            USUARIOS.mercaderistaRival,
+          ),
+        ),
+      );
+    });
+  });
+
+  it("no puede pedir en el tenant ajeno", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await esRechazado(() =>
+        c.query(
+          ...insertar(
+            IDS.nuevaSolicitud,
+            TENANTS.rival,
+            USUARIOS.mercaderistaMaracumango,
+          ),
+        ),
+      );
+    });
+  });
+
+  it("el desvinculado no puede pedir: la revocación llega a la escritura", async () => {
+    await comoUsuario(db, USUARIOS.desvinculado, async (c) => {
+      await esRechazado(() =>
+        c.query(
+          ...insertar(
+            IDS.nuevaSolicitud,
+            TENANTS.maracumango,
+            USUARIOS.desvinculado,
+          ),
+        ),
+      );
+    });
+  });
+
+  it("el mercaderista no puede resolver su propia solicitud (solo el staff)", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await c.query(
+        ...insertar(
+          IDS.nuevaSolicitud,
+          TENANTS.maracumango,
+          USUARIOS.mercaderistaMaracumango,
+        ),
+      );
+      // No tiene política de UPDATE: el USING no la ve para escribir → 0 filas.
+      const r = await c.query(
+        "update public.solicitud_cambio_ruta set estado = 'resuelta' where id = $1",
+        [IDS.nuevaSolicitud],
+      );
+      expect(r.rowCount).toBe(0);
     });
   });
 });
