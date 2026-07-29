@@ -12,6 +12,15 @@ describe("itemActivo", () => {
     expect(itemActivo("/supervisor/revision/123")?.href).toBe(
       "/supervisor/revision",
     );
+    // El constructor de formularios: la lista, el alta y el detalle caen todos
+    // en la misma sección (y su ayuda contextual).
+    expect(itemActivo("/admin/formularios")?.label).toBe("Formularios");
+    expect(itemActivo("/admin/formularios/nuevo")?.href).toBe(
+      "/admin/formularios",
+    );
+    expect(itemActivo("/admin/formularios/abc-123")?.href).toBe(
+      "/admin/formularios",
+    );
   });
 
   it("prefiere el prefijo MÁS LARGO (no confunde /admin con /admin/catalogo)", () => {
