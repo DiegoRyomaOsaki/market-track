@@ -163,6 +163,7 @@ export type Database = {
           levantamiento_id: string | null
           motivo: string
           paso: Database["public"]["Enums"]["paso_levantamiento"]
+          paso_config_id: string | null
           registrada_at: string
           tenant_id: string
           visita_id: string
@@ -175,6 +176,7 @@ export type Database = {
           levantamiento_id?: string | null
           motivo: string
           paso: Database["public"]["Enums"]["paso_levantamiento"]
+          paso_config_id?: string | null
           registrada_at: string
           tenant_id?: string
           visita_id: string
@@ -187,6 +189,7 @@ export type Database = {
           levantamiento_id?: string | null
           motivo?: string
           paso?: Database["public"]["Enums"]["paso_levantamiento"]
+          paso_config_id?: string | null
           registrada_at?: string
           tenant_id?: string
           visita_id?: string
@@ -576,6 +579,7 @@ export type Database = {
         Row: {
           creado_at: string
           estado: Database["public"]["Enums"]["estado_levantamiento"]
+          formulario_version_id: string | null
           foto_antes_id: string | null
           foto_despues_id: string | null
           id: string
@@ -589,6 +593,7 @@ export type Database = {
         Insert: {
           creado_at?: string
           estado?: Database["public"]["Enums"]["estado_levantamiento"]
+          formulario_version_id?: string | null
           foto_antes_id?: string | null
           foto_despues_id?: string | null
           id?: string
@@ -602,6 +607,7 @@ export type Database = {
         Update: {
           creado_at?: string
           estado?: Database["public"]["Enums"]["estado_levantamiento"]
+          formulario_version_id?: string | null
           foto_antes_id?: string | null
           foto_despues_id?: string | null
           id?: string
@@ -649,7 +655,56 @@ export type Database = {
             referencedColumns: ["id", "tenant_id"]
           },
           {
+            foreignKeyName: "levantamiento_formulario_version_id_fkey"
+            columns: ["formulario_version_id"]
+            isOneToOne: false
+            referencedRelation: "formulario_version"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "levantamiento_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      levantamiento_respuesta: {
+        Row: {
+          campo_id: string
+          creado_at: string
+          id: string
+          levantamiento_id: string
+          tenant_id: string
+          valor: Json
+        }
+        Insert: {
+          campo_id: string
+          creado_at?: string
+          id?: string
+          levantamiento_id: string
+          tenant_id: string
+          valor: Json
+        }
+        Update: {
+          campo_id?: string
+          creado_at?: string
+          id?: string
+          levantamiento_id?: string
+          tenant_id?: string
+          valor?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lev_resp_lev_fk"
+            columns: ["levantamiento_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "levantamiento"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "levantamiento_respuesta_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenant"
@@ -1527,6 +1582,7 @@ export type Database = {
         | "exhibiciones"
         | "foto_despues"
         | "checkout"
+        | "campos_extra"
       rol_usuario: "admin" | "supervisor" | "mercaderista" | "cliente"
       severidad_alerta: "info" | "alta" | "critica"
       tipo_alerta:
@@ -1701,6 +1757,7 @@ export const Constants = {
         "exhibiciones",
         "foto_despues",
         "checkout",
+        "campos_extra",
       ],
       rol_usuario: ["admin", "supervisor", "mercaderista", "cliente"],
       severidad_alerta: ["info", "alta", "critica"],
