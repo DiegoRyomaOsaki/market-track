@@ -23,12 +23,17 @@ export default async function PortalPage({
   const clienteId = primero((await searchParams).cliente);
 
   const supabase = await createServerSupabaseClient();
-  const { data: clientes } = await supabase
+  const { data: clientes, error: errorClientes } = await supabase
     .from("tenant")
     .select("id, nombre")
     .eq("activo", true)
     .order("nombre");
 
+  // Un fallo de la consulta NO es lo mismo que "no hay clientes": no lo
+  // disfracemos de estado vacío.
+  if (errorClientes) {
+    return <Aviso>No se pudieron cargar los clientes.</Aviso>;
+  }
   if (!clientes?.length) {
     return (
       <Aviso>
@@ -43,10 +48,15 @@ export default async function PortalPage({
   // habilitado) resuelto por `estadoDeModulos`. El admin ve todo por RLS.
   let estado = null;
   if (seleccionado) {
-    const { data: overrides } = await supabase
+    const { data: overrides, error: errorOverrides } = await supabase
       .from("portal_modulo_habilitado")
       .select("modulo, habilitado")
       .eq("tenant_id", seleccionado.id);
+    // Si la lectura falla, mostrar el default "todo habilitado" mentiría sobre el
+    // estado real: se avisa en vez de adivinar.
+    if (errorOverrides) {
+      return <Aviso>No se pudo cargar la configuración del cliente.</Aviso>;
+    }
     estado = estadoDeModulos(overrides ?? []);
   }
 
@@ -59,6 +69,10 @@ export default async function PortalPage({
 
       {seleccionado && estado ? (
         <FormModulos
+          // Remonta al cambiar de cliente: `router.push` es navegación suave y
+          // reusaría la instancia, dejando el estado local (las casillas) del
+          // cliente anterior — con riesgo de guardar la config equivocada.
+          key={seleccionado.id}
           tenantId={seleccionado.id}
           nombreCliente={seleccionado.nombre}
           estadoInicial={estado}

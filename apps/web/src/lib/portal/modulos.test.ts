@@ -22,6 +22,15 @@ describe("estadoDeModulos", () => {
     ]);
     expect(Object.values(estado).every(Boolean)).toBe(true);
   });
+
+  it("todos deshabilitados cuando cada módulo tiene un override en false", () => {
+    const overrides = moduloPortalSchema.options.map((modulo) => ({
+      modulo,
+      habilitado: false,
+    }));
+    const estado = estadoDeModulos(overrides);
+    expect(Object.values(estado).some(Boolean)).toBe(false);
+  });
 });
 
 describe("ETIQUETA_MODULO", () => {

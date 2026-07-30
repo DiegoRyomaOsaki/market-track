@@ -62,33 +62,43 @@ export function FormModulos({
         todas están habilitadas.
       </p>
 
-      <div className="flex flex-col gap-1">
+      <div
+        role="group"
+        aria-label="Módulos del portal"
+        className="flex flex-col gap-1"
+      >
         {moduloPortalSchema.options.map((modulo) => (
           <label
             key={modulo}
             className="flex items-center justify-between gap-3 border-b border-border py-2.5 last:border-0"
           >
+            {/* El `<label>` ya nombra la casilla con este texto: sin aria-label
+                redundante (que además ganaría al texto visible y podría desviarse). */}
             <span className={etiqueta}>{ETIQUETA_MODULO[modulo]}</span>
             <input
               type="checkbox"
               checked={estado[modulo]}
               onChange={(e) => alternar(modulo, e.target.checked)}
               className="size-4"
-              aria-label={ETIQUETA_MODULO[modulo]}
             />
           </label>
         ))}
       </div>
 
       <Errores error={error} />
-      {mensaje ? (
-        <p
-          role="status"
-          className="rounded-[9px] bg-completado-suave px-3 py-2 text-[13px] font-semibold text-completado-texto"
-        >
-          {mensaje}
-        </p>
-      ) : null}
+      {/* Región viva siempre montada: al aparecer el mensaje, el lector de
+          pantalla lo anuncia (montarla condicionalmente se lo perdería). */}
+      <p
+        role="status"
+        aria-live="polite"
+        className={
+          mensaje
+            ? "rounded-[9px] bg-completado-suave px-3 py-2 text-[13px] font-semibold text-completado-texto"
+            : "sr-only"
+        }
+      >
+        {mensaje ?? ""}
+      </p>
       <Pie enviando={enviando} editando volverA="/admin/portal" />
     </form>
   );

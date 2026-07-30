@@ -44,11 +44,19 @@ export async function guardarModulosPortal(
     };
   }
 
-  const filas = moduloPortalSchema.options.map((modulo) => ({
-    tenant_id: parsed.data.tenant_id,
-    modulo,
-    habilitado: parsed.data.modulos[modulo] ?? true,
-  }));
+  // Solo se tocan los módulos PRESENTES en el payload: nada de rellenar los
+  // ausentes con `true`, que reactivaría en silencio módulos que otro admin
+  // había deshabilitado. La UI siempre manda los 5; un payload parcial (llamada
+  // directa al server action) solo cambia lo que nombra.
+  const filas = moduloPortalSchema.options.flatMap((modulo) => {
+    const habilitado = parsed.data.modulos[modulo];
+    return habilitado === undefined
+      ? []
+      : [{ tenant_id: parsed.data.tenant_id, modulo, habilitado }];
+  });
+  if (filas.length === 0) {
+    return { ok: false, error: "No hay módulos que guardar" };
+  }
 
   const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase
