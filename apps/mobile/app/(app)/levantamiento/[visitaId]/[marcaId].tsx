@@ -182,6 +182,10 @@ export default function WizardLevantamiento() {
       {activo ? (
         <View style={e.contenido}>
           <PasoActivo
+            // Remonta al cambiar de paso: cada paso (incluidos varios
+            // configurables seguidos, que comparten componente) arranca con su
+            // propio estado y su propia siembra, sin heredar la del anterior.
+            key={activo.id}
             paso={activo}
             visitaId={visitaId}
             marcaId={marcaId}

@@ -125,24 +125,18 @@ async function resolverVersionParaMarca(
   tenantId: string,
   marcaId: string,
 ): Promise<string | null> {
-  const formularios = await db.getAll<{
-    id: string;
-    marca_id: string | null;
-    creado_at: string;
-  }>(
-    `SELECT id, marca_id, creado_at FROM formulario_levantamiento
-     WHERE tenant_id = ? AND activo = 1`,
-    [tenantId],
-  );
-  const versiones = await db.getAll<{
-    id: string;
-    formulario_id: string;
-    version: number;
-  }>(
-    `SELECT id, formulario_id, version FROM formulario_version
-     WHERE tenant_id = ? AND publicada = 1`,
-    [tenantId],
-  );
+  const [formularios, versiones] = await Promise.all([
+    db.getAll<{ id: string; marca_id: string | null; creado_at: string }>(
+      `SELECT id, marca_id, creado_at FROM formulario_levantamiento
+       WHERE tenant_id = ? AND activo = 1`,
+      [tenantId],
+    ),
+    db.getAll<{ id: string; formulario_id: string; version: number }>(
+      `SELECT id, formulario_id, version FROM formulario_version
+       WHERE tenant_id = ? AND publicada = 1`,
+      [tenantId],
+    ),
+  ]);
   return resolverVersionAnclada(formularios, versiones, marcaId);
 }
 

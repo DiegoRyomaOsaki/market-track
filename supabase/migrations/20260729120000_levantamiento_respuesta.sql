@@ -44,8 +44,10 @@ create table public.levantamiento_respuesta (
     references public.levantamiento (id, tenant_id) on delete cascade
 );
 
+-- No hace falta un índice sobre (levantamiento_id) solo: el UNIQUE
+-- (levantamiento_id, campo_id) ya lo cubre por su columna líder, que es como
+-- consultan useRespuestas y la sync.
 create index lev_resp_tenant_id_idx on public.levantamiento_respuesta (tenant_id);
-create index lev_resp_lev_id_idx on public.levantamiento_respuesta (levantamiento_id);
 
 alter table public.levantamiento_respuesta enable row level security;
 

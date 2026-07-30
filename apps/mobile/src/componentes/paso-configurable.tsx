@@ -120,7 +120,12 @@ export function PasoConfigurable({
     >
       <Text style={e.titulo}>{paso.titulo || "Datos adicionales"}</Text>
 
-      {paso.campos.length === 0 ? (
+      {cargando ? (
+        <ActivityIndicator
+          color={colores.marca}
+          style={{ marginTop: espacio.l }}
+        />
+      ) : paso.campos.length === 0 ? (
         <Text style={[p.nota, { marginTop: espacio.l }]}>
           Este paso no tiene campos.
         </Text>
@@ -149,12 +154,17 @@ export function PasoConfigurable({
           <Text style={p.botonTexto}>Continuar</Text>
         )}
       </Pressable>
-      {faltan ? (
-        <Text style={[p.nota, e.aviso]}>
-          Completa los campos obligatorios (*) para continuar, o registra una
-          contingencia.
-        </Text>
-      ) : null}
+      {/* Región viva siempre montada: al pasar `faltan` a true, el lector de
+          pantalla anuncia el aviso (si se montara condicionalmente, no lo vería). */}
+      <Text
+        style={[p.nota, e.aviso]}
+        accessibilityLiveRegion="polite"
+        accessibilityRole="alert"
+      >
+        {faltan
+          ? "Completa los campos obligatorios (*) para continuar, o registra una contingencia."
+          : ""}
+      </Text>
 
       <ContingenciaLink onPress={onContingencia} />
     </ScrollView>
@@ -283,6 +293,8 @@ const e = StyleSheet.create({
   aviso: { marginTop: espacio.s, textAlign: "center" },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: espacio.s },
   chip: {
+    minHeight: 44,
+    justifyContent: "center",
     paddingHorizontal: espacio.m,
     paddingVertical: espacio.s,
     borderRadius: radio.s,

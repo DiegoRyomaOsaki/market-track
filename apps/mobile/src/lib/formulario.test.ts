@@ -76,6 +76,20 @@ describe("resolverVersionAnclada", () => {
     expect(v).toBe("vt");
   });
 
+  it("a igual especificidad, gana el formulario más reciente (no la versión más alta)", () => {
+    const viejo = { id: "viejo", marca_id: marca, creado_at: "2026-07-01" };
+    const nuevo = { id: "nuevo", marca_id: marca, creado_at: "2026-07-10" };
+    const v = resolverVersionAnclada(
+      [viejo, nuevo],
+      [
+        { id: "v_viejo", formulario_id: "viejo", version: 99 },
+        { id: "v_nuevo", formulario_id: "nuevo", version: 1 },
+      ],
+      marca,
+    );
+    expect(v).toBe("v_nuevo");
+  });
+
   it("elige la versión publicada más alta del formulario elegido", () => {
     const v = resolverVersionAnclada(
       [formTodas],
@@ -126,11 +140,26 @@ describe("coercionValorRespuesta", () => {
     expect(coercionValorRespuesta(campo({ tipo: "entero" }), "abc")).toBe(0);
   });
 
-  it("interpreta el booleano", () => {
+  it("el decimal conserva los decimales y acota al rango", () => {
+    expect(coercionValorRespuesta(campo({ tipo: "decimal" }), "4.5")).toBe(4.5);
+    expect(
+      coercionValorRespuesta(campo({ tipo: "decimal", max: 10 }), "12.5"),
+    ).toBe(10);
+    expect(coercionValorRespuesta(campo({ tipo: "decimal" }), "abc")).toBe(0);
+  });
+
+  it("interpreta el booleano desde bool, cadena 'true' o 1", () => {
     expect(coercionValorRespuesta(campo({ tipo: "booleano" }), true)).toBe(
       true,
     );
     expect(coercionValorRespuesta(campo({ tipo: "booleano" }), false)).toBe(
+      false,
+    );
+    expect(coercionValorRespuesta(campo({ tipo: "booleano" }), "true")).toBe(
+      true,
+    );
+    expect(coercionValorRespuesta(campo({ tipo: "booleano" }), 1)).toBe(true);
+    expect(coercionValorRespuesta(campo({ tipo: "booleano" }), "no")).toBe(
       false,
     );
   });

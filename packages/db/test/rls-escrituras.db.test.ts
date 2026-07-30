@@ -372,4 +372,20 @@ describe("levantamiento_respuesta — el mercaderista escribe lo que levanta", (
       );
     });
   });
+
+  it("puede ACTUALIZAR una respuesta de su propio levantamiento", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await c.query(
+        `insert into public.levantamiento_respuesta (id, tenant_id, levantamiento_id, campo_id, valor)
+         values ($1, $2, $3, 'temperatura', '4.5'::jsonb)`,
+        [IDS.nuevaRespuesta, TENANTS.maracumango, IDS.levantamientoMrc],
+      );
+      // Ejercita levresp_mercaderista_actualiza (USING + WITH CHECK): su fila.
+      const r = await c.query(
+        `update public.levantamiento_respuesta set valor = '5.0'::jsonb where id = $1`,
+        [IDS.nuevaRespuesta],
+      );
+      expect(r.rowCount).toBe(1);
+    });
+  });
 });
