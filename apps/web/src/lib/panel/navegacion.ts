@@ -58,6 +58,16 @@ export const NAV_ADMIN: readonly ItemNav[] = [
       "Los espacios de exhibición negociados por tienda. El mercaderista verifica en campo que se cumplan; si faltan, se dispara una alerta de exhibición incompleta.",
   },
   {
+    href: "/admin/formularios",
+    label: "Formularios",
+    icono: "📝",
+    area: "admin",
+    titulo: "Constructor de formularios",
+    subtitulo: "El formulario de levantamiento por cliente",
+    ayuda:
+      "Diseña el formulario que ven los mercaderistas: pasos, campos y su orden. Configura la presentación y los campos libres —los pasos con lógica (quiebres, precios, Share of Shelf) los calcula el sistema y no se editan aquí—. Publicar congela una versión inmutable y la envía al teléfono; los borradores no salen del panel.",
+  },
+  {
     href: "/admin/usuarios",
     label: "Usuarios",
     icono: "👥",
