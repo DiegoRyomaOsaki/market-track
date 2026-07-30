@@ -1,0 +1,69 @@
+import { describe, expect, it } from "vitest";
+
+import { leerFiltros, serializarFiltros } from "./filtros";
+
+const UUID = "aaaaaaaa-0000-0000-0000-000000000001";
+
+describe("leerFiltros", () => {
+  it("lee fechas ISO y uuids válidos", () => {
+    expect(
+      leerFiltros({
+        desde: "2026-07-01",
+        hasta: "2026-07-30",
+        cadena: UUID,
+        tienda: UUID,
+      }),
+    ).toEqual({
+      desde: "2026-07-01",
+      hasta: "2026-07-30",
+      cadena: UUID,
+      tienda: UUID,
+    });
+  });
+
+  it("descarta valores con forma inválida (nunca llegan a una query)", () => {
+    expect(
+      leerFiltros({ desde: "julio", hasta: "2026/07/30", cadena: "x" }),
+    ).toEqual({ desde: null, hasta: null, cadena: null, tienda: null });
+  });
+
+  it("toma el primer valor de un parámetro repetido", () => {
+    expect(leerFiltros({ desde: ["2026-07-01", "2026-01-01"] }).desde).toBe(
+      "2026-07-01",
+    );
+  });
+
+  it("sin parámetros, todo es null", () => {
+    expect(leerFiltros({})).toEqual({
+      desde: null,
+      hasta: null,
+      cadena: null,
+      tienda: null,
+    });
+  });
+});
+
+describe("serializarFiltros", () => {
+  it("arma el querystring y omite los vacíos", () => {
+    expect(serializarFiltros({ desde: "2026-07-01", cadena: UUID })).toBe(
+      `?desde=2026-07-01&cadena=${UUID}`,
+    );
+  });
+
+  it("sin filtros devuelve cadena vacía", () => {
+    expect(serializarFiltros({})).toBe("");
+  });
+
+  it("es la inversa de leerFiltros en la ida y vuelta", () => {
+    const filtros = {
+      desde: "2026-07-01",
+      hasta: "2026-07-30",
+      cadena: UUID,
+      tienda: null,
+    };
+    const params = Object.fromEntries(
+      new URLSearchParams(serializarFiltros(filtros)),
+    );
+    expect(leerFiltros(params)).toEqual(filtros);
+  });
+});
