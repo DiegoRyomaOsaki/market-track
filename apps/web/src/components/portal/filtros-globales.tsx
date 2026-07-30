@@ -1,16 +1,22 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import type { FormEvent } from "react";
 
 import { campo, etiqueta } from "@/components/panel/campos";
+import { botonSecundario } from "@/components/panel/estilos";
 
 type Cadena = { id: string; nombre: string };
 type Tienda = { id: string; nombre: string; cadena_id: string | null };
 
+const CLAVES = ["desde", "hasta", "cadena", "tienda"] as const;
+
 // La barra de filtros GLOBALES del portal (rango de fechas · cadena · tienda).
-// Vive en la URL: al cambiar, reescribe los searchParams conservando la ruta, y
-// cada página los lee en el servidor. Las opciones vienen del layout (RLS ya las
-// acota al cliente).
+// Viven en la URL: al pulsar "Aplicar" se reescriben los searchParams conservando
+// la ruta, y cada página los lee en el servidor. Se navega SOLO al enviar (no en
+// cada `onChange`), para no disparar una navegación por cada tecla en un `select`
+// (antipatrón de menú de salto, WCAG 3.2.2). El `key` remonta el formulario cuando
+// cambia la URL (al limpiar o con atrás/adelante) para re-sembrar los controles.
 export function FiltrosGlobales({
   cadenas,
   tiendas,
@@ -22,36 +28,34 @@ export function FiltrosGlobales({
   const router = useRouter();
   const params = useSearchParams();
 
-  const desde = params.get("desde") ?? "";
-  const hasta = params.get("hasta") ?? "";
-  const cadena = params.get("cadena") ?? "";
-  const tienda = params.get("tienda") ?? "";
+  const valor = (clave: string) => params.get(clave) ?? "";
+  const hayFiltros = CLAVES.some((c) => valor(c) !== "");
 
-  function actualizar(cambios: Record<string, string>) {
-    const next = new URLSearchParams(params.toString());
-    for (const [clave, valor] of Object.entries(cambios)) {
-      if (valor) next.set(clave, valor);
-      else next.delete(clave);
+  function aplicar(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const datos = new FormData(e.currentTarget);
+    const next = new URLSearchParams();
+    for (const clave of CLAVES) {
+      const v = datos.get(clave);
+      if (typeof v === "string" && v) next.set(clave, v);
     }
     const qs = next.toString();
-    router.push(qs ? `${pathname}?${qs}` : pathname);
+    // `scroll: false`: aplicar un filtro no debe saltar el scroll de la vista.
+    router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }
 
-  // La tienda se acota a la cadena elegida; cambiar de cadena limpia la tienda.
-  const tiendasVisibles = cadena
-    ? tiendas.filter((t) => t.cadena_id === cadena)
-    : tiendas;
-  const hayFiltros = Boolean(desde || hasta || cadena || tienda);
-
   return (
-    <div className="flex flex-wrap items-end gap-3 border-b border-border bg-background px-6 py-3">
+    <form
+      key={params.toString()}
+      onSubmit={aplicar}
+      className="flex flex-wrap items-end gap-3 border-b border-border bg-background px-6 py-3"
+    >
       <label className="flex flex-col gap-1">
         <span className={etiqueta}>Desde</span>
         <input
           type="date"
-          value={desde}
-          max={hasta || undefined}
-          onChange={(e) => actualizar({ desde: e.target.value })}
+          name="desde"
+          defaultValue={valor("desde")}
           className={campo}
         />
       </label>
@@ -59,19 +63,14 @@ export function FiltrosGlobales({
         <span className={etiqueta}>Hasta</span>
         <input
           type="date"
-          value={hasta}
-          min={desde || undefined}
-          onChange={(e) => actualizar({ hasta: e.target.value })}
+          name="hasta"
+          defaultValue={valor("hasta")}
           className={campo}
         />
       </label>
       <label className="flex flex-col gap-1">
         <span className={etiqueta}>Cadena</span>
-        <select
-          value={cadena}
-          onChange={(e) => actualizar({ cadena: e.target.value, tienda: "" })}
-          className={campo}
-        >
+        <select name="cadena" defaultValue={valor("cadena")} className={campo}>
           <option value="">Todas</option>
           {cadenas.map((c) => (
             <option key={c.id} value={c.id}>
@@ -82,28 +81,28 @@ export function FiltrosGlobales({
       </label>
       <label className="flex flex-col gap-1">
         <span className={etiqueta}>Tienda</span>
-        <select
-          value={tienda}
-          onChange={(e) => actualizar({ tienda: e.target.value })}
-          className={campo}
-        >
+        <select name="tienda" defaultValue={valor("tienda")} className={campo}>
           <option value="">Todas</option>
-          {tiendasVisibles.map((t) => (
+          {tiendas.map((t) => (
             <option key={t.id} value={t.id}>
               {t.nombre}
             </option>
           ))}
         </select>
       </label>
+
+      <button type="submit" className={botonSecundario}>
+        Aplicar
+      </button>
       {hayFiltros ? (
         <button
           type="button"
-          onClick={() => router.push(pathname)}
+          onClick={() => router.push(pathname, { scroll: false })}
           className="h-[38px] text-[13px] font-semibold text-muted-foreground hover:underline"
         >
           Limpiar
         </button>
       ) : null}
-    </div>
+    </form>
   );
 }

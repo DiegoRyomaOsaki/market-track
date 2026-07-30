@@ -23,8 +23,19 @@ describe("leerFiltros", () => {
 
   it("descarta valores con forma inválida (nunca llegan a una query)", () => {
     expect(
-      leerFiltros({ desde: "julio", hasta: "2026/07/30", cadena: "x" }),
+      leerFiltros({
+        desde: "julio",
+        hasta: "2026/07/30",
+        cadena: "x",
+        tienda: "no-es-uuid",
+      }),
     ).toEqual({ desde: null, hasta: null, cadena: null, tienda: null });
+  });
+
+  it("acepta un uuid en mayúsculas (la validación no distingue caso)", () => {
+    expect(leerFiltros({ cadena: UUID.toUpperCase() }).cadena).toBe(
+      UUID.toUpperCase(),
+    );
   });
 
   it("toma el primer valor de un parámetro repetido", () => {
@@ -54,12 +65,12 @@ describe("serializarFiltros", () => {
     expect(serializarFiltros({})).toBe("");
   });
 
-  it("es la inversa de leerFiltros en la ida y vuelta", () => {
+  it("es la inversa de leerFiltros con los cuatro campos poblados", () => {
     const filtros = {
       desde: "2026-07-01",
       hasta: "2026-07-30",
-      cadena: UUID,
-      tienda: null,
+      cadena: "aaaaaaaa-0000-0000-0000-000000000001",
+      tienda: "bbbbbbbb-0000-0000-0000-000000000002",
     };
     const params = Object.fromEntries(
       new URLSearchParams(serializarFiltros(filtros)),

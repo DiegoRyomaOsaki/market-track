@@ -22,6 +22,12 @@ describe("itemPortalActivo", () => {
   it("devuelve undefined fuera del portal", () => {
     expect(itemPortalActivo("/admin")).toBeUndefined();
   });
+
+  it("no cae por un prefijo falso: /clientefoo no es el dashboard", () => {
+    // El match exige `=== href` o `href + "/"`, no un `startsWith(href)` a secas.
+    expect(itemPortalActivo("/clientefoo")).toBeUndefined();
+    expect(itemPortalActivo("/cliente-x")).toBeUndefined();
+  });
 });
 
 describe("NAV_PORTAL", () => {
