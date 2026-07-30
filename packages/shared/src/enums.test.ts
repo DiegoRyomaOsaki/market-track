@@ -2,6 +2,7 @@ import { Constants } from "@market-track/db";
 import { describe, expect, it } from "vitest";
 
 import {
+  moduloPortalSchema,
   pasoLevantamientoSchema,
   rolUsuarioSchema,
   tipoFotoSchema,
@@ -14,11 +15,13 @@ describe("enums derivados de la base", () => {
     expect(pasoLevantamientoSchema.parse("share_of_shelf")).toBe(
       "share_of_shelf",
     );
+    expect(moduloPortalSchema.parse("galeria")).toBe("galeria");
   });
 
   it("rechaza un valor que la base no reconoce", () => {
     expect(rolUsuarioSchema.safeParse("auditor").success).toBe(false);
     expect(tipoFotoSchema.safeParse("selfie_grupal").success).toBe(false);
+    expect(moduloPortalSchema.safeParse("facturacion").success).toBe(false);
   });
 
   it("no duplica la lista: el esquema y la base son literalmente el mismo array", () => {
@@ -29,6 +32,9 @@ describe("enums derivados de la base", () => {
     ]);
     expect(tipoFotoSchema.options).toEqual([
       ...Constants.public.Enums.tipo_foto,
+    ]);
+    expect(moduloPortalSchema.options).toEqual([
+      ...Constants.public.Enums.modulo_portal,
     ]);
   });
 });

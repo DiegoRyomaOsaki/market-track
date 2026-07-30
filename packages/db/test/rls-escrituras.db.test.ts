@@ -27,6 +27,7 @@ const IDS = {
   nuevaRespuesta: "e0000042-0000-0000-0000-000000000099",
   levantamientoMrc: "a0000011-0000-0000-0000-000000000001",
   levantamientoRival: "b0000011-0000-0000-0000-000000000002",
+  nuevoPortalModulo: "e0000043-0000-0000-0000-000000000099",
 } as const;
 
 // Los tests de "no puede escribir en el tenant ajeno" y "revocación en la
@@ -386,6 +387,34 @@ describe("levantamiento_respuesta — el mercaderista escribe lo que levanta", (
         [IDS.nuevaRespuesta],
       );
       expect(r.rowCount).toBe(1);
+    });
+  });
+});
+
+describe("portal_modulo_habilitado — solo el admin configura el portal del cliente", () => {
+  const insertar = (tenantId: string): [string, unknown[]] => [
+    `insert into public.portal_modulo_habilitado (id, tenant_id, modulo, habilitado)
+     values ($1, $2, 'dashboard', false)`,
+    [IDS.nuevoPortalModulo, tenantId],
+  ];
+
+  it("el admin deshabilita un módulo para un cliente", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const r = await c.query(...insertar(TENANTS.maracumango));
+      expect(r.rowCount).toBe(1);
+    });
+  });
+
+  it("el CLIENTE no puede tocar su propia config (solo lee): solo el admin escribe", async () => {
+    await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
+      // Fila coherente con su tenant: la única verja es el WITH CHECK rol='admin'.
+      await esRechazado(() => c.query(...insertar(TENANTS.maracumango)));
+    });
+  });
+
+  it("el mercaderista tampoco puede configurar el portal", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await esRechazado(() => c.query(...insertar(TENANTS.maracumango)));
     });
   });
 });

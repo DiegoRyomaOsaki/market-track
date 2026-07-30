@@ -156,3 +156,11 @@ insert into public.importacion (id, tenant_id, subido_por) values
 insert into public.mapeo_importacion (id, tenant_id, nombre, mapeo, creado_por) values
   ('a0000018-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'Plantilla precios Maracumango', '{"codigo":"SKU","precio":"PRECIO"}'::jsonb, '11111111-1111-1111-1111-111111111111'),
   ('b0000018-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0000-000000000002', 'Plantilla precios rival', '{"codigo":"COD","precio":"PVP"}'::jsonb, '11111111-1111-1111-1111-111111111111');
+
+-- Config de módulos del portal (MAR-74): modelo DISPERSO, solo se guarda lo que
+-- el admin DESHABILITA. Cada cliente deshabilita uno para que el test de
+-- aislamiento tenga algo que filtrar si una política se rompe; el resto de
+-- módulos quedan habilitados por defecto (coalesce).
+insert into public.portal_modulo_habilitado (tenant_id, modulo, habilitado) values
+  ('aaaaaaaa-0000-0000-0000-000000000001', 'reportes', false),
+  ('bbbbbbbb-0000-0000-0000-000000000002', 'galeria', false);

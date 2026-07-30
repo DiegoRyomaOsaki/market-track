@@ -242,3 +242,44 @@ describe("segundo factor: el gate aal2 protege los DATOS, no solo la pantalla", 
     });
   });
 });
+
+describe("portal_modulo_habilitado — config de secciones del portal (MAR-74)", () => {
+  it("el cliente ve su propio override y nunca el del otro tenant", async () => {
+    await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
+      const r = await c.query<{ tenant_id: string; modulo: string }>(
+        "select tenant_id, modulo from public.portal_modulo_habilitado",
+      );
+      // Solo su fila (reportes de Maracumango); jamás la del rival (galeria).
+      expect(r.rows).toEqual([
+        { tenant_id: TENANTS.maracumango, modulo: "reportes" },
+      ]);
+    });
+  });
+
+  it("el staff ve la config de ambos clientes", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const r = await c.query("select 1 from public.portal_modulo_habilitado");
+      expect(r.rowCount).toBe(2);
+    });
+  });
+
+  it("portal_modulos(): el override manda y el resto queda habilitado por defecto", async () => {
+    await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
+      const r = await c.query<{ modulo: string; habilitado: boolean }>(
+        "select modulo, habilitado from public.portal_modulos()",
+      );
+      // Los 5 módulos, con reportes=false (override) y el resto true (coalesce):
+      // esto es el "default todos habilitados" de un módulo sin fila.
+      const estado = Object.fromEntries(
+        r.rows.map((x) => [x.modulo, x.habilitado]),
+      );
+      expect(estado).toEqual({
+        dashboard: true,
+        mapa: true,
+        galeria: true,
+        alertas: true,
+        reportes: false,
+      });
+    });
+  });
+});
