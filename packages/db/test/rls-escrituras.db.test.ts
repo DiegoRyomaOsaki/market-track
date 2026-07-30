@@ -398,17 +398,51 @@ describe("portal_modulo_habilitado — solo el admin configura el portal del cli
     [IDS.nuevoPortalModulo, tenantId],
   ];
 
-  it("el admin deshabilita un módulo para un cliente", async () => {
+  // Re-habilitar/deshabilitar es un UPDATE de la fila (tenant, modulo), no un
+  // INSERT: la clave del upsert. En una política `for all`, un UPDATE que no pasa
+  // el USING devuelve 0 filas EN SILENCIO (no revienta como el INSERT), así que
+  // el camino de escritura se cubre por separado.
+  it("el admin deshabilita (INSERT) un módulo para un cliente", async () => {
     await comoUsuario(db, USUARIOS.admin, async (c) => {
       const r = await c.query(...insertar(TENANTS.maracumango));
       expect(r.rowCount).toBe(1);
     });
   });
 
-  it("el CLIENTE no puede tocar su propia config (solo lee): solo el admin escribe", async () => {
+  it("el admin configura CUALQUIER cliente: su política de escritura no está acotada por tenant", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const r = await c.query(...insertar(TENANTS.rival));
+      expect(r.rowCount).toBe(1);
+    });
+  });
+
+  it("el admin re-habilita (UPDATE) un módulo ya deshabilitado", async () => {
+    // `reportes` de Maracumango viene deshabilitado del seed: togglearlo es UPDATE.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const r = await c.query(
+        `update public.portal_modulo_habilitado set habilitado = true
+         where tenant_id = $1 and modulo = 'reportes'`,
+        [TENANTS.maracumango],
+      );
+      expect(r.rowCount).toBe(1);
+    });
+  });
+
+  it("el CLIENTE no puede INSERTAR config (solo lee)", async () => {
     await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
       // Fila coherente con su tenant: la única verja es el WITH CHECK rol='admin'.
       await esRechazado(() => c.query(...insertar(TENANTS.maracumango)));
+    });
+  });
+
+  it("el CLIENTE tampoco puede ACTUALIZAR su config (el USING la oculta: 0 filas, no error)", async () => {
+    await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
+      const r = await c.query(
+        `update public.portal_modulo_habilitado set habilitado = true
+         where tenant_id = $1 and modulo = 'reportes'`,
+        [TENANTS.maracumango],
+      );
+      expect(r.rowCount).toBe(0);
     });
   });
 

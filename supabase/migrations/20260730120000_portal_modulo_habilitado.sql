@@ -50,7 +50,10 @@ create policy portmod_admin_escribe on public.portal_modulo_habilitado for all t
 -- el scope lo pone `app.tenant_actual()` (los claims del que llama), no el owner.
 --
 -- NO es una verja de auth: es una fuente de config. El acceso al portal lo
--- gobierna el login multi-tenant + aal2 (MAR-54), aparte.
+-- gobierna el login multi-tenant + aal2 (MAR-54), aparte. Un llamador sin tenant
+-- efectivo (staff, o un usuario revocado/cancelado → tenant_actual() NULL) recibe
+-- "todo habilitado" por defecto: es inofensivo (solo flags de UI, ningún dato del
+-- tenant), y la RLS de cada tabla real sí cierra el acceso de un revocado.
 create function public.portal_modulos()
 returns table (modulo public.modulo_portal, habilitado boolean)
 language sql
