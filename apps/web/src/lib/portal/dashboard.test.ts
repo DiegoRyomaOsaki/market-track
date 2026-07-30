@@ -14,6 +14,17 @@ describe("periodoPorDefecto", () => {
     const p = periodoPorDefecto(new Date("2026-07-30T12:00:00Z"));
     expect(p).toEqual({ desde: "2026-07-01", hasta: "2026-07-30" });
   });
+
+  it("usa el día de calendario de Lima, no el de UTC, al caer la noche", () => {
+    // 2026-07-31T02:00Z = 2026-07-30 21:00 en Lima (UTC-5): sigue siendo 30 de julio.
+    const p = periodoPorDefecto(new Date("2026-07-31T02:00:00Z"));
+    expect(p).toEqual({ desde: "2026-07-01", hasta: "2026-07-30" });
+  });
+
+  it("cruza el fin de mes correctamente", () => {
+    const p = periodoPorDefecto(new Date("2026-03-05T12:00:00Z"));
+    expect(p).toEqual({ desde: "2026-02-04", hasta: "2026-03-05" });
+  });
 });
 
 describe("periodoAnterior", () => {
@@ -55,6 +66,14 @@ describe("calcularTendencia", () => {
     expect(calcularTendencia(5, null)).toEqual({ disponible: false });
     expect(calcularTendencia(null, 5)).toEqual({ disponible: false });
   });
+
+  it("conserva un decimal (los porcentajes vienen redondeados a 1 decimal de la BD)", () => {
+    expect(calcularTendencia(87.3, 83.1)).toEqual({
+      disponible: true,
+      delta: 4.2,
+      direccion: "sube",
+    });
+  });
 });
 
 describe("colorDePin", () => {
@@ -72,6 +91,14 @@ describe("colorDePin", () => {
 
   it("verde si la visita se completó sin alerta", () => {
     expect(colorDePin("completada", false, true)).toBe("verde");
+  });
+
+  it("rojo para cualquier otro estado visitado (p. ej. bloqueada)", () => {
+    expect(colorDePin("bloqueada", false, true)).toBe("rojo");
+  });
+
+  it("la alerta manda aunque no haya visita registrada", () => {
+    expect(colorDePin(null, true, false)).toBe("rojo");
   });
 });
 

@@ -23,6 +23,9 @@ export function KpiCard({ kpi }: { kpi: Kpi }) {
           )}
         >
           <span aria-hidden="true">{t.direccion === "sube" ? "▲" : "▼"}</span>{" "}
+          <span className="sr-only">
+            {t.direccion === "sube" ? "Sube" : "Baja"},{" "}
+          </span>
           {Math.abs(t.delta)} vs. período anterior
         </div>
       ) : (

@@ -34,10 +34,21 @@ function desdeISO(iso: string): Date {
 
 const DIA_MS = 86_400_000;
 
-/** El período por defecto del dashboard: los últimos 30 días hasta `ref` (hoy). */
+// El "hoy" del dashboard es el día de calendario en Lima, no en UTC: entre las
+// 19:00 y medianoche de Lima la fecha UTC ya rodó al día siguiente, y `toISOString`
+// (UTC) devolvería un `hasta` un día adelantado. Se resuelve el día con la zona
+// `America/Lima` (Perú es UTC-5 fijo, pero se deja a Intl por si algún día cambia).
+const FORMATO_DIA_LIMA = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Lima",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/** El período por defecto del dashboard: los últimos 30 días hasta `ref` (hoy en Lima). */
 export function periodoPorDefecto(ref: Date): Periodo {
-  const hasta = aISO(ref);
-  const desde = aISO(new Date(ref.getTime() - 29 * DIA_MS));
+  const hasta = FORMATO_DIA_LIMA.format(ref); // YYYY-MM-DD del calendario de Lima
+  const desde = aISO(new Date(desdeISO(hasta).getTime() - 29 * DIA_MS));
   return { desde, hasta };
 }
 
