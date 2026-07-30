@@ -51,6 +51,10 @@ streams:
       - SELECT * FROM visita WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND mercaderista_id = auth.user_id()
       - SELECT * FROM levantamiento WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
       - SELECT * FROM levantamiento_sku WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
+      # Respuestas de los campos libres del formulario configurable (ADR-0010): la
+      # app las ESCRIBE y las relee para hidratar los pasos configurables al
+      # reanudar. Se acota por tenant como el resto del levantamiento.
+      - SELECT * FROM levantamiento_respuesta WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
       # Exhibiciones negociadas: pre-carga que el mercaderista audita (solo lee).
       # La exhibición cuelga del levantamiento; la app la ESCRIBE y la relee.
       - SELECT * FROM exhibicion_negociada WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)

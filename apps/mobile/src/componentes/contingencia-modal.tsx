@@ -1,4 +1,3 @@
-import type { PasoLevantamiento } from "@market-track/shared";
 import * as Crypto from "expo-crypto";
 import { useState } from "react";
 import {
@@ -18,6 +17,7 @@ import { CamaraFoto } from "@/componentes/camara-foto";
 import { colaFotos } from "@/lib/cola-fotos-instancia";
 import { type FotoProcesada } from "@/lib/foto-captura";
 import { registrarContingencia } from "@/lib/levantamiento";
+import type { PasoBypass } from "@/lib/pasos-levantamiento";
 import { ubicacionActual } from "@/lib/ubicacion";
 import { colores, espacio, radio } from "@/tema";
 
@@ -29,7 +29,9 @@ import { colores, espacio, radio } from "@/tema";
 
 type Props = {
   visible: boolean;
-  paso: PasoLevantamiento;
+  paso: PasoBypass;
+  // El id del paso configurable omitido (null en los pasos fijos).
+  pasoConfigId: string | null;
   tituloPaso: string;
   usuario: string;
   tenant_id: string;
@@ -42,6 +44,7 @@ type Props = {
 export function ContingenciaModal({
   visible,
   paso,
+  pasoConfigId,
   tituloPaso,
   usuario,
   tenant_id,
@@ -93,6 +96,7 @@ export function ContingenciaModal({
         visita_id,
         levantamiento_id,
         paso,
+        paso_config_id: pasoConfigId,
         motivo: texto,
         comentario: null,
         foto_id: fotoId,
@@ -170,7 +174,10 @@ export function ContingenciaModal({
             <Pressable
               onPress={() => void registrar()}
               disabled={!motivo.trim() || guardando}
-              style={[e.boton, (!motivo.trim() || guardando) && e.botonInactivo]}
+              style={[
+                e.boton,
+                (!motivo.trim() || guardando) && e.botonInactivo,
+              ]}
               accessibilityRole="button"
             >
               {guardando ? (

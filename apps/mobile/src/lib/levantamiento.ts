@@ -1,7 +1,14 @@
-import type { PasoLevantamiento } from "@market-track/shared";
+import type { DefinicionFormulario } from "@market-track/shared";
 import { useQuery } from "@powersync/react-native";
 import * as Crypto from "expo-crypto";
+import { useMemo } from "react";
 
+import {
+  parseDefinicionFormulario,
+  resolverVersionAnclada,
+  type ValorRespuesta,
+} from "./formulario";
+import type { PasoBypass } from "./pasos-levantamiento";
 import { db } from "./powersync/db";
 import { type FrenteCompetidor } from "./share-of-shelf";
 
@@ -57,12 +64,16 @@ export function useMarcasDeVisita(visitaId: string) {
   return { marcas: data ?? [], cargando: isLoading };
 }
 
-export type ContingenciaLocal = { paso: string; motivo: string };
+export type ContingenciaLocal = {
+  paso: string;
+  paso_config_id: string | null;
+  motivo: string;
+};
 
 /** Las contingencias ya registradas en un levantamiento (pasos "⚠ Omitido"). */
 export function useContingencias(levantamientoId: string | null) {
   const { data } = useQuery<ContingenciaLocal>(
-    `SELECT paso, motivo FROM contingencia WHERE levantamiento_id = ?`,
+    `SELECT paso, paso_config_id, motivo FROM contingencia WHERE levantamiento_id = ?`,
     [levantamientoId ?? ""],
   );
   return data ?? [];
@@ -84,25 +95,128 @@ export function useContingenciasDeVisita(visitaId: string) {
   return data ?? [];
 }
 
-/** Crea el levantamiento de una marca en una visita y devuelve su id. */
+/**
+ * Crea el levantamiento de una marca en una visita y devuelve su id. Lo ANCLA a
+ * la versión de formulario vigente al crearse (ADR-0010): como una versión
+ * publicada es inmutable, publicar un formulario nuevo no altera esta visita.
+ */
 export async function crearLevantamiento(d: {
   tenant_id: string;
   visita_id: string;
   marca_id: string;
 }): Promise<string> {
   const id = Crypto.randomUUID();
+  const formularioVersionId = await resolverVersionParaMarca(
+    d.tenant_id,
+    d.marca_id,
+  );
   await db.execute(
-    `INSERT INTO levantamiento (id, tenant_id, visita_id, marca_id, estado)
-     VALUES (?, ?, ?, ?, 'en_curso')`,
-    [id, d.tenant_id, d.visita_id, d.marca_id],
+    `INSERT INTO levantamiento
+       (id, tenant_id, visita_id, marca_id, estado, formulario_version_id)
+     VALUES (?, ?, ?, ?, 'en_curso', ?)`,
+    [id, d.tenant_id, d.visita_id, d.marca_id, formularioVersionId],
   );
   return id;
 }
 
+/** La versión publicada que ancla el levantamiento de una marca, o null si el
+ * cliente no tiene formulario configurable (el wizard usa solo los pasos fijos). */
+async function resolverVersionParaMarca(
+  tenantId: string,
+  marcaId: string,
+): Promise<string | null> {
+  const formularios = await db.getAll<{
+    id: string;
+    marca_id: string | null;
+    creado_at: string;
+  }>(
+    `SELECT id, marca_id, creado_at FROM formulario_levantamiento
+     WHERE tenant_id = ? AND activo = 1`,
+    [tenantId],
+  );
+  const versiones = await db.getAll<{
+    id: string;
+    formulario_id: string;
+    version: number;
+  }>(
+    `SELECT id, formulario_id, version FROM formulario_version
+     WHERE tenant_id = ? AND publicada = 1`,
+    [tenantId],
+  );
+  return resolverVersionAnclada(formularios, versiones, marcaId);
+}
+
+/** La definición ANCLADA al levantamiento (no la última publicada), ya validada
+ * con Zod. Null si el levantamiento no tiene formulario: solo pasos fijos. */
+export function useDefinicionAnclada(
+  levantamientoId: string | null,
+): DefinicionFormulario | null {
+  const { data } = useQuery<{ definicion: string | null }>(
+    `SELECT fv.definicion AS definicion
+     FROM levantamiento l
+     JOIN formulario_version fv ON fv.id = l.formulario_version_id
+     WHERE l.id = ?`,
+    [levantamientoId ?? ""],
+  );
+  const raw = data?.[0]?.definicion ?? null;
+  return useMemo(() => parseDefinicionFormulario(raw), [raw]);
+}
+
+export type RespuestaRow = { id: string; campo_id: string; valor: string };
+
+/** Las respuestas ya guardadas de los campos libres, para hidratar el paso. */
+export function useRespuestas(levantamientoId: string | null) {
+  const { data, isLoading } = useQuery<RespuestaRow>(
+    `SELECT id, campo_id, valor FROM levantamiento_respuesta
+     WHERE levantamiento_id = ?`,
+    [levantamientoId ?? ""],
+  );
+  return { respuestas: data ?? [], cargando: isLoading };
+}
+
+/**
+ * Upsert de las respuestas de un paso configurable, una fila por campo. `id` es
+ * el de la fila existente (de useRespuestas) o null para insertar. El `valor` se
+ * guarda como JSON: puede ser texto, número, booleano o lista.
+ */
+export async function guardarRespuestas(d: {
+  levantamiento_id: string;
+  tenant_id: string;
+  respuestas: readonly {
+    id: string | null;
+    campo_id: string;
+    valor: ValorRespuesta;
+  }[];
+}): Promise<void> {
+  for (const r of d.respuestas) {
+    const valor = JSON.stringify(r.valor);
+    if (r.id) {
+      await db.execute(
+        `UPDATE levantamiento_respuesta SET valor = ? WHERE id = ?`,
+        [valor, r.id],
+      );
+    } else {
+      await db.execute(
+        `INSERT INTO levantamiento_respuesta
+           (id, tenant_id, levantamiento_id, campo_id, valor)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          Crypto.randomUUID(),
+          d.tenant_id,
+          d.levantamiento_id,
+          r.campo_id,
+          valor,
+        ],
+      );
+    }
+  }
+}
+
 export async function completarLevantamiento(id: string): Promise<void> {
-  await db.execute(`UPDATE levantamiento SET estado = 'completado' WHERE id = ?`, [
-    id,
-  ]);
+  await db.execute(
+    `UPDATE levantamiento SET estado = 'completado' WHERE id = ?`,
+    [id],
+  );
 }
 
 export type LevantamientoRow = {
@@ -304,7 +418,9 @@ export async function registrarContingencia(d: {
   tenant_id: string;
   visita_id: string;
   levantamiento_id: string;
-  paso: PasoLevantamiento;
+  // 'campos_extra' cuando es un paso configurable; `paso_config_id` dice cuál.
+  paso: PasoBypass;
+  paso_config_id: string | null;
   motivo: string;
   comentario: string | null;
   foto_id: string | null;
@@ -312,15 +428,16 @@ export async function registrarContingencia(d: {
   const id = Crypto.randomUUID();
   await db.execute(
     `INSERT INTO contingencia
-       (id, tenant_id, visita_id, levantamiento_id, paso, motivo, comentario,
-        registrada_at, foto_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, tenant_id, visita_id, levantamiento_id, paso, paso_config_id, motivo,
+        comentario, registrada_at, foto_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       d.tenant_id,
       d.visita_id,
       d.levantamiento_id,
       d.paso,
+      d.paso_config_id,
       d.motivo,
       d.comentario,
       new Date().toISOString(),

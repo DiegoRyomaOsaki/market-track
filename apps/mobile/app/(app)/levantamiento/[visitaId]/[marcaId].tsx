@@ -12,6 +12,7 @@ import {
 import { AyudaBoton } from "@/componentes/ayuda-boton";
 import { ContingenciaModal } from "@/componentes/contingencia-modal";
 import { PasoAntesSos } from "@/componentes/paso-antes-sos";
+import { PasoConfigurable } from "@/componentes/paso-configurable";
 import { PasoDespues } from "@/componentes/paso-despues";
 import { PasoExhibiciones } from "@/componentes/paso-exhibiciones";
 import { PasoPrecios } from "@/componentes/paso-precios";
@@ -20,22 +21,28 @@ import {
   completarLevantamiento,
   crearLevantamiento,
   useContingencias,
+  useDefinicionAnclada,
   useLevantamiento,
   useMarcasDeVisita,
   useVisita,
 } from "@/lib/levantamiento";
-import { levantamientoCompleto, PASOS } from "@/lib/pasos-levantamiento";
+import {
+  construirPasos,
+  levantamientoCompleto,
+  type PasoWizard,
+} from "@/lib/pasos-levantamiento";
 import { useSesion } from "@/sesion";
 import { colores, espacio, radio } from "@/tema";
 
 // El shell del wizard de levantamiento de una marca: navegación secuencial de
-// los 5 pasos, barra de progreso y contingencia (bypass) en cada paso. Cada
-// paso lo implementa su propio componente (PasoActivo despacha por id).
+// los pasos, barra de progreso y contingencia (bypass) en cada paso. Los pasos
+// se construyen de los 5 fijos (MAR-36/37/38) más los CONFIGURABLES de la
+// definición anclada al levantamiento (MAR-80), entre "exhibiciones" y "despues".
 //
 // "Antes + Share of Shelf" (MAR-37) deriva su avance de datos persistidos; los
-// pasos de quiebres/precios/exhibiciones/Después (MAR-38) avanzan en sesión al
-// completar. Los pasos omitidos por contingencia se persisten (tabla
-// `contingencia`).
+// pasos de quiebres/precios/exhibiciones/Después (MAR-38) y los configurables
+// avanzan en sesión al completar. Los pasos omitidos por contingencia se
+// persisten (tabla `contingencia`).
 
 export default function WizardLevantamiento() {
   const router = useRouter();
@@ -51,6 +58,8 @@ export default function WizardLevantamiento() {
   const levantamientoId = marca?.levantamiento_id ?? null;
   const contingencias = useContingencias(levantamientoId);
   const lev = useLevantamiento(levantamientoId);
+  const definicion = useDefinicionAnclada(levantamientoId);
+  const pasos = useMemo(() => construirPasos(definicion), [definicion]);
 
   const [hechosSesion, setHechosSesion] = useState<ReadonlySet<string>>(
     new Set(),
@@ -72,9 +81,19 @@ export default function WizardLevantamiento() {
   }, [visita, marca, levantamientoId, visitaId, marcaId]);
 
   const omitidos = useMemo(() => {
-    const pasosOmitidos = new Set(contingencias.map((c) => c.paso));
-    return new Set(PASOS.filter((p) => pasosOmitidos.has(p.paso)).map((p) => p.id));
-  }, [contingencias]);
+    const ids = new Set<string>();
+    for (const c of contingencias) {
+      // Un paso configurable se identifica por su id (paso_config_id); un paso
+      // fijo, por el valor de enum que comparte con el paso del wizard.
+      if (c.paso_config_id) {
+        ids.add(c.paso_config_id);
+        continue;
+      }
+      const fijo = pasos.find((p) => p.tipo === "fijo" && p.paso === c.paso);
+      if (fijo) ids.add(fijo.id);
+    }
+    return ids;
+  }, [contingencias, pasos]);
 
   // "antes" se deriva de datos persistidos (el SOS quedó guardado): así el paso
   // sobrevive a un cierre de la app. Los pasos aún sin implementar usan estado de
@@ -85,7 +104,7 @@ export default function WizardLevantamiento() {
     return s;
   }, [hechosSesion, lev]);
 
-  const completo = levantamientoCompleto(hechos, omitidos);
+  const completo = levantamientoCompleto(pasos, hechos, omitidos);
   const yaCompletado =
     marca?.levantamiento_estado === "completado" ||
     marca?.levantamiento_estado === "omitido";
@@ -102,8 +121,9 @@ export default function WizardLevantamiento() {
     });
   }, [completo, levantamientoId, yaCompletado, router, visitaId]);
 
-  const activo = PASOS.find((p) => !hechos.has(p.id) && !omitidos.has(p.id)) ?? null;
-  const hechosCount = PASOS.filter(
+  const activo =
+    pasos.find((p) => !hechos.has(p.id) && !omitidos.has(p.id)) ?? null;
+  const hechosCount = pasos.filter(
     (p) => hechos.has(p.id) || omitidos.has(p.id),
   ).length;
 
@@ -132,14 +152,14 @@ export default function WizardLevantamiento() {
     <View style={e.pantalla}>
       <Encabezado
         nombre={marca.nombre}
-        // Los ids de PASOS (antes/quiebres/precios/exhibiciones/despues) son un
-        // subconjunto de ClaveAyuda; por eso la conversión es segura.
-        clave={activo ? (activo.id as ClaveAyuda) : undefined}
+        // Solo los pasos FIJOS tienen ayuda contextual: sus ids son un
+        // subconjunto de ClaveAyuda. Los configurables llevan su ayuda por campo.
+        clave={activo?.tipo === "fijo" ? activo.id : undefined}
         onVolver={() => router.replace(`/levantamiento/${visitaId}`)}
       />
 
       <View style={e.barra}>
-        {PASOS.map((p) => {
+        {pasos.map((p) => {
           const hecho = hechos.has(p.id);
           const omitido = omitidos.has(p.id);
           return (
@@ -156,13 +176,13 @@ export default function WizardLevantamiento() {
         })}
       </View>
       <Text style={e.progresoTexto}>
-        {hechosCount} de {PASOS.length} pasos
+        {hechosCount} de {pasos.length} pasos
       </Text>
 
       {activo ? (
         <View style={e.contenido}>
           <PasoActivo
-            id={activo.id}
+            paso={activo}
             visitaId={visitaId}
             marcaId={marcaId}
             levantamientoId={levantamientoId}
@@ -180,6 +200,7 @@ export default function WizardLevantamiento() {
         <ContingenciaModal
           visible={mostrarContingencia}
           paso={activo.paso}
+          pasoConfigId={activo.tipo === "configurable" ? activo.id : null}
           tituloPaso={activo.titulo}
           usuario={sesion?.user.email ?? "Mercaderista"}
           tenant_id={visita.tenant_id}
@@ -194,9 +215,10 @@ export default function WizardLevantamiento() {
 }
 
 // Despacha al componente de cada paso. "antes" no usa onCompletar: su avance se
-// deriva de datos persistidos; los demás avanzan en sesión al completar.
+// deriva de datos persistidos; los demás (fijos y configurables) avanzan en
+// sesión al completar.
 function PasoActivo({
-  id,
+  paso,
   visitaId,
   marcaId,
   levantamientoId,
@@ -205,7 +227,7 @@ function PasoActivo({
   onCompletar,
   onContingencia,
 }: {
-  id: string;
+  paso: PasoWizard;
   visitaId: string;
   marcaId: string;
   levantamientoId: string;
@@ -214,13 +236,29 @@ function PasoActivo({
   onCompletar: () => void;
   onContingencia: () => void;
 }) {
-  const comun = { visitaId, marcaId, levantamientoId, tenantId };
-  if (id === "antes") {
+  if (paso.tipo === "configurable") {
     return (
-      <PasoAntesSos {...comun} usuario={usuario} onContingencia={onContingencia} />
+      <PasoConfigurable
+        paso={paso}
+        levantamientoId={levantamientoId}
+        tenantId={tenantId}
+        onCompletar={onCompletar}
+        onContingencia={onContingencia}
+      />
     );
   }
-  if (id === "quiebres") {
+
+  const comun = { visitaId, marcaId, levantamientoId, tenantId };
+  if (paso.id === "antes") {
+    return (
+      <PasoAntesSos
+        {...comun}
+        usuario={usuario}
+        onContingencia={onContingencia}
+      />
+    );
+  }
+  if (paso.id === "quiebres") {
     return (
       <PasoQuiebres
         {...comun}
@@ -229,7 +267,7 @@ function PasoActivo({
       />
     );
   }
-  if (id === "precios") {
+  if (paso.id === "precios") {
     return (
       <PasoPrecios
         {...comun}
@@ -238,7 +276,7 @@ function PasoActivo({
       />
     );
   }
-  if (id === "exhibiciones") {
+  if (paso.id === "exhibiciones") {
     return (
       <PasoExhibiciones
         {...comun}

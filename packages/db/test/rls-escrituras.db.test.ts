@@ -24,6 +24,9 @@ const IDS = {
   nuevaSolicitud: "e0000030-0000-0000-0000-000000000099",
   nuevoFormulario: "e0000040-0000-0000-0000-000000000099",
   nuevaVersionForm: "e0000041-0000-0000-0000-000000000099",
+  nuevaRespuesta: "e0000042-0000-0000-0000-000000000099",
+  levantamientoMrc: "a0000011-0000-0000-0000-000000000001",
+  levantamientoRival: "b0000011-0000-0000-0000-000000000002",
 } as const;
 
 // Los tests de "no puede escribir en el tenant ajeno" y "revocación en la
@@ -337,6 +340,34 @@ describe("formulario de levantamiento — config del admin, publicar congela", (
           `insert into public.formulario_levantamiento (id, tenant_id, nombre)
            values ($1, $2, 'Intruso')`,
           [IDS.nuevoFormulario, TENANTS.maracumango],
+        ),
+      );
+    });
+  });
+});
+
+describe("levantamiento_respuesta — el mercaderista escribe lo que levanta", () => {
+  it("el mercaderista guarda una respuesta en SU levantamiento", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const r = await c.query(
+        `insert into public.levantamiento_respuesta (id, tenant_id, levantamiento_id, campo_id, valor)
+         values ($1, $2, $3, 'temperatura', '4.5'::jsonb)`,
+        [IDS.nuevaRespuesta, TENANTS.maracumango, IDS.levantamientoMrc],
+      );
+      expect(r.rowCount).toBe(1);
+    });
+  });
+
+  it("NO puede guardar una respuesta en el levantamiento de otro cliente", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      // Fila 100% coherente con el rival (levantamiento y tenant del rival): la FK
+      // compuesta pasa. Lo único que bloquea es el WITH CHECK, que exige que el
+      // levantamiento cuelgue de una visita del propio mercaderista.
+      await esRechazado(() =>
+        c.query(
+          `insert into public.levantamiento_respuesta (id, tenant_id, levantamiento_id, campo_id, valor)
+           values ($1, $2, $3, 'temperatura', '4.5'::jsonb)`,
+          [IDS.nuevaRespuesta, TENANTS.rival, IDS.levantamientoRival],
         ),
       );
     });

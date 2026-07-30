@@ -122,6 +122,9 @@ const levantamiento = new Table({
   foto_antes_id: column.text,
   foto_despues_id: column.text,
   sos_foto_id: column.text,
+  // Ancla a la versión de formulario que usó este levantamiento (ADR-0010): el
+  // wizard renderiza ESA versión, no la última publicada.
+  formulario_version_id: column.text,
 });
 
 const levantamiento_sku = new Table({
@@ -168,10 +171,40 @@ const contingencia = new Table({
   visita_id: column.text,
   levantamiento_id: column.text,
   paso: column.text,
+  // El id del paso configurable omitido (null en los pasos fijos). Sin esto, los
+  // pasos configurables —todos con paso 'campos_extra'— serían indistinguibles.
+  paso_config_id: column.text,
   motivo: column.text,
   comentario: column.text,
   registrada_at: column.text,
   foto_id: column.text,
+});
+
+// El formulario configurable del levantamiento (ADR-0010). Baja publicado y
+// activo (packages/sync); el jsonb `definicion` se replica como texto y se valida
+// con Zod al leer (ver lib/formulario.ts).
+const formulario_levantamiento = new Table({
+  tenant_id: column.text,
+  marca_id: column.text,
+  nombre: column.text,
+  activo: column.integer,
+  creado_at: column.text,
+});
+
+const formulario_version = new Table({
+  tenant_id: column.text,
+  formulario_id: column.text,
+  version: column.integer,
+  definicion: column.text,
+  publicada: column.integer,
+  creada_at: column.text,
+});
+
+const levantamiento_respuesta = new Table({
+  tenant_id: column.text,
+  levantamiento_id: column.text,
+  campo_id: column.text,
+  valor: column.text,
 });
 
 const solicitud_cambio_ruta = new Table({
@@ -211,4 +244,7 @@ export const AppSchema = new Schema({
   contingencia,
   solicitud_cambio_ruta,
   profile,
+  formulario_levantamiento,
+  formulario_version,
+  levantamiento_respuesta,
 });
