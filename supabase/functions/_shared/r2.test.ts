@@ -1,7 +1,8 @@
 // Tests de la lógica pura del firmado de R2. Corren con `deno test supabase/functions`
 // (sin base, sin servidor, sin credenciales reales de Cloudflare — el firmado de
-// aws4fetch es cripto local). Cablearlos a CI es MAR-65. La prueba de invocación
-// end-to-end (401 / 403 / omisión) también vive en ese arnés.
+// aws4fetch es cripto local). La prueba de invocación end-to-end (401 / 403 /
+// omisión) necesita un stack de Supabase levantado, así que espera al arnés de CI
+// de Edge Functions.
 
 import { assert, assertEquals, assertMatch } from "jsr:@std/assert@1";
 
@@ -16,6 +17,8 @@ import {
   firmarPut,
   lecturaFirmadaSchema,
   leerConfigR2,
+  puedeSubirFoto,
+  subidaFirmadaSchema,
   TOPE_LOTE_LECTURA,
 } from "./r2.ts";
 
@@ -76,6 +79,29 @@ Deno.test("lecturaFirmadaSchema rechaza ids que no son uuid", () => {
   assert(!lecturaFirmadaSchema.safeParse({ foto_ids: ["no-es-uuid"] }).success);
 });
 
+Deno.test("lecturaFirmadaSchema rechaza el campo ausente (distinto de vacío)", () => {
+  assert(!lecturaFirmadaSchema.safeParse({}).success);
+  assert(!lecturaFirmadaSchema.safeParse({ foto_ids: undefined }).success);
+});
+
+Deno.test("subidaFirmadaSchema acepta un par de uuids y rechaza lo demás", () => {
+  assert(subidaFirmadaSchema.safeParse({ visita_id: VISITA, foto_id: FOTO }).success);
+  // Falta un campo.
+  assert(!subidaFirmadaSchema.safeParse({ visita_id: VISITA }).success);
+  assert(!subidaFirmadaSchema.safeParse({ foto_id: FOTO }).success);
+  // Cadena vacía (distinta de ausente) y no-uuid.
+  assert(!subidaFirmadaSchema.safeParse({ visita_id: "", foto_id: FOTO }).success);
+  assert(!subidaFirmadaSchema.safeParse({ visita_id: VISITA, foto_id: "x" }).success);
+});
+
+Deno.test("puedeSubirFoto: solo el mercaderista dueño de la visita", () => {
+  assert(puedeSubirFoto({ mercaderista_id: "u1" }, "u1"));
+  // Del mismo tenant pero no el dueño.
+  assert(!puedeSubirFoto({ mercaderista_id: "u1" }, "u2"));
+  // Visita oculta por RLS (otro tenant o inexistente) → misma respuesta que no-dueño.
+  assert(!puedeSubirFoto(null, "u1"));
+});
+
 Deno.test(
   "firmarGet/firmarPut producen una URL prefirmada con firma, expiración, bucket y key",
   async () => {
@@ -86,18 +112,32 @@ Deno.test(
       fotoId: FOTO,
     });
 
-    const get = await firmarGet(cliente, CFG_PRUEBA, key);
-    assertMatch(get, /X-Amz-Signature=/);
-    assert(get.includes(`X-Amz-Expires=${EXPIRACION_LECTURA_SEGUNDOS}`));
-    assert(get.includes(CFG_PRUEBA.bucket));
-    assert(get.includes(FOTO));
+    const get = new URL(await firmarGet(cliente, CFG_PRUEBA, key));
+    assertMatch(get.searchParams.get("X-Amz-Signature") ?? "", /.+/);
+    assertEquals(
+      get.searchParams.get("X-Amz-Expires"),
+      String(EXPIRACION_LECTURA_SEGUNDOS),
+    );
+    // La ruta es exactamente /bucket/tenant/visita/foto — un reordenamiento de
+    // segmentos o una fuga no pasaría un substring suelto, pero sí este igual.
+    assertEquals(get.pathname, `/${CFG_PRUEBA.bucket}/${key}`);
+    // Servido forzado a imagen en línea (cierra el XSS almacenado).
+    assertEquals(get.searchParams.get("response-content-type"), "image/jpeg");
+    assertMatch(
+      get.searchParams.get("response-content-disposition") ?? "",
+      /^inline/,
+    );
 
-    const put = await firmarPut(cliente, CFG_PRUEBA, key);
-    assert(put.includes(`X-Amz-Expires=${EXPIRACION_SUBIDA_SEGUNDOS}`));
+    const put = new URL(await firmarPut(cliente, CFG_PRUEBA, key));
+    assertEquals(
+      put.searchParams.get("X-Amz-Expires"),
+      String(EXPIRACION_SUBIDA_SEGUNDOS),
+    );
+    assertEquals(put.pathname, `/${CFG_PRUEBA.bucket}/${key}`);
 
     // El método va firmado: GET y PUT dan firmas distintas para la misma key.
-    const firmaGet = new URL(get).searchParams.get("X-Amz-Signature");
-    const firmaPut = new URL(put).searchParams.get("X-Amz-Signature");
+    const firmaGet = get.searchParams.get("X-Amz-Signature");
+    const firmaPut = put.searchParams.get("X-Amz-Signature");
     assert(firmaGet !== null && firmaGet !== firmaPut);
   },
 );

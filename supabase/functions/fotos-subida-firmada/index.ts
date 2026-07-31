@@ -18,6 +18,7 @@ import {
   EXPIRACION_SUBIDA_SEGUNDOS,
   firmarPut,
   leerConfigR2,
+  puedeSubirFoto,
   subidaFirmadaSchema,
 } from "../_shared/r2.ts";
 
@@ -67,8 +68,8 @@ Deno.serve(async (req) => {
     });
   }
   // Otro tenant (RLS la oculta) o no es el dueño → la MISMA respuesta: no se filtra
-  // la existencia entre tenants.
-  if (!visita || visita.mercaderista_id !== auth.user.id) {
+  // la existencia entre tenants. La decisión vive en un helper puro y probado.
+  if (!puedeSubirFoto(visita, auth.user.id)) {
     return json(403, { error: "sin acceso a la visita" });
   }
 
@@ -84,7 +85,7 @@ Deno.serve(async (req) => {
   } catch (e) {
     return json(500, {
       error: "no se pudo firmar la subida",
-      detalle: e instanceof Error ? e.message.slice(0, 200) : String(e),
+      detalle: (e instanceof Error ? e.message : String(e)).slice(0, 200),
     });
   }
 

@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
   } catch (e) {
     return json(500, {
       error: "no se pudieron firmar las lecturas",
-      detalle: e instanceof Error ? e.message.slice(0, 200) : String(e),
+      detalle: (e instanceof Error ? e.message : String(e)).slice(0, 200),
     });
   }
 

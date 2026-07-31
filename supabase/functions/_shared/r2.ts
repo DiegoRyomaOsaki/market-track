@@ -1,7 +1,8 @@
 // Firmado de URLs de Cloudflare R2 para las Edge Functions. La lógica PURA
-// (config, convención de key, endpoint, expiraciones y firmado) vive aquí,
-// separada de los handlers, para probarla con `deno test supabase/functions` sin
-// red ni credenciales reales — igual que `_shared/pase.ts`.
+// (config, convención de key, endpoint, expiraciones, autorización de subida y
+// firmado) vive aquí, separada de los handlers, para probarla con
+// `deno test supabase/functions` sin red ni credenciales reales — igual que
+// `_shared/pase.ts`.
 //
 // R2 es "compatible con S3": habla el MISMO protocolo que Amazon S3 (la API y el
 // firmado SigV4), pero es un servicio de Cloudflare — no hay cuenta de AWS. Por eso
@@ -31,6 +32,17 @@ export const EXPIRACION_SUBIDA_SEGUNDOS = 900; // 15 min
 // Tope del lote de lectura: la galería pide muchas miniaturas de una; se acota el
 // fan-out para no firmar sin límite en una sola llamada.
 export const TOPE_LOTE_LECTURA = 50;
+
+// Al SERVIR se fuerzan el tipo y la disposición como parámetros de respuesta
+// firmados: aunque el objeto almacenado tuviera un MIME ejecutable (image/svg+xml,
+// text/html con <script>), R2 lo entrega como imagen en línea, así que abrir la URL
+// como documento no ejecuta nada. El bucket es privado y toda lectura pasa por
+// `firmarGet`, así que esta es la única superficie de servido — y la que cierra el
+// XSS almacenado en origen, sin depender de cómo la pinte cada consumidor.
+const SERVIR_COMO_IMAGEN: Record<string, string> = {
+  "response-content-type": "image/jpeg",
+  "response-content-disposition": 'inline; filename="foto.jpg"',
+};
 
 export const subidaFirmadaSchema = z.object({
   visita_id: z.uuid(),
@@ -74,6 +86,19 @@ export function construirKeyFoto(ids: {
   return `${ids.tenantId}/${ids.visitaId}/${ids.fotoId}`;
 }
 
+export type VisitaAutz = { mercaderista_id: string } | null;
+
+/**
+ * ¿Puede este llamante subir una foto a esta visita? Solo el mercaderista DUEÑO —
+ * replica la política de INSERT de `foto` (que no da escritura al staff). La visita
+ * ya llega LEÍDA bajo la RLS del llamante, así que `null` significa "de otro tenant
+ * u oculta": se colapsa con "no es el dueño" en la misma respuesta, sin filtrar
+ * existencia entre tenants.
+ */
+export function puedeSubirFoto(visita: VisitaAutz, callerId: string): boolean {
+  return visita !== null && visita.mercaderista_id === callerId;
+}
+
 export function clienteR2(cfg: ConfigR2): AwsClient {
   return new AwsClient({
     accessKeyId: cfg.accessKeyId,
@@ -89,9 +114,15 @@ async function firmar(
   key: string,
   metodo: "GET" | "PUT",
   expiraSegundos: number,
+  overrides?: Record<string, string>,
 ): Promise<string> {
   const url = new URL(`${endpointR2(cfg.accountId)}/${cfg.bucket}/${key}`);
   url.searchParams.set("X-Amz-Expires", String(expiraSegundos));
+  // Los overrides (p. ej. `response-content-type`) van al query ANTES de firmar,
+  // así quedan dentro de la firma y R2 los exige al servir.
+  for (const [k, v] of Object.entries(overrides ?? {})) {
+    url.searchParams.set(k, v);
+  }
   // `signQuery`: la firma va en el query string, así la URL entera es la credencial
   // (no hace falta cabecera Authorization al usarla).
   const firmada = await cliente.sign(url.toString(), {
@@ -110,11 +141,19 @@ export function firmarPut(
   return firmar(cliente, cfg, key, "PUT", EXPIRACION_SUBIDA_SEGUNDOS);
 }
 
-/** URL GET prefirmada de expiración corta para servir la foto a la galería/portal. */
+/** URL GET prefirmada de expiración corta para servir la foto a la galería/portal,
+ * forzando un tipo de imagen en línea (ver `SERVIR_COMO_IMAGEN`). */
 export function firmarGet(
   cliente: AwsClient,
   cfg: ConfigR2,
   key: string,
 ): Promise<string> {
-  return firmar(cliente, cfg, key, "GET", EXPIRACION_LECTURA_SEGUNDOS);
+  return firmar(
+    cliente,
+    cfg,
+    key,
+    "GET",
+    EXPIRACION_LECTURA_SEGUNDOS,
+    SERVIR_COMO_IMAGEN,
+  );
 }
