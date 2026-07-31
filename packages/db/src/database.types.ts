@@ -929,6 +929,38 @@ export type Database = {
           },
         ]
       }
+      portal_modulo_habilitado: {
+        Row: {
+          creado_at: string
+          habilitado: boolean
+          id: string
+          modulo: Database["public"]["Enums"]["modulo_portal"]
+          tenant_id: string
+        }
+        Insert: {
+          creado_at?: string
+          habilitado?: boolean
+          id?: string
+          modulo: Database["public"]["Enums"]["modulo_portal"]
+          tenant_id: string
+        }
+        Update: {
+          creado_at?: string
+          habilitado?: boolean
+          id?: string
+          modulo?: Database["public"]["Enums"]["modulo_portal"]
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_modulo_habilitado_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       precio_regular: {
         Row: {
           cadena_id: string
@@ -1557,6 +1589,13 @@ export type Database = {
           correo: string
         }[]
       }
+      portal_modulos: {
+        Args: never
+        Returns: {
+          habilitado: boolean
+          modulo: Database["public"]["Enums"]["modulo_portal"]
+        }[]
+      }
     }
     Enums: {
       canal_alerta: "dashboard" | "email" | "whatsapp"
@@ -1573,6 +1612,7 @@ export type Database = {
       estado_rutero: "borrador" | "publicado" | "en_curso" | "completado"
       estado_solicitud_ruta: "nueva" | "vista" | "resuelta" | "rechazada"
       estado_visita: "en_curso" | "completada" | "bloqueada"
+      modulo_portal: "dashboard" | "mapa" | "galeria" | "alertas" | "reportes"
       paso_levantamiento:
         | "checkin"
         | "foto_antes"
@@ -1748,6 +1788,7 @@ export const Constants = {
       estado_rutero: ["borrador", "publicado", "en_curso", "completado"],
       estado_solicitud_ruta: ["nueva", "vista", "resuelta", "rechazada"],
       estado_visita: ["en_curso", "completada", "bloqueada"],
+      modulo_portal: ["dashboard", "mapa", "galeria", "alertas", "reportes"],
       paso_levantamiento: [
         "checkin",
         "foto_antes",

@@ -45,6 +45,10 @@ export const tipoTiendaSchema = z.enum(Constants.public.Enums.tipo_tienda);
 export const estadoImportacionSchema = z.enum(
   Constants.public.Enums.estado_importacion,
 );
+// Los módulos (secciones) del portal cliente que el admin habilita por cliente
+// (MAR-74). Es el contrato tipado que consumen el shell (MAR-54) y el toggle
+// admin (MAR-81) sin redefinir la lista.
+export const moduloPortalSchema = z.enum(Constants.public.Enums.modulo_portal);
 
 export type RolUsuario = z.infer<typeof rolUsuarioSchema>;
 export type EstadoVisita = z.infer<typeof estadoVisitaSchema>;
@@ -61,3 +65,4 @@ export type CanalAlerta = z.infer<typeof canalAlertaSchema>;
 export type CanalOtp = z.infer<typeof canalOtpSchema>;
 export type TipoTienda = z.infer<typeof tipoTiendaSchema>;
 export type EstadoImportacion = z.infer<typeof estadoImportacionSchema>;
+export type ModuloPortal = z.infer<typeof moduloPortalSchema>;
