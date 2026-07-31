@@ -21,6 +21,8 @@ describe("itemActivo", () => {
     expect(itemActivo("/admin/formularios/abc-123")?.href).toBe(
       "/admin/formularios",
     );
+    // La sección de módulos del portal (MAR-81) resuelve su ayuda contextual.
+    expect(itemActivo("/admin/portal")?.label).toBe("Portal cliente");
   });
 
   it("prefiere el prefijo MÁS LARGO (no confunde /admin con /admin/catalogo)", () => {
