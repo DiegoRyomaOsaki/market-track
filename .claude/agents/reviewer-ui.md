@@ -43,6 +43,7 @@ constants) to understand the available token palette.
 - [ ] Every input has a real label — a placeholder is not a label (WCAG 1.3.1); standalone search/numeric/toggle inputs need an explicit `aria-label`; toggle-button groups need `role="group"` + `aria-label`
 - [ ] Interactive elements are keyboard-accessible (semantic elements, not divs with click handlers)
 - [ ] Color contrast meets WCAG AA
+- [ ] Meaning is never conveyed by color or icon alone — a colored dot, status badge, or trend glyph (esp. `aria-hidden`) needs a text/`sr-only` equivalent (WCAG 1.4.1)
 - [ ] ARIA attributes on dynamic content (modals, toasts, live regions)
 - [ ] `aria-disabled` belongs only on interactive elements; decorative children use `aria-hidden` so they don't pollute the accessible name
 - [ ] `aria-pressed` is only for persistent two-state toggles — never on one-shot buttons (Back/Close/Cancel/Submit), which it mislabels as "pressed"
@@ -52,6 +53,7 @@ constants) to understand the available token palette.
 - [ ] Programmatic blob downloads attach the anchor to the document before `.click()` and remove it after (some browsers ignore `.click()` on a detached anchor), and defer `URL.revokeObjectURL` (e.g. via a timeout)
 - [ ] Focus management on dialog open/close
 - [ ] Data grids navigable via keyboard (if applicable)
+- [ ] Canvas/WebGL map interactions (MapLibre pin clicks) have a keyboard-operable equivalent — a click-only feature handler is unreachable without a mouse (WCAG 2.1.1)
 - [ ] Touch targets at least 44x44px on interactive elements
 
 ### Responsive Design

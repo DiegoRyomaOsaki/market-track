@@ -237,6 +237,11 @@ Aún no hay `.env`. Al scaffoldear, crear `.env.example` por app. Previstas:
   Sin el `select`, Postgres las evalúa **una vez por fila**; con él, una vez por
   consulta. Medido sobre 200.000 filas: **42.480 ms contra 12,9 ms**. En una
   tabla de 3 filas da igual; en `visita` es un dashboard o un timeout.
+- **Nunca `col::date between $1 and $2` sobre una columna `timestamptz`
+  indexada.** El cast por fila anula el índice `(tenant_id, fecha)` y fuerza un
+  rescan; un rango medio-abierto sobre la columna cruda (`col >= $1 and col <
+  ($2 + 1)`) es sargable y sí usa el índice. Gemela de la pitfall de `(select
+  ...)` de arriba: ambas son "un dashboard o un timeout".
 - **La regla de acceso tiene un solo dueño: `app.perfil_efectivo()`.** No copiar
   el rol ni el `tenant_id` a los claims del JWT: un claim es una copia rancia y
   el mercaderista de un cliente que canceló seguiría dentro hasta que expire el
@@ -279,6 +284,10 @@ Aún no hay `.env`. Al scaffoldear, crear `.env.example` por app. Previstas:
   el flujo sin el bypass incumple la propuesta aceptada.
 - **Campos derivados** (quiebre, diferencia, semáforo, KPIs) se calculan en
   vistas/triggers/Edge Functions, una sola vez — no en el código de las apps.
+- **El "hoy" del negocio es el día de calendario en Lima (UTC-5), no en UTC.**
+  `new Date().toISOString().slice(0,10)` da la fecha UTC: entre las 19:00 y
+  medianoche de Lima ya rodó al día siguiente. Toda ventana de fechas
+  (dashboards, reportes, KPIs) resuelve el día con `America/Lima`.
 - **Nunca poner `passWithNoTests: true` en Vitest.** El default (`false`) es lo
   único que impide que la suite vuelva a ser un verde falso: si alguien borra el
   último test, Vitest sale con exit 1 en vez de fingir que todo está bien.
@@ -294,6 +303,9 @@ Aún no hay `.env`. Al scaffoldear, crear `.env.example` por app. Previstas:
   valida la salida antes de escribir. Y `packages/db/src/database.types.ts` está
   en `.prettierignore` **a propósito**: si Prettier lo reformatea, deja de
   coincidir con la salida del generador y el check de CI se pone rojo para siempre.
+- **Al cambiar de rama que añade o quita rutas, `.next/types` queda rancio** y
+  `tsc` falla en rutas que no tocaste (`Cannot find module '.../page.js'`).
+  Limpiar con `git clean -fdx apps/web/.next` (o `next build`) antes del typecheck.
 - **El 2FA nunca se desactiva por usuario.** Al mercaderista que no recibe su
   OTP se le emite un **pase de acceso temporal** (un solo uso, 15 min, motivo
   obligatorio, auditado). Un interruptor de "sin 2FA para este usuario" se queda

@@ -51,6 +51,7 @@ Read `CLAUDE.md` for full context. Key facts for this project:
 - [ ] Dynamic values interpolated into HTTP headers (Content-Disposition, Location, etc.) are sanitized — type/length validation alone is insufficient; strip characters outside a safe set before interpolation (header injection / response splitting)
 - [ ] Uploaded file type validated by content signature (magic bytes) read server-side, not the client-supplied MIME type
 - [ ] Signed URLs have short TTL and are never cached client-side
+- [ ] Presigned URLs for user-uploaded binaries force a safe `response-content-type` + `response-content-disposition` in the signed query (the server sets no headers on a direct-to-bucket fetch) — an unconstrained Content-Type lets a stored SVG/HTML execute as XSS when the URL is opened
 - [ ] File paths validated against expected format
 - [ ] Internal storage-provider paths absent from API response bodies — stripped before serializing; clients receive only opaque reference IDs or proxy URLs
 
