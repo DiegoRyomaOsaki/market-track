@@ -194,6 +194,11 @@ concern.
 **Test critical paths first.** Prioritize permissions, workflow branching,
 data mutations, money movement, and external integrations.
 
+**Derived-value SQL ships with a `test:db` test.** A new view, trigger, or RPC
+that computes a derived field (KPI, quiebre, semáforo, aggregate) is verified
+against a seeded database — testing only the TS helper that shapes its output
+leaves the actual computation uncovered.
+
 **Test failure cases.** Cover invalid input, missing data, permission denial,
 duplicate submissions, and upstream service failure.
 
@@ -295,6 +300,11 @@ validation failures.
 **Custom controls require accessible behavior.** If a custom dropdown, modal,
 popover, or tab system is introduced, it must support keyboard navigation,
 focus management, and accessible naming.
+
+**Never convey meaning by color or icon alone.** Status, direction, or state
+shown by a colored dot, arrow glyph, or badge needs a text or `sr-only`
+equivalent (WCAG 1.4.1) — an `aria-hidden` trend arrow leaves a screen reader
+the number but not whether it rose or fell.
 
 ## Observability
 
