@@ -1589,6 +1589,62 @@ export type Database = {
           correo: string
         }[]
       }
+      dashboard_alertas: {
+        Args: {
+          p_cadena?: string
+          p_desde: string
+          p_hasta: string
+          p_tienda?: string
+        }
+        Returns: {
+          creado_at: string
+          id: string
+          severidad: Database["public"]["Enums"]["severidad_alerta"]
+          tienda_nombre: string
+          tipo: Database["public"]["Enums"]["tipo_alerta"]
+        }[]
+      }
+      dashboard_kpis: {
+        Args: {
+          p_cadena?: string
+          p_desde: string
+          p_hasta: string
+          p_tienda?: string
+        }
+        Returns: {
+          cumplimiento_pct: number
+          cumplimiento_pct_prev: number
+          desviaciones_precio: number
+          desviaciones_precio_prev: number
+          diferencias: number
+          diferencias_prev: number
+          exhib_cumplidas: number
+          exhib_cumplidas_prev: number
+          exhib_negociadas: number
+          exhib_negociadas_prev: number
+          quiebres: number
+          quiebres_prev: number
+          sos_pct: number
+          sos_pct_prev: number
+        }[]
+      }
+      dashboard_pines: {
+        Args: {
+          p_cadena?: string
+          p_desde: string
+          p_hasta: string
+          p_tienda?: string
+        }
+        Returns: {
+          id: string
+          lat: number
+          lon: number
+          nombre: string
+          tiene_alerta: boolean
+          ultima_visita_estado: string
+          visitada: boolean
+        }[]
+      }
       portal_modulos: {
         Args: never
         Returns: {

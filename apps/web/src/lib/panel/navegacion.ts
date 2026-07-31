@@ -68,6 +68,16 @@ export const NAV_ADMIN: readonly ItemNav[] = [
       "Diseña el formulario que ven los mercaderistas: pasos, campos y su orden. Configura la presentación y los campos libres —los pasos con lógica (quiebres, precios, Share of Shelf) los calcula el sistema y no se editan aquí—. Publicar congela una versión inmutable y la envía al teléfono; los borradores no salen del panel.",
   },
   {
+    href: "/admin/portal",
+    label: "Portal cliente",
+    icono: "🖥️",
+    area: "admin",
+    titulo: "Módulos del portal cliente",
+    subtitulo: "Qué secciones ve cada cliente en su portal",
+    ayuda:
+      "Activa o desactiva las secciones del portal —dashboard, mapa, galería, alertas, reportes— por cada cliente. Una sección desactivada no se muestra ni es accesible por URL en el portal del cliente. Por defecto, un cliente nuevo tiene todas habilitadas.",
+  },
+  {
     href: "/admin/usuarios",
     label: "Usuarios",
     icono: "👥",
