@@ -31,6 +31,11 @@ afterAll(async () => {
   await db.end();
 });
 
+// El seed ya disparó los triggers, así que `realtime.messages` llega con
+// mensajes reales dentro. Cada test marca los suyos con un `event` propio y solo
+// cuenta esos: así el conteo no depende de cuántas alertas traiga el seed.
+const MARCA_DEL_TEST = "marca-del-test";
+
 /**
  * Siembra un mensaje de broadcast en cada topic que nos interesa.
  *
@@ -42,18 +47,23 @@ async function sembrarMensajes(c: Client, topicos: string[]) {
   for (const topico of topicos) {
     await c.query(
       `insert into realtime.messages (topic, extension, event, private, inserted_at)
-       values ($1, 'broadcast', 'INSERT', true, now())`,
-      [topico],
+       values ($1, 'broadcast', $2, true, now())`,
+      [topico, MARCA_DEL_TEST],
     );
   }
 }
 
-/** Cuántos mensajes ve este usuario AL UNIRSE a este topic. */
+/**
+ * Cuántos de los mensajes sembrados por este test ve el usuario AL UNIRSE al
+ * topic. Filtra por el marcador, pero quien decide es la RLS sobre el topic:
+ * si la política no deja entrar al canal, devuelve 0 aunque el mensaje exista.
+ */
 async function mensajesVisiblesEn(c: Client, topico: string): Promise<number> {
   await c.query(`set local realtime.topic = '${topico}'`);
   const r = await c.query<{ n: string }>(
-    `select count(*)::text as n from realtime.messages where topic = $1`,
-    [topico],
+    `select count(*)::text as n from realtime.messages
+     where topic = $1 and event = $2`,
+    [topico, MARCA_DEL_TEST],
   );
   return Number(r.rows[0]?.n ?? "0");
 }
@@ -167,17 +177,22 @@ describe("emisión desde los triggers", () => {
   it("insertar una alerta emite al canal del tenant y al del staff", async () => {
     await comoUsuario(db, USUARIOS.supervisor, async (c) => {
       await c.query("set local role postgres");
+      // El seed ya dejó mensajes de sus propias alertas: sin vaciar primero,
+      // este test pasaría aunque el trigger no hiciera nada. El rollback de
+      // comoUsuario devuelve la tabla a su sitio.
+      await c.query("delete from realtime.messages");
       await c.query(
         `insert into public.alerta (tenant_id, tipo, severidad)
          values ($1, 'quiebre', 'alta')`,
         [TENANTS.maracumango],
       );
       const r = await c.query<{ topic: string }>(
-        `select topic from realtime.messages order by topic`,
+        `select distinct topic from realtime.messages order by topic`,
       );
-      const topicos = r.rows.map((x) => x.topic);
-      expect(topicos).toContain(topicoTenant(TENANTS.maracumango, "alerta"));
-      expect(topicos).toContain(topicoStaff("alerta"));
+      expect(r.rows.map((x) => x.topic)).toEqual([
+        topicoStaff("alerta"),
+        topicoTenant(TENANTS.maracumango, "alerta"),
+      ]);
     });
   });
 });
