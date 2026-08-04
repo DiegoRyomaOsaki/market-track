@@ -22,7 +22,11 @@ describe("topicos de los feeds en vivo", () => {
     expect(topicoStaff("visita")).toBe("staff:visita");
   });
 
-  it("los feeds en vivo son alerta y visita", () => {
-    expect(FEEDS_EN_VIVO).toEqual(["alerta", "visita"]);
+  it("los feeds en vivo son alerta, visita y solicitud de cambio de ruta", () => {
+    expect(FEEDS_EN_VIVO).toEqual([
+      "alerta",
+      "visita",
+      "solicitud_cambio_ruta",
+    ]);
   });
 });

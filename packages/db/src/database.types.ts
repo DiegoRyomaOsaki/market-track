@@ -1583,6 +1583,23 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      bandeja_solicitudes: {
+        Args: { p_solo_mi_equipo?: boolean }
+        Returns: {
+          comentario_resolucion: string
+          creada_at: string
+          estado: Database["public"]["Enums"]["estado_solicitud_ruta"]
+          fecha: string
+          id: string
+          mercaderista_id: string
+          mercaderista_nombre: string
+          motivo: string
+          resuelta_at: string
+          resuelta_por_nombre: string
+          rutero_fecha: string
+          tipo: Database["public"]["Enums"]["tipo_solicitud_ruta"]
+        }[]
+      }
       correos_clientes_del_tenant: {
         Args: { p_tenant: string }
         Returns: {

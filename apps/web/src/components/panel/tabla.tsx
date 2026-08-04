@@ -1,4 +1,5 @@
 import { iniciales } from "@/lib/panel/iniciales";
+import { cn } from "@/lib/utils";
 
 // Las piezas de tabla del panel. Viven aquí porque las usan Usuarios y
 // Clientes-marca, y una tercera copia haría que el badge de estado o el avatar
@@ -27,15 +28,39 @@ export function Avatar({ nombre }: { nombre: string }) {
   );
 }
 
+/**
+ * La píldora de estado del panel: forma y peso iguales en todas las secciones.
+ * El COLOR lo decide quien la usa, porque el vocabulario cambia (activo/inactivo,
+ * el estado de una visita, el de una solicitud); lo que no puede cambiar es el
+ * tamaño ni la tipografía, o los estados dejan de parecerse entre pantallas.
+ *
+ * Lleva siempre texto dentro: el color nunca es el único portador del significado
+ * (WCAG 1.4.1).
+ */
+export function Pastilla({
+  tono,
+  children,
+}: {
+  tono: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex rounded-full px-2.5 py-0.5 text-[11.5px] font-bold",
+        tono,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
 export function Estado({ activo }: { activo: boolean }) {
   return activo ? (
-    <span className="inline-flex rounded-full bg-completado-suave px-2.5 py-0.5 text-[11.5px] font-bold text-completado-texto">
-      Activo
-    </span>
+    <Pastilla tono="bg-completado-suave text-completado-texto">Activo</Pastilla>
   ) : (
-    <span className="inline-flex rounded-full bg-alerta-suave px-2.5 py-0.5 text-[11.5px] font-bold text-alerta-texto">
-      Inactivo
-    </span>
+    <Pastilla tono="bg-alerta-suave text-alerta-texto">Inactivo</Pastilla>
   );
 }
 
