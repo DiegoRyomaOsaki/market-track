@@ -53,21 +53,54 @@ describe("FilaSolicitud", () => {
     expect(screen.getByText(/Cambio de día/)).toBeInTheDocument();
   });
 
-  it("sin comentario no se puede decidir", () => {
-    // El mercaderista tiene que saber QUÉ se decidió, no solo que alguien tocó
-    // su ruta. Por eso el botón nace deshabilitado.
-    render(<FilaSolicitud solicitud={solicitud()} onResuelta={vi.fn()} />);
-    expect(screen.getByRole("button", { name: "Aprobar" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Rechazar" })).toBeDisabled();
+  it("sin comentario avisa por qué, en vez de un botón muerto", async () => {
+    // El botón se queda habilitado a propósito: uno deshabilitado no se puede
+    // enfocar y no dice POR QUÉ lo está, así que con teclado se pasaba de largo.
+    const onResuelta = vi.fn();
+    render(<FilaSolicitud solicitud={solicitud()} onResuelta={onResuelta} />);
 
-    escribirComentario("Aprobado, ajusto el rutero");
-    expect(screen.getByRole("button", { name: "Aprobar" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Aprobar" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /comentario antes de resolver/i,
+    );
+    expect(resolver).not.toHaveBeenCalled();
+    expect(onResuelta).not.toHaveBeenCalled();
   });
 
-  it("solo espacios no cuenta como comentario", () => {
+  it("solo espacios no cuenta como comentario", async () => {
     render(<FilaSolicitud solicitud={solicitud()} onResuelta={vi.fn()} />);
     escribirComentario("   ");
-    expect(screen.getByRole("button", { name: "Aprobar" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Rechazar" }));
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(resolver).not.toHaveBeenCalled();
+  });
+
+  it('el "Guardando…" sale en el botón que se pulsó, no en el otro', async () => {
+    // Con un solo booleano compartido, rechazar ponía \"Guardando…\" sobre Aprobar
+    // — la UI decía que estaba pasando algo que no era.
+    let resolverPromesa: (v: unknown) => void = () => {};
+    resolver.mockReturnValue(
+      new Promise((res) => {
+        resolverPromesa = res;
+      }),
+    );
+    render(<FilaSolicitud solicitud={solicitud()} onResuelta={vi.fn()} />);
+
+    escribirComentario("No procede");
+    fireEvent.click(screen.getByRole("button", { name: "Rechazar" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Guardando…" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Aprobar" })).toBeInTheDocument();
+
+    resolverPromesa({
+      ok: true,
+      resueltaAt: "2026-08-04T15:00:00Z",
+      resueltaPorNombre: "Carla",
+    });
   });
 
   it("aprobar envía la decisión y avisa al padre", async () => {

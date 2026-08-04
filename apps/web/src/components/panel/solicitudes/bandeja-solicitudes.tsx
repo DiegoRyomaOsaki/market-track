@@ -1,18 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { topicoStaff } from "@market-track/shared";
 
-import { Aviso } from "@/components/panel/tabla";
+import { Aviso, Pastilla } from "@/components/panel/tabla";
 import {
   aplicarResolucion,
   pendientes,
   type Solicitud,
 } from "@/lib/panel/solicitudes";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
-import { cn } from "@/lib/utils";
 
 import { FilaSolicitud } from "./fila-solicitud";
 
@@ -77,27 +77,29 @@ export function BandejaSolicitudes({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <span
-          aria-live="polite"
-          className={cn(
-            "inline-flex rounded-full px-2.5 py-0.5 text-[11.5px] font-bold",
-            sinResolver > 0
-              ? "bg-alerta-suave text-alerta-texto"
-              : "bg-muted text-muted-foreground",
-          )}
-        >
-          {sinResolver === 0
-            ? "Ninguna pendiente"
-            : `${sinResolver} sin resolver`}
+        <span aria-live="polite">
+          <Pastilla
+            tono={
+              sinResolver > 0
+                ? "bg-alerta-suave text-alerta-texto"
+                : "bg-muted text-muted-foreground"
+            }
+          >
+            {sinResolver === 0
+              ? "Ninguna pendiente"
+              : `${sinResolver} sin resolver`}
+          </Pastilla>
         </span>
         {/* Un enlace, no un botón: el filtro vive en la URL, así que la vista se
-            comparte y sobrevive a una recarga. */}
-        <a
+            comparte y sobrevive a una recarga. Y `Link`, no `<a>`: una navegación
+            completa del navegador tiraría la suscripción de Realtime recién
+            montada y la volvería a levantar en cada cambio de filtro. */}
+        <Link
           href={soloMiEquipo ? "?equipo=todas" : "?equipo=mias"}
-          className="rounded-lg border border-border px-3 py-1.5 text-[12px] font-semibold hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="inline-flex min-h-11 items-center rounded-lg border border-border px-3 text-[12px] font-semibold hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           {soloMiEquipo ? "Ver todas" : "Ver solo mi equipo"}
-        </a>
+        </Link>
       </div>
 
       {solicitudes.length === 0 ? (

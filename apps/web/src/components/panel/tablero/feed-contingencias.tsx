@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 
 import { marcarContingenciaAtendida } from "@/lib/panel/acciones-tablero";
+import { Pastilla } from "@/components/panel/tabla";
 import { sinAtender, type Contingencia } from "@/lib/panel/tablero";
-import { cn } from "@/lib/utils";
 
 // El feed de contingencias en vivo. Una contingencia es el bypass del
 // levantamiento: el mercaderista no pudo completar un paso, siguió adelante y
@@ -37,16 +37,16 @@ export function FeedContingencias({
         <h2 className="text-[13px] font-bold">Contingencias de hoy</h2>
         {/* El badge no es solo un número de color: `aria-live` hace que el lector
             de pantalla anuncie la contingencia que entra sin recargar. */}
-        <span
-          aria-live="polite"
-          className={cn(
-            "inline-flex min-w-6 justify-center rounded-full px-2 py-0.5 text-[11.5px] font-bold",
-            pendientes > 0
-              ? "bg-alerta-suave text-alerta-texto"
-              : "bg-muted text-muted-foreground",
-          )}
-        >
-          {pendientes === 0 ? "Sin pendientes" : `${pendientes} sin atender`}
+        <span aria-live="polite">
+          <Pastilla
+            tono={
+              pendientes > 0
+                ? "bg-alerta-suave text-alerta-texto"
+                : "bg-muted text-muted-foreground"
+            }
+          >
+            {pendientes === 0 ? "Sin pendientes" : `${pendientes} sin atender`}
+          </Pastilla>
         </span>
       </div>
 
@@ -122,9 +122,11 @@ function Fila({
         <span
           ref={confirmacion}
           tabIndex={-1}
-          className="shrink-0 rounded-full bg-completado-suave px-2.5 py-1 text-[11.5px] font-bold text-completado-texto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
-          Atendida
+          <Pastilla tono="bg-completado-suave text-completado-texto">
+            Atendida
+          </Pastilla>
         </span>
       ) : (
         <button

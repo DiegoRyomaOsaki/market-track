@@ -1,4 +1,11 @@
-import { Avatar, Aviso, Tarjeta, TD, TH } from "@/components/panel/tabla";
+import {
+  Avatar,
+  Aviso,
+  Pastilla,
+  Tarjeta,
+  TD,
+  TH,
+} from "@/components/panel/tabla";
 import {
   colorDeVisita,
   formatoDuracion,
@@ -104,14 +111,9 @@ export function TablaVisitas({ filas }: { filas: FilaTablero[] }) {
             <td className={TD}>
               {/* El color no puede ser el único portador del estado (WCAG 1.4.1):
                   el texto va dentro del badge, no solo en el tono. */}
-              <span
-                className={cn(
-                  "inline-flex rounded-full px-2.5 py-0.5 text-[11.5px] font-bold",
-                  ESTILO_ESTADO[colorDeVisita(f.estado)],
-                )}
-              >
+              <Pastilla tono={ESTILO_ESTADO[colorDeVisita(f.estado)]}>
                 {textoDeVisita(f.estado)}
-              </span>
+              </Pastilla>
             </td>
             <td className={cn(TD, "max-w-[220px] text-muted-foreground")}>
               {f.motivo ? (

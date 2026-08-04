@@ -14,6 +14,13 @@
 -- `p_solo_mi_equipo` filtra por `profile.supervisor_id`: quién reporta a quién.
 -- El admin no tiene reportes directos, así que para él el filtro devolvería vacío
 -- — por eso solo se aplica cuando el que llama es supervisor.
+--
+-- Y RESOLVER TAMPOCO ESTÁ ACOTADO AL PROPIO EQUIPO, a propósito. `sol_staff_resuelve`
+-- deja a cualquier admin o supervisor decidir sobre cualquier solicitud. No es un
+-- cruce entre clientes —el staff de la outsourcing no pertenece a ninguno, lo
+-- impone `profile_tenant_segun_rol`— sino cobertura entre pares: un supervisor de
+-- vacaciones no puede dejar a su equipo esperando en la calle. La trazabilidad la
+-- da `resuelta_por`, que graba quién decidió.
 
 create function public.bandeja_solicitudes(p_solo_mi_equipo boolean default true)
 returns table (

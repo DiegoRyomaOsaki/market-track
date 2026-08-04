@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
 
-import { Avatar } from "@/components/panel/tabla";
+import { Avatar, Pastilla } from "@/components/panel/tabla";
 import { resolverSolicitud } from "@/lib/panel/acciones-solicitudes";
 import {
   estaPendiente,
@@ -12,7 +12,6 @@ import {
   type EstadoSolicitud,
   type Solicitud,
 } from "@/lib/panel/solicitudes";
-import { cn } from "@/lib/utils";
 
 // Una solicitud de la bandeja. Mientras espera decisión muestra el formulario de
 // resolución; una vez resuelta, quién decidió qué y con qué comentario.
@@ -34,6 +33,8 @@ function fechaLegible(iso: string): string {
   });
 }
 
+type Decision = Extract<EstadoSolicitud, "resuelta" | "rechazada">;
+
 export type Resolucion = {
   id: string;
   estado: EstadoSolicitud;
@@ -52,14 +53,24 @@ export function FilaSolicitud({
   const [comentario, setComentario] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pendiente, iniciar] = useTransition();
+  // Cuál de las dos decisiones está en curso. Con un solo booleano compartido, el
+  // "Guardando…" salía en el botón que el supervisor NO había pulsado.
+  const [enCurso, setEnCurso] = useState<Decision | null>(null);
   const resumen = useRef<HTMLParagraphElement>(null);
 
   const abierta = estaPendiente(solicitud.estado);
 
-  function resolver(
-    decision: Extract<EstadoSolicitud, "resuelta" | "rechazada">,
-  ) {
+  function resolver(decision: Decision) {
+    // Los botones se quedan habilitados y la validación ocurre aquí: un botón
+    // deshabilitado no se puede enfocar y no dice POR QUÉ lo está, así que quien
+    // navega con teclado pasaba de largo sin enterarse. El aviso va al mismo
+    // `role="alert"` que ya usan los errores del servidor.
+    if (comentario.trim() === "") {
+      setError("Escribe un comentario antes de resolver.");
+      return;
+    }
     setError(null);
+    setEnCurso(decision);
     iniciar(async () => {
       const r = await resolverSolicitud({
         id: solicitud.id,
@@ -69,12 +80,13 @@ export function FilaSolicitud({
       if (!r.ok) {
         // Fallar en silencio dejaría al supervisor creyendo que ya decidió.
         setError(r.error);
+        setEnCurso(null);
         return;
       }
       onResuelta({
         id: solicitud.id,
         estado: decision,
-        comentario,
+        comentario: comentario.trim(),
         resueltaPorNombre: r.resueltaPorNombre,
         resueltaAt: r.resueltaAt,
       });
@@ -99,14 +111,9 @@ export function FilaSolicitud({
             </span>
           </span>
         </span>
-        <span
-          className={cn(
-            "inline-flex rounded-full px-2.5 py-0.5 text-[11.5px] font-bold",
-            ESTILO_ESTADO[solicitud.estado],
-          )}
-        >
+        <Pastilla tono={ESTILO_ESTADO[solicitud.estado]}>
           {etiquetaEstado(solicitud.estado)}
-        </span>
+        </Pastilla>
       </div>
 
       <p className="mt-2.5 text-[13px]">{solicitud.motivo}</p>
@@ -143,18 +150,18 @@ export function FilaSolicitud({
             <button
               type="button"
               onClick={() => resolver("resuelta")}
-              disabled={pendiente || comentario.trim() === ""}
+              disabled={pendiente}
               className="min-h-11 rounded-lg bg-primary px-3 text-[12px] font-semibold text-primary-foreground hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
             >
-              {pendiente ? "Guardando…" : "Aprobar"}
+              {enCurso === "resuelta" ? "Guardando…" : "Aprobar"}
             </button>
             <button
               type="button"
               onClick={() => resolver("rechazada")}
-              disabled={pendiente || comentario.trim() === ""}
+              disabled={pendiente}
               className="min-h-11 rounded-lg border border-border px-3 text-[12px] font-semibold hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
             >
-              Rechazar
+              {enCurso === "rechazada" ? "Guardando…" : "Rechazar"}
             </button>
           </div>
           <p className="text-[11px] text-muted-foreground">
