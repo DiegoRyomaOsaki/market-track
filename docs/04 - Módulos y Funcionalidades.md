@@ -114,8 +114,10 @@ están en Linear y reflejadas en las tablas de abajo.
 
 ## Tercera revisión con el cliente — agosto 2026
 
-Reunión del **3 ago 2026**. Alcance nuevo, fuera de la propuesta aceptada: dos
-**métricas** que el sistema no medía y que cambian para qué sirve el producto.
+Reunión del **3 ago 2026**. El cliente pidió **dos métricas** que el sistema no
+medía y que cambian para qué sirve el producto. Es alcance nuevo, fuera de la
+propuesta aceptada. La tabla de más abajo desglosa esas dos peticiones en las 16
+piezas que hay que construir — no son 16 cosas que pidiera el cliente.
 
 - **Perfect Store** — cómo de bien está ejecutada la marca en una tienda. Es lo
   que el cliente le vende a la marca: *"te ofrezco medirte Perfect Store en Perú,
@@ -149,13 +151,17 @@ levantamiento — *"las tres primeras ya las tenemos"*.
 |---|---|---|---|
 | 1 | **Puntualidad** | desvío contra la hora planificada de la parada | ✅ |
 | 2 | **Asistencia** | la parada se visitó o no — *"una cosa es que llegues tarde, pero otra cosa es que ni siquiera llegues"* | ✅ |
-| 3 | **Tiempo efectivo de atención** | ⚠️ **sin definir** (ver abajo) | ✅ andamiaje, desactivada |
+| 3 | **Tiempo efectivo de atención** | ⚠️ **sin fórmula acordada** (ver abajo) | 🔸 andamiaje, llega desactivada |
 | 4 | **Calidad de registro** | completitud de campos y fotos presentes | ✅ |
 | 5 | **Herramientas de trabajo** | checklist del check-in | ✅ |
 
-### Las 16 peticiones y su disposición
+> 🔸 no es una fase: la variable 3 se construye en el piloto pero **nace apagada**
+> porque nadie ha acordado cómo se mide. Encenderla no requiere desarrollo nuevo,
+> requiere una decisión.
 
-| # | Petición | Disposición | Dónde impacta |
+### Las dos peticiones, desglosadas en 16 piezas
+
+| # | Pieza | Disposición | Dónde impacta |
 |---|---|---|---|
 | 1 | **Categoría de producto** en el catálogo | ✅ nuevo al piloto | `categoria` + `sku.categoria_id` · panel · importador |
 | 2 | **Hora planificada** por parada | ✅ nuevo al piloto | `rutero_parada.hora_planificada` · derivados en base |
@@ -174,12 +180,11 @@ levantamiento — *"las tres primeras ya las tenemos"*.
 | 15 | **Surtido ideal** por tipo de tienda (plantilla) | 🟡 | panel · expande `tienda_sku` |
 | 16 | **Publicar el prototipo** navegable para el cliente | 🟡 | compromiso de Diego en la reunión |
 
-> **Consecuencia de este corte, dicha en voz alta:** con las variables 4 y 5 en
-> 🟡, **Perfect Store entra al piloto con 3 de sus 5 variables**. El puntaje será
-> real y comparable, pero no es el Perfect Store completo que se le describió a
-> la marca. La ponderación renormaliza sobre las variables evaluadas, así que el
-> número no queda inflado ni hundido — pero conviene decidir si se acepta
-> presentarlo así o si 10 y 11 suben a ✅ antes del piloto.
+> **Consecuencia de este corte:** con las variables 4 y 5 en 🟡, **Perfect Store
+> entra al piloto con 3 de sus 5 variables**. La ponderación renormaliza sobre
+> las evaluadas, así que el número no queda inflado ni hundido — pero no es el
+> Perfect Store completo que se le describió a la marca. Qué hacer con eso es una
+> decisión abierta; está abajo.
 
 ### Decisiones cerradas en la reunión
 
@@ -197,12 +202,14 @@ equivale a no fotografiarlas, así que la ausencia de foto ya descuenta: se ahor
 un paso de calificación manual sin bloquear el flujo de campo.
 
 **El ranking completo no baja al teléfono.** Cada mercaderista ve *su* puntaje y
-*su* posición — *"si tú lo quieres compartir, es otra historia"*. Esto condiciona
-las **reglas de sincronización**, no solo la pantalla: lo que el teléfono
-descarga lo deciden las sync rules, no la RLS.
+*su* posición — *"si tú lo quieres compartir, es otra historia"*. Es una decisión
+de producto con consecuencia técnica: ver [[03 - Modelo de Datos]] para qué
+implica en las reglas de sincronización.
 
-**Un puntaje ya calculado conserva la configuración con la que se calculó.**
-Cambiar los pesos no reescribe la historia.
+**Un puntaje ya calculado conserva la configuración con la que se calculó**, y
+**una variable no evaluada renormaliza el peso en vez de puntuar cero**. Las dos
+invariantes viven en [[03 - Modelo de Datos]], "Entidades añadidas tras la 3ª
+revisión", que es donde se modelan.
 
 ### Decisiones abiertas — no las inventamos
 
@@ -219,6 +226,12 @@ tener 100 puntos de perfect store y esto te suma y te lleva a 110."* Se define
 
 **La unidad del share of shelf.** Frentes o centímetros — *"ahí se mide por
 frentes o se mide por distancia real"*. También es configuración por marca.
+
+**Si el piloto sale con Perfect Store a 3 de 5 variables.** Consecuencia directa
+del corte de arriba, y la única de estas cuatro que **no** la dejó abierta el
+cliente: la abrimos nosotros al priorizar. O se acepta presentar el puntaje
+incompleto —diciéndolo—, o las peticiones 10 y 11 suben a ✅ antes del piloto.
+Conviene resolverlo antes de enseñarle el primer número a la marca.
 
 > Dónde se calculan los puntajes y por qué no en el código de las apps:
 > [ADR-0011](adr/0011-puntajes-derivados-en-la-base.md).

@@ -235,7 +235,8 @@ auditoría, y una sesión iniciada con pase queda marcada como tal.
 |---|---|---|
 | id | uuid PK | |
 | rutero_parada_id, mercaderista_id, tienda_id, tenant_id | FK | |
-| check_in_at | timestamptz | hora de servidor |
+| check_in_at | timestamptz | hora que **declara el teléfono** (se puede cambiar a mano) |
+| check_in_recibido_at | timestamptz | hora de servidor, autoritativa: la sella el trigger |
 | check_in_geo | geography(Point) | validación geocerca |
 | selfie_foto_id | uuid FK | foto de ingreso con watermark |
 | check_out_at | timestamptz | |
@@ -430,8 +431,9 @@ un puntaje "por categoría". `id, tenant_id, nombre, codigo_externo, activo` +
 al final. Es la pieza que bloquea toda la medición.
 
 **Configuración de Perfect Store** — el peso y el objetivo de cada variable, por
-`tenant × marca × categoria × tipo_tienda` con los tres últimos opcionales: la
-fila más específica gana y hay un default de marca. Guarda el peso de las cinco
+`tenant × marca × categoria × tipo_tienda`. **`marca` es el piso**: siempre hay
+una fila a ese nivel, y `categoria` y `tipo_tienda` la afinan. Al resolver, gana
+la fila más específica que aplique y se cae al default de la marca. Guarda el peso de las cinco
 variables, el objetivo de share of shelf y **su unidad** (`frentes` |
 `centimetros`), la política de POP (`dentro_del_tope` | `bonus_sobre_100`) y
 cuántos puntos vale cada nivel de la escala cualitativa.
@@ -441,11 +443,17 @@ cuántos puntos vale cada nivel de la escala cualitativa.
 > divergiría, y el cliente vería dos verdades sobre el mismo SKU.
 
 **`rutero_parada.hora_planificada`** — hora local de Lima esperada en cada
-parada, más una tolerancia en minutos por tenant. Hoy `rutero_parada` solo tiene
-`orden`, así que **no se puede afirmar que alguien llegó tarde**. De aquí salen
-`minutos_desvio` y `asistio`, derivados **en la base** contra `visita.check_in_at`
-(hora de servidor). Una parada sin hora planificada no puntúa puntualidad — no
-penaliza.
+parada, más una tolerancia en minutos por tenant. Hoy `rutero_parada` ordena
+(`orden`) y marca `estado`, pero no guarda ninguna hora esperada, así que **no se
+puede afirmar que alguien llegó tarde**. De aquí salen `minutos_desvio` y
+`asistio`, derivados **en la base**. Una parada sin hora planificada no puntúa
+puntualidad — no penaliza.
+
+> **Contra qué se mide la llegada: `check_in_recibido_at`, no `check_in_at`.**
+> La segunda es la hora que **declara el teléfono** y se puede cambiar a mano; la
+> autoritativa la sella el trigger de geocerca en el servidor. La puntualidad
+> alimenta los bonos del Perfect Merchandiser: derivarla del reloj del
+> dispositivo sería pagar por un dato que el propio interesado controla.
 
 **Puntajes de Perfect Store** — el resultado por `levantamiento` (una marca en
 una visita) con su desglose por variable, más los agregados por tienda, marca,

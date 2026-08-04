@@ -20,9 +20,14 @@ Tres hechos condicionan dónde se calculan:
 2. **Los pesos los fija la marca y cambian.** *"Eso es decisión que se toma con
    el cliente… la marca es la que tiene que alinearnos."* Un puntaje de marzo no
    puede moverse porque en agosto alguien reajustó una ponderación.
-3. **El proyecto ya tiene la regla y ya la ha roto una vez.** `CLAUDE.md` exige
-   que los campos derivados (quiebre, diferencia, semáforo, KPIs) se calculen
-   una sola vez en vistas/triggers/Edge Functions. La tentación aquí es mayor
+3. **El proyecto ya tiene la regla y un precedente de cómo se aplica.**
+   `CLAUDE.md` exige que los campos derivados (quiebre, diferencia, semáforo,
+   KPIs) se calculen una sola vez en vistas/triggers/Edge Functions. El quiebre
+   es columna generada en `levantamiento_sku`; el móvil tiene un espejo en
+   `apps/mobile/src/lib/quiebres.ts`, pero **solo para pintar un badge mientras
+   el mercaderista teclea sin señal**, y el propio archivo deja dicho que la app
+   no escribe esas columnas. Esa es la forma admisible de duplicar: un eco
+   efímero para la UI, nunca el valor que se persiste. La tentación aquí es mayor
    porque el formulario de levantamiento es configurable (ADR-0010) y parece
    natural dejar que el formulario "traiga" también su fórmula.
 
