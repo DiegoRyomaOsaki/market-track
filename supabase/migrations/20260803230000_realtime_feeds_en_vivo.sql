@@ -66,22 +66,47 @@ security definer
 set search_path = ''
 as $$
 begin
-  -- Cada cambio sale dos veces: al canal del cliente dueño de la fila y al canal
-  -- del staff. Son audiencias distintas con permisos distintos, no una copia.
-  perform realtime.broadcast_changes(
-    app.topico_tenant(new.tenant_id, tg_table_name),
-    tg_op, tg_op, tg_table_name, tg_table_schema, new, old
-  );
-  perform realtime.broadcast_changes(
-    app.topico_staff(tg_table_name),
-    tg_op, tg_op, tg_table_name, tg_table_schema, new, old
-  );
+  -- El feed en vivo NUNCA puede tumbar la escritura que lo origina.
+  --
+  -- Este trigger corre dentro de la transacción del check-in o de la alerta, y el
+  -- mercaderista sube su visita después de horas sin señal: ese dato es el
+  -- producto; el tile del supervisor, no.
+  --
+  -- `realtime.send` ya degrada a WARNING el fallo de su propio INSERT (partición
+  -- del día que aún no existe, por ejemplo), así que ese caso está cubierto aguas
+  -- abajo. Lo que este bloque ataja es el resto: `realtime.broadcast_changes`
+  -- envuelve todo lo demás en un `raise exception`, y esa sí subiría hasta aquí y
+  -- abortaría la escritura. Es también el seguro ante un cambio de versión de
+  -- Realtime, que la propia ficha del ticket advierte que ocurre a menudo.
+  --
+  -- Se degrada con ruido, no en silencio: el WARNING queda en los logs de Postgres.
+  begin
+    -- Cada cambio sale dos veces: al canal del cliente dueño de la fila y al canal
+    -- del staff. Son audiencias distintas con permisos distintos, no una copia.
+    perform realtime.broadcast_changes(
+      app.topico_tenant(new.tenant_id, tg_table_name),
+      tg_op, tg_op, tg_table_name, tg_table_schema, new, old
+    );
+    perform realtime.broadcast_changes(
+      app.topico_staff(tg_table_name),
+      tg_op, tg_op, tg_table_name, tg_table_schema, new, old
+    );
+  exception
+    when others then
+      raise warning 'feed en vivo: no se emitió % sobre %.% — %',
+        tg_op, tg_table_schema, tg_table_name, sqlerrm;
+  end;
   return null;
 end;
 $$;
 
 comment on function app.difundir_cambio_en_vivo() is
-  'Emite el cambio de fila a los canales privados del tenant y del staff. AFTER trigger: no altera la fila.';
+  'Emite el cambio de fila a los canales privados del tenant y del staff. AFTER trigger: no altera la fila, y un fallo al emitir no aborta la escritura de origen.';
+
+-- Postgres concede EXECUTE a PUBLIC al crear una función: sin este revoke, una
+-- SECURITY DEFINER queda al alcance de cualquiera. Misma cautela que en
+-- `20260715182500_motor_de_alertas.sql`.
+revoke execute on function app.difundir_cambio_en_vivo() from public;
 
 -- Solo INSERT y UPDATE. `alerta` y `visita` no se borran en la operación normal
 -- (las FK son `on delete restrict`), y un feed en vivo no tiene qué hacer con un
@@ -110,8 +135,8 @@ using (
   extension = 'broadcast'
   and (select app.es_staff())
   and (select realtime.topic()) in (
-    app.topico_staff('alerta'),
-    app.topico_staff('visita')
+    (select app.topico_staff('alerta')),
+    (select app.topico_staff('visita'))
   )
 );
 
@@ -121,7 +146,7 @@ using (
   extension = 'broadcast'
   and (select app.rol_actual()) = 'cliente'
   and (select realtime.topic()) in (
-    app.topico_tenant((select app.tenant_actual()), 'alerta'),
-    app.topico_tenant((select app.tenant_actual()), 'visita')
+    (select app.topico_tenant((select app.tenant_actual()), 'alerta')),
+    (select app.topico_tenant((select app.tenant_actual()), 'visita'))
   )
 );
