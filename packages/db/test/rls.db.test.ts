@@ -282,4 +282,32 @@ describe("portal_modulo_habilitado — config de secciones del portal (MAR-74)",
       });
     });
   });
+
+  it("anon no puede ejecutar portal_modulos: es SECURITY DEFINER", async () => {
+    // Lo destapó el advisor de Supabase en el primer despliegue (MAR-63): la
+    // función se creó con `grant execute to authenticated` pero anon la
+    // alcanzaba igual. Se revoca de PUBLIC y de anon porque local y la nube
+    // conceden distinto, y este test fija el lado local — el que ve el CI.
+    const r = await db.query<{ anon: boolean; auth: boolean }>(
+      `select has_function_privilege('anon', 'public.portal_modulos()', 'EXECUTE') as anon,
+              has_function_privilege('authenticated', 'public.portal_modulos()', 'EXECUTE') as auth`,
+    );
+    expect(r.rows[0]?.anon).toBe(false);
+    // authenticated SÍ: es quien la consume desde el portal.
+    expect(r.rows[0]?.auth).toBe(true);
+  });
+
+  it("ninguna SECURITY DEFINER de app queda al alcance de PUBLIC", async () => {
+    // `app` no está expuesto por PostgREST, así que no hay ruta desde fuera —
+    // pero la higiene de `app.perfil_efectivo()`, que es el único dueño de la
+    // regla de acceso, no debería depender de que eso siga siendo cierto.
+    const r = await db.query<{ funcion: string }>(
+      `select n.nspname || '.' || p.proname as funcion
+       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'app' and p.prosecdef
+         and has_function_privilege('anon', p.oid, 'EXECUTE')
+       order by 1`,
+    );
+    expect(r.rows.map((x) => x.funcion)).toEqual([]);
+  });
 });
