@@ -25,6 +25,7 @@ const IDS = {
   nuevoFormulario: "e0000040-0000-0000-0000-000000000099",
   nuevaVersionForm: "e0000041-0000-0000-0000-000000000099",
   nuevaRespuesta: "e0000042-0000-0000-0000-000000000099",
+  otraRespuesta: "e0000045-0000-0000-0000-000000000099",
   levantamientoMrc: "a0000011-0000-0000-0000-000000000001",
   levantamientoRival: "b0000011-0000-0000-0000-000000000002",
   nuevoPortalModulo: "e0000043-0000-0000-0000-000000000099",
@@ -428,6 +429,8 @@ describe("levantamiento_respuesta — el mercaderista escribe lo que levanta", (
     ["a otro campo", "campo_id = 'otro_campo'"],
     ["a otro levantamiento", `levantamiento_id = '${IDS.levantamientoRival}'`],
     ["a otro cliente", `tenant_id = '${TENANTS.rival}'`],
+    ["a otro id", `id = '${IDS.otraRespuesta}'`],
+    ["a otra hora de captura", "creado_at = now() - interval '3 days'"],
   ])("NO puede mover la respuesta %s", async (_caso, asignacion) => {
     // La app solo escribe `valor`, pero el `grant update` es de tabla y PostgREST
     // está abierto a cualquiera con la sesión: sin el trigger, un PATCH movería
@@ -443,7 +446,92 @@ describe("levantamiento_respuesta — el mercaderista escribe lo que levanta", (
           `update public.levantamiento_respuesta set ${asignacion} where id = $1`,
           [IDS.nuevaRespuesta],
         ),
-      ).rejects.toMatchObject({ code: "23514" });
+      ).rejects.toMatchObject({ code: "P0001" });
+    });
+  });
+
+  it("NO puede mover la respuesta a OTRO LEVANTAMIENTO SUYO, que es el caso que solo para el trigger", async () => {
+    // Los casos de arriba apuntan al tenant rival, así que la FK compuesta ya los
+    // bloquearía aunque el trigger no existiera. Este es el escenario del ticket:
+    // dos levantamientos de la MISMA visita del MISMO mercaderista (otra marca
+    // del mismo cliente). La RLS pasa —ambos cuelgan de una visita suya— y la FK
+    // también. Sin el trigger, la respuesta se movería de marca sin más.
+    const OTRA_MARCA = "cccccccc-0000-0000-0000-000000000002";
+    const otroLevantamiento = "e0000044-0000-0000-0000-000000000099";
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await c.query("set local role postgres");
+      await c.query(
+        `insert into public.levantamiento (id, tenant_id, visita_id, marca_id)
+         values ($1, $2, (select visita_id from public.levantamiento where id = $3), $4)`,
+        [
+          otroLevantamiento,
+          TENANTS.maracumango,
+          IDS.levantamientoMrc,
+          OTRA_MARCA,
+        ],
+      );
+      await c.query("set local role authenticated");
+
+      await c.query(
+        `insert into public.levantamiento_respuesta (id, tenant_id, levantamiento_id, campo_id, valor)
+         values ($1, $2, $3, 'temperatura', '4.5'::jsonb)`,
+        [IDS.nuevaRespuesta, TENANTS.maracumango, IDS.levantamientoMrc],
+      );
+      await expect(
+        c.query(
+          `update public.levantamiento_respuesta set levantamiento_id = $2 where id = $1`,
+          [IDS.nuevaRespuesta, otroLevantamiento],
+        ),
+      ).rejects.toMatchObject({ code: "P0001" });
+    });
+  });
+
+  it("el trigger también aplica a service_role: la identidad no la mueve nadie", async () => {
+    // `service_role` salta la RLS pero NO los triggers. Es deliberado: si algún
+    // día una Edge Function necesita corregir una identidad, que tenga que
+    // hacerlo a conciencia y no por accidente.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await c.query(
+        `insert into public.levantamiento_respuesta (id, tenant_id, levantamiento_id, campo_id, valor)
+         values ($1, $2, $3, 'temperatura', '4.5'::jsonb)`,
+        [IDS.nuevaRespuesta, TENANTS.maracumango, IDS.levantamientoMrc],
+      );
+      await c.query("set local role service_role");
+      await expect(
+        c.query(
+          `update public.levantamiento_respuesta set campo_id = 'otro' where id = $1`,
+          [IDS.nuevaRespuesta],
+        ),
+      ).rejects.toMatchObject({ code: "P0001" });
+    });
+  });
+
+  it("el upsert real de PowerSync (on conflict do update) pasa el trigger", async () => {
+    // El test de abajo prueba la invariante con un UPDATE plano; este ejercita la
+    // sentencia que de verdad emite el conector, para no dar por hecho que un
+    // BEFORE UPDATE se dispara igual en la rama `do update` de un `on conflict`.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await c.query(
+        `insert into public.levantamiento_respuesta (id, tenant_id, levantamiento_id, campo_id, valor)
+         values ($1, $2, $3, 'temperatura', '4.5'::jsonb)`,
+        [IDS.nuevaRespuesta, TENANTS.maracumango, IDS.levantamientoMrc],
+      );
+      const r = await c.query(
+        `insert into public.levantamiento_respuesta (id, tenant_id, levantamiento_id, campo_id, valor)
+         values ($1, $2, $3, 'temperatura', '9.9'::jsonb)
+         on conflict (id) do update set
+           tenant_id = excluded.tenant_id,
+           levantamiento_id = excluded.levantamiento_id,
+           campo_id = excluded.campo_id,
+           valor = excluded.valor`,
+        [IDS.nuevaRespuesta, TENANTS.maracumango, IDS.levantamientoMrc],
+      );
+      expect(r.rowCount).toBe(1);
+      const leido = await c.query<{ valor: string }>(
+        `select valor::text as valor from public.levantamiento_respuesta where id = $1`,
+        [IDS.nuevaRespuesta],
+      );
+      expect(leido.rows[0]?.valor).toBe("9.9");
     });
   });
 
