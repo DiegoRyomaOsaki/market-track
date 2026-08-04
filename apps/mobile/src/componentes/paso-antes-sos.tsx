@@ -38,7 +38,8 @@ import { colores, espacio } from "@/tema";
 // recorre de pie: lista con steppers, jamás una pantalla por SKU. Las fotos se
 // encolan sin bloquear; el share se calcula fuera de la UI (share-of-shelf.ts).
 
-type CamaraPara = { tipo: "antes" } | { tipo: "sos" } | { tipo: "sku"; skuId: string };
+type CamaraPara =
+  { tipo: "antes" } | { tipo: "sos" } | { tipo: "sku"; skuId: string };
 
 type Props = {
   visitaId: string;
@@ -80,7 +81,9 @@ export function PasoAntesSos({
   const [fotosSku, setFotosSku] = useState<Record<string, FotoProcesada>>({});
   const [propios, setPropios] = useState(0);
   const [competidores, setCompetidores] = useState<FrenteCompetidor[]>([]);
-  const [frentesPorSku, setFrentesPorSku] = useState<Record<string, number>>({});
+  const [frentesPorSku, setFrentesPorSku] = useState<Record<string, number>>(
+    {},
+  );
   const [guardando, setGuardando] = useState(false);
 
   const sembradoAgg = useRef(false);
@@ -102,7 +105,10 @@ export function PasoAntesSos({
     setFrentesPorSku(inicial);
   }, [cargando, skus]);
 
-  const competencia = useMemo(() => sumaCompetencia(competidores), [competidores]);
+  const competencia = useMemo(
+    () => sumaCompetencia(competidores),
+    [competidores],
+  );
   const share = shareEnVivo(propios, competencia);
   const sumaDetalle = useMemo(
     () => Object.values(frentesPorSku).reduce((a, n) => a + n, 0),
@@ -173,11 +179,17 @@ export function PasoAntesSos({
           <View
             style={[
               e.punto,
-              { backgroundColor: fotoAntes ? colores.completado : colores.textoSuave },
+              {
+                backgroundColor: fotoAntes
+                  ? colores.completado
+                  : colores.textoSuave,
+              },
             ]}
           />
           <Text style={p.filaTexto}>
-            {fotoAntes ? "Foto tomada" : "Toma la foto de la góndola (obligatoria)"}
+            {fotoAntes
+              ? "Foto tomada"
+              : "Toma la foto de la góndola (obligatoria)"}
           </Text>
         </View>
         <Pressable
@@ -194,7 +206,11 @@ export function PasoAntesSos({
       <Seccion titulo="Share of Shelf — góndola">
         <View style={p.filaEntre}>
           <Text style={p.filaTexto}>Frentes propios</Text>
-          <Stepper valor={propios} onCambio={setPropios} etiqueta="Frentes propios" />
+          <Stepper
+            valor={propios}
+            onCambio={setPropios}
+            etiqueta="Frentes propios"
+          />
         </View>
 
         {competidores.map((c, i) => (
@@ -254,7 +270,9 @@ export function PasoAntesSos({
           accessibilityRole="button"
         >
           <Text style={p.botonSecTexto}>
-            {fotoSos ? "Repetir foto (opcional)" : "Foto de la góndola (opcional)"}
+            {fotoSos
+              ? "Repetir foto (opcional)"
+              : "Foto de la góndola (opcional)"}
           </Text>
         </Pressable>
       </Seccion>
@@ -274,7 +292,9 @@ export function PasoAntesSos({
                 <Text style={e.skuCodigo}>{s.codigo}</Text>
               </View>
               <Pressable
-                onPress={() => void abrirCamara({ tipo: "sku", skuId: s.sku_id })}
+                onPress={() =>
+                  void abrirCamara({ tipo: "sku", skuId: s.sku_id })
+                }
                 hitSlop={8}
                 accessibilityRole="button"
                 accessibilityLabel={`Foto de ${s.nombre}`}

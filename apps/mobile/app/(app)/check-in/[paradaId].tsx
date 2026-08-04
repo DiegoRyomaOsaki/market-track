@@ -15,7 +15,11 @@ import { colaFotos } from "@/lib/cola-fotos-instancia";
 import { type FotoProcesada } from "@/lib/foto-captura";
 import { dentroDeGeocerca, distanciaMetros } from "@/lib/geo";
 import { useParada } from "@/lib/rutero";
-import { leerTransito, limpiarTransito, minutosDeTraslado } from "@/lib/transito";
+import {
+  leerTransito,
+  limpiarTransito,
+  minutosDeTraslado,
+} from "@/lib/transito";
 import { type ResultadoUbicacion, ubicacionActual } from "@/lib/ubicacion";
 import { crearVisitaCheckIn } from "@/lib/visita";
 import { useSesion } from "@/sesion";

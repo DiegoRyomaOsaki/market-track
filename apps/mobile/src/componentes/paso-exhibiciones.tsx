@@ -59,11 +59,11 @@ export function PasoExhibiciones({
   onCompletar,
   onContingencia,
 }: Props) {
-  const { negociadas, adicionales: adicPrevias, cargando } = useExhibiciones(
-    visitaId,
-    marcaId,
-    levantamientoId,
-  );
+  const {
+    negociadas,
+    adicionales: adicPrevias,
+    cargando,
+  } = useExhibiciones(visitaId, marcaId, levantamientoId);
 
   const [estadoNeg, setEstadoNeg] = useState<Record<string, EstadoNeg>>({});
   const [adicionales, setAdicionales] = useState<Adicional[]>([]);
@@ -178,7 +178,9 @@ export function PasoExhibiciones({
         {cargando ? (
           <ActivityIndicator color={colores.marca} />
         ) : negociadas.length === 0 ? (
-          <Text style={p.nota}>Sin exhibiciones negociadas para esta marca.</Text>
+          <Text style={p.nota}>
+            Sin exhibiciones negociadas para esta marca.
+          </Text>
         ) : (
           negociadas.map((n) => {
             const s = estadoNeg[n.negociada_id] ?? {

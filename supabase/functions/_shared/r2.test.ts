@@ -56,43 +56,63 @@ Deno.test("endpointR2 arma el host de la cuenta sin barra final", () => {
   );
 });
 
-Deno.test("la expiración de lectura es de minutos y menor que la de subida", () => {
-  assert(EXPIRACION_LECTURA_SEGUNDOS > 0);
-  assert(EXPIRACION_LECTURA_SEGUNDOS <= 600);
-  assert(EXPIRACION_SUBIDA_SEGUNDOS > EXPIRACION_LECTURA_SEGUNDOS);
-});
+Deno.test(
+  "la expiración de lectura es de minutos y menor que la de subida",
+  () => {
+    assert(EXPIRACION_LECTURA_SEGUNDOS > 0);
+    assert(EXPIRACION_LECTURA_SEGUNDOS <= 600);
+    assert(EXPIRACION_SUBIDA_SEGUNDOS > EXPIRACION_LECTURA_SEGUNDOS);
+  },
+);
 
 Deno.test("el tope del lote de lectura es 50", () => {
   assertEquals(TOPE_LOTE_LECTURA, 50);
 });
 
-Deno.test("lecturaFirmadaSchema rechaza lote vacío y por encima del tope; acepta 1 y el tope", () => {
-  assert(!lecturaFirmadaSchema.safeParse({ foto_ids: [] }).success);
-  const deMas = Array.from({ length: TOPE_LOTE_LECTURA + 1 }, () => FOTO);
-  assert(!lecturaFirmadaSchema.safeParse({ foto_ids: deMas }).success);
-  assert(lecturaFirmadaSchema.safeParse({ foto_ids: [FOTO] }).success);
-  const enElTope = Array.from({ length: TOPE_LOTE_LECTURA }, () => FOTO);
-  assert(lecturaFirmadaSchema.safeParse({ foto_ids: enElTope }).success);
-});
+Deno.test(
+  "lecturaFirmadaSchema rechaza lote vacío y por encima del tope; acepta 1 y el tope",
+  () => {
+    assert(!lecturaFirmadaSchema.safeParse({ foto_ids: [] }).success);
+    const deMas = Array.from({ length: TOPE_LOTE_LECTURA + 1 }, () => FOTO);
+    assert(!lecturaFirmadaSchema.safeParse({ foto_ids: deMas }).success);
+    assert(lecturaFirmadaSchema.safeParse({ foto_ids: [FOTO] }).success);
+    const enElTope = Array.from({ length: TOPE_LOTE_LECTURA }, () => FOTO);
+    assert(lecturaFirmadaSchema.safeParse({ foto_ids: enElTope }).success);
+  },
+);
 
 Deno.test("lecturaFirmadaSchema rechaza ids que no son uuid", () => {
   assert(!lecturaFirmadaSchema.safeParse({ foto_ids: ["no-es-uuid"] }).success);
 });
 
-Deno.test("lecturaFirmadaSchema rechaza el campo ausente (distinto de vacío)", () => {
-  assert(!lecturaFirmadaSchema.safeParse({}).success);
-  assert(!lecturaFirmadaSchema.safeParse({ foto_ids: undefined }).success);
-});
+Deno.test(
+  "lecturaFirmadaSchema rechaza el campo ausente (distinto de vacío)",
+  () => {
+    assert(!lecturaFirmadaSchema.safeParse({}).success);
+    assert(!lecturaFirmadaSchema.safeParse({ foto_ids: undefined }).success);
+  },
+);
 
-Deno.test("subidaFirmadaSchema acepta un par de uuids y rechaza lo demás", () => {
-  assert(subidaFirmadaSchema.safeParse({ visita_id: VISITA, foto_id: FOTO }).success);
-  // Falta un campo.
-  assert(!subidaFirmadaSchema.safeParse({ visita_id: VISITA }).success);
-  assert(!subidaFirmadaSchema.safeParse({ foto_id: FOTO }).success);
-  // Cadena vacía (distinta de ausente) y no-uuid.
-  assert(!subidaFirmadaSchema.safeParse({ visita_id: "", foto_id: FOTO }).success);
-  assert(!subidaFirmadaSchema.safeParse({ visita_id: VISITA, foto_id: "x" }).success);
-});
+Deno.test(
+  "subidaFirmadaSchema acepta un par de uuids y rechaza lo demás",
+  () => {
+    assert(
+      subidaFirmadaSchema.safeParse({ visita_id: VISITA, foto_id: FOTO })
+        .success,
+    );
+    // Falta un campo.
+    assert(!subidaFirmadaSchema.safeParse({ visita_id: VISITA }).success);
+    assert(!subidaFirmadaSchema.safeParse({ foto_id: FOTO }).success);
+    // Cadena vacía (distinta de ausente) y no-uuid.
+    assert(
+      !subidaFirmadaSchema.safeParse({ visita_id: "", foto_id: FOTO }).success,
+    );
+    assert(
+      !subidaFirmadaSchema.safeParse({ visita_id: VISITA, foto_id: "x" })
+        .success,
+    );
+  },
+);
 
 Deno.test("puedeSubirFoto: solo el mercaderista dueño de la visita", () => {
   assert(puedeSubirFoto({ mercaderista_id: "u1" }, "u1"));

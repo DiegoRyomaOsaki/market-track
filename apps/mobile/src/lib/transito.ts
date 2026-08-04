@@ -11,7 +11,10 @@ import * as FileSystem from "expo-file-system/legacy";
 const RUTA = `${FileSystem.documentDirectory}transito.json`;
 
 export async function iniciarTransito(desdeIso: string): Promise<void> {
-  await FileSystem.writeAsStringAsync(RUTA, JSON.stringify({ desde: desdeIso }));
+  await FileSystem.writeAsStringAsync(
+    RUTA,
+    JSON.stringify({ desde: desdeIso }),
+  );
 }
 
 export async function leerTransito(): Promise<string | null> {

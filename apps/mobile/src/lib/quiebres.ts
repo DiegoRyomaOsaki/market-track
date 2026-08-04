@@ -16,6 +16,9 @@ export function esDiferencia(stockSistema: number, stockPiso: number): boolean {
 }
 
 /** El delta piso − sistema, para mostrarlo junto al badge de diferencia. */
-export function deltaDiferencia(stockSistema: number, stockPiso: number): number {
+export function deltaDiferencia(
+  stockSistema: number,
+  stockPiso: number,
+): number {
   return stockPiso - stockSistema;
 }

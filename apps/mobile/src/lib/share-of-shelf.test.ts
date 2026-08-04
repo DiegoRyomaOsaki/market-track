@@ -1,10 +1,6 @@
 import { describe, expect, it } from "@jest/globals";
 
-import {
-  detalleCuadra,
-  shareEnVivo,
-  sumaCompetencia,
-} from "./share-of-shelf";
+import { detalleCuadra, shareEnVivo, sumaCompetencia } from "./share-of-shelf";
 
 describe("sumaCompetencia", () => {
   it("suma los frentes de todos los competidores", () => {

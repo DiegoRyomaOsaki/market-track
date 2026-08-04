@@ -127,7 +127,10 @@ function BannerTransito({ desde }: { desde: string }) {
     const id = setInterval(() => setAhora(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
-  const seg = Math.max(0, Math.floor((ahora - new Date(desde).getTime()) / 1000));
+  const seg = Math.max(
+    0,
+    Math.floor((ahora - new Date(desde).getTime()) / 1000),
+  );
   const mm = String(Math.floor(seg / 60)).padStart(2, "0");
   const ss = String(seg % 60).padStart(2, "0");
   return (

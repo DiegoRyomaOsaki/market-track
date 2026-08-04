@@ -184,7 +184,11 @@ export default function CheckOut() {
               <View
                 style={[
                   e.punto,
-                  { backgroundColor: ubic?.ok ? colores.completado : colores.alerta },
+                  {
+                    backgroundColor: ubic?.ok
+                      ? colores.completado
+                      : colores.alerta,
+                  },
                 ]}
               />
               <Text style={e.filaTexto}>
@@ -200,7 +204,10 @@ export default function CheckOut() {
           <Pressable
             onPress={() => void confirmar()}
             disabled={!lista || !ubic?.ok || guardando}
-            style={[e.boton, (!lista || !ubic?.ok || guardando) && e.botonInactivo]}
+            style={[
+              e.boton,
+              (!lista || !ubic?.ok || guardando) && e.botonInactivo,
+            ]}
             accessibilityRole="button"
           >
             {guardando ? (
