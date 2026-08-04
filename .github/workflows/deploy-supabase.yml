@@ -1,0 +1,83 @@
+name: Desplegar Supabase
+
+#   dev  → market-track-staging
+#   main → market-track (producción)
+#
+# El porqué de que nadie despliegue a mano está en SETUP.md → "Desplegar a la
+# nube", junto al runbook de secretos.
+#
+# Solo en `push`: un pull request NO despliega. Su CI ya levanta un Postgres real
+# y corre `db reset` con las migraciones enteras, así que la verificación ocurre
+# antes de mergear; desplegar desde un PR abriría la nube a cualquier rama.
+on:
+  push:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  # Nunca dos despliegues a la vez sobre el mismo entorno, y sin cancelar el que
+  # está en marcha: una migración interrumpida a medias es peor que esperar.
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  desplegar:
+    name: ${{ github.ref_name == 'main' && 'Producción' || 'Staging' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # El entorno de GitHub es lo que permite exigir una aprobación manual antes
+    # de tocar producción (Settings → Environments → required reviewers). El
+    # workflow no puede imponerlo solo; esto es lo que lo hace posible.
+    environment: ${{ github.ref_name == 'main' && 'produccion' || 'staging' }}
+
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Comprobar la contraseña de la base
+        # Solo esta: un token o un ref mal puestos mueren en `link`, que es de
+        # solo lectura y da un error claro. La contraseña la consume `db push`,
+        # que sin ella se queda esperando en un prompt hasta agotar el timeout —
+        # quince minutos para acabar sin saber por qué.
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::Falta SUPABASE_DB_PASSWORD en el entorno '${{ github.ref_name == 'main' && 'produccion' || 'staging' }}'. Ver SETUP.md → Desplegar a la nube."
+            exit 1
+          fi
+
+      - name: Enlazar el proyecto
+        run: pnpm exec supabase link --project-ref "$PROJECT_REF"
+
+      - name: Deriva entre el repositorio y la nube
+        # `db push` ya dice qué va a aplicar. Esto añade la otra mitad: qué hay en
+        # la nube que no está en el repositorio, que es lo que delata un cambio
+        # hecho a mano por el dashboard.
+        run: pnpm exec supabase migration list --linked
+
+      - name: Aplicar migraciones
+        # `db push` nunca ejecuta seed.sql.
+        run: pnpm exec supabase db push --linked
+
+      - name: Desplegar Edge Functions
+        # Sin nombres: el CLI despliega todas las de `supabase/functions/`. La
+        # carpeta `_shared` no entra porque su nombre no es un slug válido.
+        run: pnpm exec supabase functions deploy
