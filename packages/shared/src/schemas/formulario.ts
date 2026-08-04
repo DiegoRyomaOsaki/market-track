@@ -80,6 +80,26 @@ export const pasoFormularioSchema = z.object({
   campos: z.array(campoFormularioSchema).max(TOPES_FORMULARIO.camposPorPaso),
 });
 
+// Topes de la RESPUESTA, que son otra cosa que los de la definición.
+//
+// La definición la escribe un admin; la respuesta la escribe el MERCADERISTA,
+// que es el actor de menor confianza del sistema. Y una respuesta no se replica
+// una vez: se guarda por cada campo de cada levantamiento de cada visita, así
+// que lo que aquí se deje pasar se multiplica por toda la operación — en
+// Postgres, en la réplica que descarga el resto del tenant y en el SQLite de un
+// Android de gama media.
+export const TOPES_RESPUESTA = {
+  textoChars: 2000,
+  parrafoChars: 10000,
+} as const;
+
+/** Cuántos caracteres admite la respuesta de este tipo de campo. */
+export function topeDeTexto(tipo: TipoCampoFormulario): number {
+  return tipo === "parrafo"
+    ? TOPES_RESPUESTA.parrafoChars
+    : TOPES_RESPUESTA.textoChars;
+}
+
 /**
  * Bytes que ocupa la cadena en UTF-8. Se cuenta a mano y no con `TextEncoder`
  * porque este paquete es isomorfo (web, móvil y Deno) y no puede dar por hecho

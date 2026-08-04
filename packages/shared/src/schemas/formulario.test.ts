@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   definicionFormularioSchema,
   excedeTamano,
+  topeDeTexto,
   TOPES_FORMULARIO,
+  TOPES_RESPUESTA,
 } from "./formulario";
 
 const valida = {
@@ -346,5 +348,23 @@ describe("tope de tamaño total", () => {
     const conAcentos = "á".repeat(TOPES_FORMULARIO.bytesTotal - 20);
     expect(excedeTamano(soloAscii)).toBe(false);
     expect(excedeTamano(conAcentos)).toBe(true);
+  });
+});
+
+describe("topeDeTexto", () => {
+  // El párrafo admite más que una línea de texto, y todo lo demás que guarde una
+  // cadena (incluida la referencia de una foto) se trata como texto corto.
+
+  it("el párrafo admite más que el texto corto", () => {
+    expect(topeDeTexto("parrafo")).toBe(TOPES_RESPUESTA.parrafoChars);
+    expect(topeDeTexto("texto")).toBe(TOPES_RESPUESTA.textoChars);
+    expect(TOPES_RESPUESTA.parrafoChars).toBeGreaterThan(
+      TOPES_RESPUESTA.textoChars,
+    );
+  });
+
+  it("los demás tipos que guardan cadena caen en el tope corto", () => {
+    expect(topeDeTexto("foto")).toBe(TOPES_RESPUESTA.textoChars);
+    expect(topeDeTexto("seleccion")).toBe(TOPES_RESPUESTA.textoChars);
   });
 });

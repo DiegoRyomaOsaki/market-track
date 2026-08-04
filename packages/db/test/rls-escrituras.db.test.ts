@@ -382,6 +382,24 @@ describe("levantamiento_respuesta — el mercaderista escribe lo que levanta", (
     });
   });
 
+  it("la base rechaza una respuesta enorme aunque no pase por la app", async () => {
+    // El mercaderista es el actor de menor confianza y el único que escribe
+    // desde un dispositivo que no controlamos. La app trunca al coercionar y el
+    // campo de la pantalla limita lo tecleable, pero ninguna de esas dos verjas
+    // existe para una sesión comprometida que hable con PostgREST. Y esto es una
+    // fila por campo, por levantamiento, por visita: lo que se cuele se
+    // multiplica por toda la operación.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await esRechazado(() =>
+        c.query(
+          `insert into public.levantamiento_respuesta (id, tenant_id, levantamiento_id, campo_id, valor)
+           values ($1, $2, $3, 'texto_libre', to_jsonb(repeat('x', 20000)))`,
+          [IDS.nuevaRespuesta, TENANTS.maracumango, IDS.levantamientoMrc],
+        ),
+      );
+    });
+  });
+
   it("NO puede guardar una respuesta en el levantamiento de otro cliente", async () => {
     await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
       // Fila 100% coherente con el rival (levantamiento y tenant del rival): la FK

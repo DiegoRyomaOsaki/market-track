@@ -2,6 +2,7 @@ import {
   type CampoFormulario,
   type DefinicionFormulario,
   definicionFormularioSchema,
+  topeDeTexto,
 } from "@market-track/shared";
 
 // La lógica pura del formulario configurable en el móvil (MAR-80, ADR-0010):
@@ -102,8 +103,14 @@ function tipoNoManejado(tipo: never): never {
 
 /**
  * Lleva el valor crudo de un control a su forma canónica para guardar, según el
- * tipo del campo. Los números respetan min/max; la selección múltiple se acota a
- * las opciones válidas.
+ * tipo del campo. Los números respetan min/max, la selección múltiple se acota a
+ * las opciones válidas y el texto libre se trunca a su tope.
+ *
+ * El truncado no es cosmético: es la única cota entre el teclado y una tabla que
+ * se replica a todos los teléfonos del cliente. El campo de la pantalla ya limita
+ * lo que se puede escribir, así que aquí solo llega texto sobre el tope si algo
+ * se saltó la UI — y en ese caso vale más guardar los primeros 2.000 caracteres
+ * que rechazar el levantamiento entero de un mercaderista que está en tienda.
  */
 export function coercionValorRespuesta(
   campo: CampoFormulario,
@@ -113,7 +120,9 @@ export function coercionValorRespuesta(
     case "texto":
     case "parrafo":
     case "foto":
-      return typeof raw === "string" ? raw.trim() : "";
+      return typeof raw === "string"
+        ? raw.trim().slice(0, topeDeTexto(campo.tipo))
+        : "";
     case "entero": {
       const n = Number(raw);
       return Number.isFinite(n)
