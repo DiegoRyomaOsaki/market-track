@@ -1652,6 +1652,39 @@ export type Database = {
           modulo: Database["public"]["Enums"]["modulo_portal"]
         }[]
       }
+      tablero_contingencias: {
+        Args: { p_fecha: string }
+        Returns: {
+          creado_at: string
+          estado: Database["public"]["Enums"]["estado_alerta"]
+          id: string
+          mercaderista_nombre: string
+          motivo: string
+          paso: string
+          tienda_nombre: string
+          visita_id: string
+        }[]
+      }
+      tablero_dia: {
+        Args: { p_fecha: string }
+        Returns: {
+          bateria_inicio_pct: number
+          check_in_at: string
+          check_out_at: string
+          duracion_min: number
+          estado: Database["public"]["Enums"]["estado_visita"]
+          fotos: number
+          mercaderista_dni: string
+          mercaderista_nombre: string
+          motivo: string
+          tiempo_traslado_min: number
+          tienda_id: string
+          tienda_lat: number
+          tienda_lon: number
+          tienda_nombre: string
+          visita_id: string
+        }[]
+      }
     }
     Enums: {
       canal_alerta: "dashboard" | "email" | "whatsapp"

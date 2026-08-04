@@ -6,21 +6,16 @@ import maplibregl from "maplibre-gl";
 import { Protocol } from "pmtiles";
 import { useEffect, useRef } from "react";
 
-import type { ColorPin } from "@/lib/portal/dashboard";
+import { COLOR_PIN_HEX, type PinMapa } from "@/lib/mapa/pines";
 
 import "maplibre-gl/dist/maplibre-gl.css";
 
-// El mapa de tiendas del dashboard (MAR-55, ADR-0009: tiles PMTiles). Reusa el
-// mismo arranque que la geocerca del panel; aquí pinta MUCHOS pines coloreados por
-// estado y, al hacer clic, muestra una mini-card con enlace a la tienda.
-
-export type PinTienda = {
-  id: string;
-  nombre: string;
-  lat: number;
-  lon: number;
-  color: ColorPin;
-};
+// El mapa de pines (ADR-0009: tiles PMTiles). Reusa el mismo arranque que la
+// geocerca del panel; aquí pinta MUCHOS pines coloreados por estado y, al hacer
+// clic, muestra una mini-card con enlace al detalle.
+//
+// Lo comparten el dashboard del portal y el tablero del supervisor: el destino del
+// pin viaja en `href`, así que este componente no conoce ninguna ruta.
 
 const CENTRO_LIMA: [number, number] = [-77.03, -12.05];
 const ZOOM_CIUDAD = 11;
@@ -28,12 +23,6 @@ const ZOOM_CIUDAD = 11;
 const FUENTE_BASE = "protomaps";
 const FUENTE_PINES = "pines";
 const ASSETS = "https://protomaps.github.io/basemaps-assets";
-
-const COLOR_HEX: Record<ColorPin, string> = {
-  verde: "#16a34a",
-  ambar: "#d97706",
-  rojo: "#dc2626",
-};
 
 let protocoloRegistrado = false;
 
@@ -55,27 +44,52 @@ function escapar(texto: string): string {
   );
 }
 
-function coleccion(pines: readonly PinTienda[]): FeatureCollection {
+/**
+ * El popup se arma concatenando HTML, así que `escapar` impide romper el
+ * atributo — pero no impide un `href="javascript:…"`, que escapado sigue siendo
+ * ejecutable. Aquí solo entran RUTAS INTERNAS: una sola barra inicial (`//host`
+ * saldría del sitio). Hoy todos los `href` los construye el servidor con un uuid,
+ * pero este componente lo comparten varias pantallas y no debe confiar en que la
+ * siguiente haga lo mismo.
+ */
+function rutaInternaSegura(href: string): string {
+  return /^\/(?!\/)/.test(href) ? href : "#";
+}
+
+function coleccion(pines: readonly PinMapa[]): FeatureCollection {
   return {
     type: "FeatureCollection",
     features: pines.map((p) => ({
       type: "Feature",
-      properties: { nombre: p.nombre, id: p.id, hex: COLOR_HEX[p.color] },
+      properties: {
+        nombre: p.nombre,
+        id: p.id,
+        href: rutaInternaSegura(p.href),
+        hex: COLOR_PIN_HEX[p.color],
+      },
       geometry: { type: "Point", coordinates: [p.lon, p.lat] },
     })),
   };
 }
 
-export function MapaTiendasInner({
+export function MapaPinesInner({
   urlTiles,
   pines,
+  textoEnlace,
+  etiqueta,
 }: {
   urlTiles: string;
-  pines: PinTienda[];
+  pines: PinMapa[];
+  textoEnlace: string;
+  etiqueta: string;
 }) {
   const contenedor = useRef<HTMLDivElement>(null);
   const mapa = useRef<maplibregl.Map | null>(null);
   const capasListas = useRef(false);
+  // El handler del popup se registra una sola vez, al construir el mapa. Leer el
+  // texto de una ref evita que se quede con el valor del primer render.
+  const textoEnlaceRef = useRef(textoEnlace);
+  textoEnlaceRef.current = textoEnlace;
 
   useEffect(() => {
     if (!contenedor.current || mapa.current) return;
@@ -129,12 +143,15 @@ export function MapaTiendasInner({
       const [lon, lat] = f.geometry.coordinates;
       if (lon === undefined || lat === undefined) return;
       const nombre = escapar(String(f.properties?.nombre ?? ""));
-      const id = String(f.properties?.id ?? "");
+      // Doble filtro: `rutaInternaSegura` ya descartó cualquier esquema que no
+      // sea una ruta interna (escapar entidades NO frena un `javascript:`), y
+      // `escapar` impide además romper el atributo.
+      const href = escapar(rutaInternaSegura(String(f.properties?.href ?? "")));
       new maplibregl.Popup({ closeButton: true, offset: 12 })
         .setLngLat([lon, lat])
         .setHTML(
           `<div style="font-size:13px"><div style="font-weight:700;margin-bottom:4px">${nombre}</div>` +
-            `<a href="/cliente/galeria?tienda=${encodeURIComponent(id)}" style="color:#4f46e5;text-decoration:underline">Ver evidencia</a></div>`,
+            `<a href="${href}" style="color:#4f46e5;text-decoration:underline">${escapar(textoEnlaceRef.current)}</a></div>`,
         )
         .addTo(m);
     });
@@ -166,14 +183,14 @@ export function MapaTiendasInner({
     <div
       ref={contenedor}
       role="application"
-      aria-label="Mapa de tiendas por estado"
+      aria-label={etiqueta}
       className="h-[440px] w-full overflow-hidden rounded-xl border border-border"
     />
   );
 }
 
 /** Encuadra el mapa a los pines; con uno solo, centra sin acercar de más. */
-function encuadrar(m: maplibregl.Map, pines: readonly PinTienda[]) {
+function encuadrar(m: maplibregl.Map, pines: readonly PinMapa[]) {
   if (pines.length === 0) return;
   if (pines.length === 1) {
     const p = pines[0];
