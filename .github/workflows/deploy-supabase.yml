@@ -37,6 +37,17 @@ jobs:
     environment: ${{ github.ref_name == 'main' && 'produccion' || 'staging' }}
 
     env:
+      # RELLENO, no un secreto — el mismo truco que `ci.yml`. El hook `send_sms`
+      # (ADR-0008) hace que el CLI VALIDE el formato de este valor al leer
+      # `config.toml`, y lo lee en cualquier comando: sin él, `migration list` y
+      # `db push` mueren con "Invalid hook config" antes de conectarse a nada.
+      #
+      # Es seguro que sea falso porque este workflow NO ejecuta `supabase config
+      # push`: la configuración de auth del proyecto remoto no se toca desde
+      # aquí. ⚠️ Si algún día se añade `config push`, este valor de mentira
+      # viajaría al proyecto real y rompería el envío de OTP — entonces tendría
+      # que pasar a ser un secreto de verdad por entorno.
+      SEND_SMS_HOOK_SECRET: v1,whsec_cmVsbGVuby1kZS1jaS1uby1lcy11bi1zZWNyZXRvLXJlYWw=
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
