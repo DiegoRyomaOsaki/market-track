@@ -64,8 +64,10 @@ alguien construirá encima creyendo que está cerrado.
 | [0007](0007-catalogos-y-tolerancias-precargados.md) | Catálogos y tolerancias pre-cargados por marca | aceptado | 2026-06-18 |
 | [0008](0008-segundo-factor-multicanal-sobre-mfa-nativo.md) | Segundo factor multicanal sobre el MFA nativo de Supabase | aceptado | 2026-07-14 |
 | [0009](0009-tiles-autohospedados-en-r2.md) | Los tiles de los mapas se autohospedan en R2 con Protomaps (PMTiles) | aceptado | 2026-07-16 |
+| [0010](0010-formularios-de-levantamiento-configurables.md) | El formulario de levantamiento es una definición versionada que configura presentación y campos libres, no las reglas de negocio | aceptado | 2026-07-28 |
+| [0011](0011-puntajes-derivados-en-la-base.md) | Los puntajes de Perfect Store y Perfect Merchandiser se derivan en la base, con la configuración congelada en cada resultado | aceptado | 2026-08-04 |
 
-Plantilla: [`0000-plantilla.md`](0000-plantilla.md). Siguiente número libre: **0010**.
+Plantilla: [`0000-plantilla.md`](0000-plantilla.md). Siguiente número libre: **0012**.
 
 Los ADR 0001–0007 portan al registro las decisiones que ya estaban tomadas y
 resumidas en la tabla "Decisiones de arquitectura" de

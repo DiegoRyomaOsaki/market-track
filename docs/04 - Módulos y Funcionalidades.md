@@ -112,6 +112,132 @@ están en Linear y reflejadas en las tablas de abajo.
 
 ---
 
+## Tercera revisión con el cliente — agosto 2026
+
+Reunión del **3 ago 2026**. El cliente pidió **dos métricas** que el sistema no
+medía y que cambian para qué sirve el producto. Es alcance nuevo, fuera de la
+propuesta aceptada. La tabla de más abajo desglosa esas dos peticiones en las 16
+piezas que hay que construir — no son 16 cosas que pidiera el cliente.
+
+- **Perfect Store** — cómo de bien está ejecutada la marca en una tienda. Es lo
+  que el cliente le vende a la marca: *"te ofrezco medirte Perfect Store en Perú,
+  que hoy nadie te lo hace"*.
+- **Perfect Merchandiser** — un plan de lealtad que puntúa al mercaderista
+  **solo por lo que él controla**. Perfect Store no sirve para evaluarlo: *"si el
+  tipo es el encargado de las tiendas de provincia que son más chiquitas, nunca
+  le va a poder competir al que trabaja en la tienda más grande"*.
+
+### Perfect Store — las 5 variables
+
+El **peso y el objetivo de cada variable los fija la marca**, no nosotros:
+*"la marca es la que tiene que alinearnos"*. La ponderación se afina por
+**categoría de producto y tipo de tienda**: *"no es por SKU, es por categoría,
+por tipo tienda"*.
+
+| # | Variable | Cómo se mide | Fase |
+|---|---|---|---|
+| 1 | **Distribución / disponibilidad** | % de SKUs presentes vs. el surtido ideal de esa tienda | ✅ |
+| 2 | **Visibilidad** | share of shelf real vs. objetivo, 0–100 con tope en 100 | ✅ |
+| 3 | **Precio y promoción** | SKUs dentro de tolerancia / evaluados × 100 | ✅ |
+| 4 | **Material POP y activación** | presencia y estado de lo comprometido | 🟡 |
+| 5 | **Orden y limpieza** | escala cualitativa de 3 niveles **con foto** | 🟡 |
+
+Las tres primeras se calculan sobre datos que **ya se capturan** hoy en el
+levantamiento — *"las tres primeras ya las tenemos"*.
+
+### Perfect Merchandiser — las 5 variables
+
+| # | Variable | Cómo se mide | Fase |
+|---|---|---|---|
+| 1 | **Puntualidad** | desvío contra la hora planificada de la parada | ✅ |
+| 2 | **Asistencia** | la parada se visitó o no — *"una cosa es que llegues tarde, pero otra cosa es que ni siquiera llegues"* | ✅ |
+| 3 | **Tiempo efectivo de atención** | ⚠️ **sin fórmula acordada** (ver abajo) | 🔸 andamiaje, llega desactivada |
+| 4 | **Calidad de registro** | completitud de campos y fotos presentes | ✅ |
+| 5 | **Herramientas de trabajo** | checklist del check-in | ✅ |
+
+> 🔸 no es una fase: la variable 3 se construye en el piloto pero **nace apagada**
+> porque nadie ha acordado cómo se mide. Encenderla no requiere desarrollo nuevo,
+> requiere una decisión.
+
+### Las dos peticiones, desglosadas en 16 piezas
+
+| # | Pieza | Disposición | Dónde impacta |
+|---|---|---|---|
+| 1 | **Categoría de producto** en el catálogo | ✅ nuevo al piloto | `categoria` + `sku.categoria_id` · panel · importador |
+| 2 | **Hora planificada** por parada | ✅ nuevo al piloto | `rutero_parada.hora_planificada` · derivados en base |
+| 3 | **Configuración de Perfect Store** por marca/categoría/tipo de tienda | ✅ nuevo al piloto | tabla de config versionada · panel |
+| 4 | **Motor de puntaje** (distribución, visibilidad, precio/promo) | ✅ nuevo al piloto | vista/función + `test:db` |
+| 5 | **Ponderado total y agregados** por categoría, tipo de tienda y periodo | ✅ nuevo al piloto | núcleo · alimenta panel y portal |
+| 6 | **Check-in con checklist** de herramientas | ✅ nuevo al piloto | formulario configurable extendido al check-in · app |
+| 7 | **Motor Perfect Merchandiser** | ✅ nuevo al piloto | puntaje por mercaderista y periodo · niveles de bono |
+| 8 | **Portal: Perfect Store con drill-down** y evolución | ✅ nuevo al piloto | portal cliente |
+| 9 | **docs de esta revisión** | ✅ | este documento · `03` · ADR-0011 |
+| 10 | **Material POP y activación** ampliados | 🟡 | `exhibicion` ampliada · 4ª variable |
+| 11 | **Orden y limpieza** con escala cualitativa | 🟡 | paso configurable + foto · 5ª variable |
+| 12 | **Panel: configurar** Perfect Store y niveles de bono | 🟡 | panel admin |
+| 13 | **Panel: ranking** de mercaderistas con desglose | 🟡 | panel |
+| 14 | **Móvil: mi puntaje** y mi posición | 🟡 | app · sync rules |
+| 15 | **Surtido ideal** por tipo de tienda (plantilla) | 🟡 | panel · expande `tienda_sku` |
+| 16 | **Publicar el prototipo** navegable para el cliente | 🟡 | compromiso de Diego en la reunión |
+
+> **Consecuencia de este corte:** con las variables 4 y 5 en 🟡, **Perfect Store
+> entra al piloto con 3 de sus 5 variables**. La ponderación renormaliza sobre
+> las evaluadas, así que el número no queda inflado ni hundido — pero no es el
+> Perfect Store completo que se le describió a la marca. Qué hacer con eso es una
+> decisión abierta; está abajo.
+
+### Decisiones cerradas en la reunión
+
+**Orden y limpieza no la puntúa el mercaderista.** Nada de que se ponga nota a sí
+mismo — *"es juez y parte"*. Escala cualitativa de tres niveles (bien / regular /
+mal) **siempre con foto**, para que el supervisor pueda auditarla. Lo que vale
+cada nivel es configuración.
+
+**La calificación automática por imagen queda fuera del piloto.** Necesita un set
+de fotos modelo por tipo de tienda que hoy no existe. Lo que sí se hace ahora es
+**acumular la evidencia** para poder entrenarlo después.
+
+**La foto del checklist de herramientas es opcional a propósito.** No tenerlas
+equivale a no fotografiarlas, así que la ausencia de foto ya descuenta: se ahorra
+un paso de calificación manual sin bloquear el flujo de campo.
+
+**El ranking completo no baja al teléfono.** Cada mercaderista ve *su* puntaje y
+*su* posición — *"si tú lo quieres compartir, es otra historia"*. Es una decisión
+de producto con consecuencia técnica: ver [[03 - Modelo de Datos]] para qué
+implica en las reglas de sincronización.
+
+**Un puntaje ya calculado conserva la configuración con la que se calculó**, y
+**una variable no evaluada renormaliza el peso en vez de puntuar cero**. Las dos
+invariantes viven en [[03 - Modelo de Datos]], "Entidades añadidas tras la 3ª
+revisión", que es donde se modelan.
+
+### Decisiones abiertas — no las inventamos
+
+**Cómo se mide el tiempo efectivo de atención.** El propio cliente lo dejó sin
+cerrar: *"no sé cómo medirlo realmente y también tengo miedo porque puede ser un
+incentivo perverso de que haga todo mal y rápido… ahí hay que pensar un poquito
+más"*. Se construye el andamiaje y la variable llega **desactivada por defecto**.
+No se inventa una fórmula: hace falta acordarla.
+
+**Si el material POP suma dentro del tope de 100 o por encima.** *"Igual podrías
+tener 100 puntos de perfect store y esto te suma y te lleva a 110."* Se define
+**con cada marca**, así que el modelo lo soporta como configuración
+(`dentro_del_tope` | `bonus_sobre_100`) y no se fija aquí una respuesta.
+
+**La unidad del share of shelf.** Frentes o centímetros — *"ahí se mide por
+frentes o se mide por distancia real"*. También es configuración por marca.
+
+**Si el piloto sale con Perfect Store a 3 de 5 variables.** Consecuencia directa
+del corte de arriba, y la única de estas cuatro que **no** la dejó abierta el
+cliente: la abrimos nosotros al priorizar. O se acepta presentar el puntaje
+incompleto —diciéndolo—, o las peticiones 10 y 11 suben a ✅ antes del piloto.
+Conviene resolverlo antes de enseñarle el primer número a la marca.
+
+> Dónde se calculan los puntajes y por qué no en el código de las apps:
+> [ADR-0011](adr/0011-puntajes-derivados-en-la-base.md).
+
+---
+
 ## App móvil (mercaderista)
 
 > Disponible en **Android e iOS** (mismo código React Native + Expo; builds vía EAS). Distribución del piloto: APK por **enlace directo desde el panel de gestión** (Android) y **TestFlight** (iOS) — la publicación en tiendas depende de sus tiempos de aprobación y no está garantizada.
@@ -282,11 +408,16 @@ graph LR
         E[Panel gestión: ruteros, aprobaciones, alertas contingencia]
         F[Portal cliente: dashboard, mapa, fotos, alertas email, export]
         F2[Auth con 2FA por correo · multi-tenant]
+        Q[Perfect Store: distribución, visibilidad, precio/promo]
+        R[Perfect Merchandiser: puntualidad, asistencia, registro, herramientas]
     end
     subgraph "🟡 Fase 2 — Inteligencia de campo"
         G[IA Share of Shelf - agnóstica al modelo]
         I[Vencimientos / control de vigencia por foto]
         L[Cruce OC + SKUs descontinuados]
+        S[Perfect Store: material POP y orden/limpieza]
+        T[Ranking en panel · mi puntaje en el móvil]
+        U[Surtido ideal por tipo de tienda]
     end
     subgraph "🔵 Fase 3 — Cumplimiento y comunicación"
         K[Jornada/horas extra SUNAFIL]
