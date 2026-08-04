@@ -87,6 +87,71 @@ describe("borradorDefinicionSchema", () => {
   });
 });
 
+describe("topes del borrador", () => {
+  // El borrador relaja los MÍNIMOS (se guarda a medio editar), pero no los
+  // topes: son lo que impide que una fila crezca sin límite, y eso no depende
+  // de si el trabajo está terminado.
+
+  it("rechaza un borrador con más pasos de los permitidos", () => {
+    const pasos = Array.from({ length: 21 }, (_, i) => ({
+      id: `p${i}`,
+      titulo: "",
+      orden: i,
+      campos: [],
+    }));
+    expect(borradorDefinicionSchema.safeParse({ pasos }).success).toBe(false);
+  });
+
+  it("rechaza una etiqueta desmesurada aunque el borrador permita vacías", () => {
+    expect(
+      borradorDefinicionSchema.safeParse({
+        pasos: [
+          {
+            id: "p1",
+            titulo: "",
+            orden: 0,
+            campos: [{ id: "c", tipo: "texto", etiqueta: "x".repeat(121) }],
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("sigue aceptando el borrador a medio editar", () => {
+    expect(
+      borradorDefinicionSchema.safeParse({
+        pasos: [
+          {
+            id: "p1",
+            titulo: "",
+            orden: 0,
+            campos: [{ id: "c", tipo: "texto", etiqueta: "" }],
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("un rango invertido SÍ se puede guardar como borrador", () => {
+    // El admin puede teclear el máximo antes que el mínimo; bloquearlo aquí
+    // haría imposible escribir. La verja está al publicar.
+    expect(
+      borradorDefinicionSchema.safeParse({
+        pasos: [
+          {
+            id: "p1",
+            titulo: "",
+            orden: 0,
+            campos: [
+              { id: "n", tipo: "entero", etiqueta: "N", min: 10, max: 5 },
+            ],
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+});
+
 describe("publicarSchema", () => {
   const definicionValida = {
     pasos: [
@@ -115,6 +180,29 @@ describe("publicarSchema", () => {
         nombre: "Base",
         activo: true,
         definicion: { pasos: [] },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rechaza publicar un rango invertido: el portero no depende del navegador", () => {
+    // El constructor ya lo comprobaba para apagar el botón "Publicar". Esta es
+    // la comprobación que protege a quien no pasa por ese botón.
+    expect(
+      publicarSchema.safeParse({
+        nombre: "Base",
+        activo: true,
+        definicion: {
+          pasos: [
+            {
+              id: "p1",
+              titulo: "X",
+              orden: 0,
+              campos: [
+                { id: "n", tipo: "entero", etiqueta: "N", min: 10, max: 5 },
+              ],
+            },
+          ],
+        },
       }).success,
     ).toBe(false);
   });

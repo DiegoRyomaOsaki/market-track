@@ -83,10 +83,16 @@ export function resolverVersionAnclada(
   return null;
 }
 
+// El techo se aplica SIEMPRE al final, aunque el suelo ya haya subido el valor.
+// Con un rango invertido —{min:10, max:5}, que el esquema estricto ya rechaza al
+// publicar pero que puede venir en una definición guardada antes de esa verja—
+// la versión anterior devolvía 10: por encima del máximo declarado por el propio
+// campo. Ningún rango imposible tiene una respuesta buena, pero devolver algo que
+// supera el techo es la peor de todas, porque el dato guardado contradice al
+// formulario que lo pidió.
 const clamp = (n: number, min?: number, max?: number): number => {
-  if (min != null && n < min) return min;
-  if (max != null && n > max) return max;
-  return n;
+  const conSuelo = min != null && n < min ? min : n;
+  return max != null && conSuelo > max ? max : conSuelo;
 };
 
 /** Un tipo de la unión que no debería llegar aquí: fuerza la exhaustividad. */
