@@ -1,5 +1,7 @@
 import type { Database } from "@market-track/db";
 
+import type { ColorPin } from "@/lib/mapa/pines";
+
 // La lógica PURA del dashboard del portal (MAR-55): el período por defecto y el
 // anterior, la tendencia vs. el período previo, el color del pin y el armado de
 // las tarjetas de KPI desde la fila que devuelve `dashboard_kpis`. Vive fuera de
@@ -77,8 +79,6 @@ export function calcularTendencia(
   const direccion = delta > 0 ? "sube" : delta < 0 ? "baja" : "igual";
   return { disponible: true, delta, direccion };
 }
-
-export type ColorPin = "verde" | "ambar" | "rojo";
 
 /** El color del pin de una tienda. Rojo = alerta o no visitada; ámbar = visita en
  * curso; verde = visita completada (design §8.1). El rojo por alerta manda aunque

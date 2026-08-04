@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 
 import { FeedAlertas } from "@/components/portal/dashboard/feed-alertas";
 import { KpisFila } from "@/components/portal/dashboard/kpis";
-import { MapaTiendas } from "@/components/portal/dashboard/mapa-tiendas";
+import { MapaPines } from "@/components/mapa/mapa-pines";
 import { Aviso } from "@/components/panel/tabla";
+import type { ColorPin } from "@/lib/mapa/pines";
 import {
   armarKpis,
   colorDePin,
@@ -15,6 +16,14 @@ import { modulosDelCliente, requerirModulo } from "@/lib/portal/estado-modulos";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Dashboard — Market Track" };
+
+// Qué significa cada color para quien no ve el mapa (WCAG 1.4.1: el color no
+// puede ser el único portador de significado).
+const ESTADO_DEL_PIN: Record<ColorPin, string> = {
+  verde: "al día",
+  ambar: "visita en curso",
+  rojo: "requiere atención",
+};
 
 export default async function DashboardPortalPage({
   searchParams,
@@ -47,13 +56,22 @@ export default async function DashboardPortalPage({
   const fila = kpisRes.data?.[0] ?? null;
   const kpis = fila ? armarKpis(fila) : [];
 
-  const pines = (pinesRes.data ?? []).map((p) => ({
-    id: p.id,
-    nombre: p.nombre,
-    lat: p.lat,
-    lon: p.lon,
-    color: colorDePin(p.ultima_visita_estado, p.tiene_alerta, p.visitada),
-  }));
+  const pines = (pinesRes.data ?? []).map((p) => {
+    const color = colorDePin(
+      p.ultima_visita_estado,
+      p.tiene_alerta,
+      p.visitada,
+    );
+    return {
+      id: p.id,
+      nombre: p.nombre,
+      lat: p.lat,
+      lon: p.lon,
+      color,
+      href: `/cliente/galeria?tienda=${encodeURIComponent(p.id)}`,
+      descripcion: ESTADO_DEL_PIN[color],
+    };
+  });
 
   const alertas = alertasRes.data ?? [];
 
@@ -65,7 +83,12 @@ export default async function DashboardPortalPage({
         <div className="lg:col-span-2">
           {estado.mapa ? (
             env.TILES_URL ? (
-              <MapaTiendas urlTiles={env.TILES_URL} pines={pines} />
+              <MapaPines
+                urlTiles={env.TILES_URL}
+                pines={pines}
+                textoEnlace="Ver evidencia"
+                etiqueta="Tiendas por estado"
+              />
             ) : (
               <Aviso>No hay mapa base configurado para este entorno.</Aviso>
             )

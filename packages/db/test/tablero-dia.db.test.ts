@@ -139,12 +139,7 @@ describe("tablero_dia", () => {
         `insert into public.visita
            (tenant_id, rutero_parada_id, mercaderista_id, tienda_id)
          values ($1, $2, $3, $4) returning id`,
-        [
-          TENANTS.maracumango,
-          PARADA,
-          USUARIOS.mercaderistaMaracumango,
-          TIENDA,
-        ],
+        [TENANTS.maracumango, PARADA, USUARIOS.mercaderistaMaracumango, TIENDA],
       );
       await c.query("set local role authenticated");
 
@@ -247,7 +242,8 @@ describe("tablero_contingencias", () => {
     await comoUsuario(db, USUARIOS.supervisor, async (c) => {
       const filas = await contingencias(c, await hoyEnLima(c));
       const suya = filas.find(
-        (f) => f.motivo === "Góndola en remodelación, no se pudo verificar precio",
+        (f) =>
+          f.motivo === "Góndola en remodelación, no se pudo verificar precio",
       );
       expect(suya).toMatchObject({ paso: "precios", estado: "nueva" });
       expect(suya?.tienda_nombre).toBeTruthy();
