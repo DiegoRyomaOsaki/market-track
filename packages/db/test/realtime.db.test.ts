@@ -295,12 +295,7 @@ describe("emisión desde los triggers", () => {
         `insert into public.visita
            (tenant_id, rutero_parada_id, mercaderista_id, tienda_id)
          values ($1, $2, $3, $4) returning id`,
-        [
-          TENANTS.maracumango,
-          PARADA,
-          USUARIOS.mercaderistaMaracumango,
-          TIENDA,
-        ],
+        [TENANTS.maracumango, PARADA, USUARIOS.mercaderistaMaracumango, TIENDA],
       );
       // Vaciar DESPUÉS del check-in: lo que se mide es lo que emite el UPDATE.
       await vaciarMensajes(c);
