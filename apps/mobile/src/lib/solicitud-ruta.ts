@@ -16,9 +16,7 @@ export type TipoSolicitud = (typeof TIPOS_SOLICITUD)[number]["id"];
 
 /** Una solicitud es válida si el tipo es conocido y el motivo no está vacío. */
 export function solicitudValida(tipo: string, motivo: string): boolean {
-  return (
-    TIPOS_SOLICITUD.some((t) => t.id === tipo) && motivo.trim().length > 0
-  );
+  return TIPOS_SOLICITUD.some((t) => t.id === tipo) && motivo.trim().length > 0;
 }
 
 const ESTADO_ETIQUETA: Record<string, string> = {

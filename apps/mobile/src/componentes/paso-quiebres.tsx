@@ -97,7 +97,10 @@ export function PasoQuiebres({
       keyboardShouldPersistTaps="handled"
     >
       {cargando ? (
-        <ActivityIndicator color={colores.marca} style={{ marginTop: espacio.l }} />
+        <ActivityIndicator
+          color={colores.marca}
+          style={{ marginTop: espacio.l }}
+        />
       ) : skus.length === 0 ? (
         <Text style={[p.nota, { marginTop: espacio.l }]}>
           Sin SKU codificados para esta marca.
@@ -113,7 +116,11 @@ export function PasoQuiebres({
                 <Text style={p.filaTexto} numberOfLines={1}>
                   {s.nombre}
                 </Text>
-                <Badge quiebre={quiebre} diferencia={diferencia} delta={deltaDiferencia(st.sistema, st.piso)} />
+                <Badge
+                  quiebre={quiebre}
+                  diferencia={diferencia}
+                  delta={deltaDiferencia(st.sistema, st.piso)}
+                />
               </View>
               <View style={p.filaEntre}>
                 <Text style={p.filaTexto}>Sistema</Text>

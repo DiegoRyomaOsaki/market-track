@@ -106,7 +106,10 @@ export function PasoPrecios({
       keyboardShouldPersistTaps="handled"
     >
       {cargando ? (
-        <ActivityIndicator color={colores.marca} style={{ marginTop: espacio.l }} />
+        <ActivityIndicator
+          color={colores.marca}
+          style={{ marginTop: espacio.l }}
+        />
       ) : skus.length === 0 ? (
         <Text style={[p.nota, { marginTop: espacio.l }]}>
           Sin SKU codificados para esta marca.
@@ -140,7 +143,10 @@ export function PasoPrecios({
                 <SiNo
                   valor={d.hayPromo}
                   onCambio={(v) =>
-                    set(s.sku_id, { hayPromo: v, comunicada: v && d.comunicada })
+                    set(s.sku_id, {
+                      hayPromo: v,
+                      comunicada: v && d.comunicada,
+                    })
                   }
                   etiqueta={`Promoción de ${s.nombre}`}
                 />

@@ -58,7 +58,9 @@ export const lecturaFirmadaSchema = z.object({
 
 // Fail-closed: sin las cuatro variables no se puede firmar nada, así que la función
 // no arranca — nunca un fallback que abra el bucket.
-export function leerConfigR2(env: Record<string, string | undefined>): ConfigR2 {
+export function leerConfigR2(
+  env: Record<string, string | undefined>,
+): ConfigR2 {
   const accountId = env.R2_ACCOUNT_ID;
   const accessKeyId = env.R2_ACCESS_KEY_ID;
   const secretAccessKey = env.R2_SECRET_ACCESS_KEY;

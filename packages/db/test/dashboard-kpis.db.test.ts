@@ -83,7 +83,11 @@ async function levantar(
   return visita;
 }
 
-async function kpis(c: Client, desde = DESDE, hasta = HASTA): Promise<FilaKpis> {
+async function kpis(
+  c: Client,
+  desde = DESDE,
+  hasta = HASTA,
+): Promise<FilaKpis> {
   const r = await c.query<FilaKpis>(
     "select * from public.dashboard_kpis($1,$2)",
     [desde, hasta],

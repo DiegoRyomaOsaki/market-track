@@ -87,7 +87,9 @@ export function PasoDespues({ usuario, onCompletar, onContingencia }: Props) {
           <View
             style={[
               e.punto,
-              { backgroundColor: foto ? colores.completado : colores.textoSuave },
+              {
+                backgroundColor: foto ? colores.completado : colores.textoSuave,
+              },
             ]}
           />
           <Text style={p.filaTexto}>
