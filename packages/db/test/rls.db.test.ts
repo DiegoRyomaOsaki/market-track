@@ -284,7 +284,7 @@ describe("portal_modulo_habilitado — config de secciones del portal (MAR-74)",
   });
 
   it("anon no puede ejecutar portal_modulos: es SECURITY DEFINER", async () => {
-    // Lo destapó el advisor de Supabase en el primer despliegue (MAR-63): la
+    // Lo destapó el advisor de Supabase en el primer despliegue: la
     // función se creó con `grant execute to authenticated` pero anon la
     // alcanzaba igual. Se revoca de PUBLIC y de anon porque local y la nube
     // conceden distinto, y este test fija el lado local — el que ve el CI.
@@ -309,5 +309,18 @@ describe("portal_modulo_habilitado — config de secciones del portal (MAR-74)",
        order by 1`,
     );
     expect(r.rows.map((x) => x.funcion)).toEqual([]);
+  });
+
+  it("authenticated CONSERVA su execute sobre app.perfil_efectivo", async () => {
+    // La otra mitad del revoke de arriba, y la que de verdad duele: las
+    // políticas RLS de TODAS las tablas llaman a esta función como
+    // `authenticated`. Un `revoke … from public, authenticated` —copiar la línea
+    // de al lado y añadir un rol de más— dejaría el esquema entero sin acceso,
+    // y el síntoma sería una cascada de "permission denied for schema app" que
+    // no señala a su causa. Este test sí la señala.
+    const r = await db.query<{ puede: boolean }>(
+      `select has_function_privilege('authenticated', 'app.perfil_efectivo()', 'EXECUTE') as puede`,
+    );
+    expect(r.rows[0]?.puede).toBe(true);
   });
 });

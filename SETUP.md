@@ -102,6 +102,10 @@ De momento solo **Supabase**, con dos proyectos en la organización
 | Staging | `market-track-staging` | us-east-2 | `dev` |
 | Producción | `market-track` | us-east-1 | `main` |
 
+> La región de **producción** está razonada en `CLAUDE.md` (Virginia queda más
+> cerca *en red* de Lima que São Paulo). Staging está en us-east-2 y da igual: no
+> le sirve a ningún usuario, así que su latencia no mide nada.
+
 PowerSync, Cloudflare R2 y Resend todavía no tienen cuenta. Cuando aparezcan,
 cada app tendrá su `.env.example` y las claves **no** se versionan. Ver
 `CLAUDE.md` → *Environment Variables*.
@@ -114,6 +118,10 @@ cada app tendrá su `.env.example` y las claves **no** se versionan. Ver
 `.github/workflows/deploy-supabase.yml` al hacer push a `dev` (staging) o `main`
 (producción). Un `db push` desde un portátil deja la nube y el repositorio
 contando historias distintas, y quien descubre la diferencia es el cliente.
+
+Usar entornos de GitHub y no secretos del repositorio es lo que permite exigir
+**aprobación manual antes de tocar producción** (Settings → Environments →
+*required reviewers*). El workflow no puede imponerlo solo.
 
 ### Los secretos, y por qué están donde están
 
@@ -141,41 +149,35 @@ supabase secrets set --project-ref <REF> \
 > `SUPABASE_SERVICE_ROLE_KEY` **no se carga a mano**: Supabase ya lo inyecta en
 > las Edge Functions. Ponerlo otra vez sería una copia más que mantener.
 
-Usar el entorno de GitHub y no secretos del repositorio es lo que permite exigir
-**aprobación manual antes de tocar producción** (Settings → Environments →
-*required reviewers*). El workflow no puede imponerlo solo.
-
 ### Poner en marcha un entorno por primera vez
 
-1. Carga los tres secretos de GitHub en el entorno que corresponda.
-2. Carga los secretos de las funciones con `supabase secrets set`.
-3. Haz push a la rama del entorno. El workflow enlaza, lista lo pendiente,
-   aplica las migraciones y despliega las funciones.
-4. **Apaga *Allow public access* en Realtime Settings** del dashboard.
+Carga los secretos de las dos tablas de arriba y haz push a la rama del entorno.
+El workflow hace el resto. Después, el paso que no se puede automatizar:
 
-> ⚠️ El paso 4 no es opcional ni cosmético. Los feeds en vivo del supervisor y
-> del portal usan **canales privados** cuya autorización son las políticas RLS
-> sobre `realtime.messages`. Con el acceso público encendido, Realtime **no las
-> evalúa** y cualquiera con una sesión puede suscribirse a los canales de
-> cualquier cliente. Es configuración de proyecto, no migración: no hay forma de
-> ponerlo en el repositorio, y por eso está aquí.
+### ⚠️ Apagar *Allow public access* en Realtime
+
+**En cada proyecto, la primera vez.** Dashboard → Realtime → Settings.
+
+Los feeds en vivo del supervisor y del portal usan **canales privados** cuya
+autorización son las políticas RLS sobre `realtime.messages`. Con el acceso
+público encendido Realtime **no las evalúa**, y cualquiera con una sesión puede
+suscribirse a los canales de cualquier cliente — el aislamiento multi-tenant, que
+es la promesa contractual del producto, se cae en ese canal.
+
+Es configuración de proyecto, no migración: no hay forma de ponerlo en el
+repositorio, y por eso vive aquí y no en un archivo que alguien pueda revisar.
 
 ### El seed nunca toca la nube
 
-`supabase db push` no ejecuta `seed.sql`, pero `db reset --linked` o un `psql -f`
-sí lo harían — y ese archivo crea un admin con la contraseña `password123`.
-
-El propio `seed.sql` **aborta** si detecta que no está en el Supabase local, así
-que el accidente no depende de que nadie se acuerde. Lo reconoce por el JWT
-secret de desarrollo, que es público e idéntico en todas las máquinas y que los
-proyectos de la nube ni siquiera exponen. Falla cerrado: si no puede confirmar
-que es local, no corre.
+`db push` no lo ejecuta, pero `db reset --linked` sí — y `seed.sql` crea un admin
+con la contraseña `password123`. El archivo **aborta** si no está en el Supabase
+local; si alguien lo intenta, el mensaje de error explica el resto.
 
 ### Comprobar que un despliegue quedó bien
 
 ```bash
 supabase migration list --project-ref <REF>   # local y remoto deben coincidir
-supabase functions list --project-ref <REF>   # las 6 funciones desplegadas
+supabase functions list --project-ref <REF>   # las de supabase/functions/
 ```
 
 ---

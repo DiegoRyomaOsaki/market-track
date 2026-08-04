@@ -1,15 +1,14 @@
 name: Desplegar Supabase
 
-# El esquema y las Edge Functions llegan a la nube POR AQUÍ, nunca a mano desde
-# el portátil de nadie. Un `db push` manual deja la nube y el repositorio
-# contando historias distintas, y el que descubre la diferencia es el cliente.
-#
 #   dev  → market-track-staging
 #   main → market-track (producción)
 #
-# Solo en `push`: un pull request NO despliega. Su CI ya levanta un Postgres
-# real y corre `db reset` con las migraciones enteras, así que la verificación
-# ocurre antes de mergear; desplegar desde un PR abriría la nube a cualquier rama.
+# El porqué de que nadie despliegue a mano está en SETUP.md → "Desplegar a la
+# nube", junto al runbook de secretos.
+#
+# Solo en `push`: un pull request NO despliega. Su CI ya levanta un Postgres real
+# y corre `db reset` con las migraciones enteras, así que la verificación ocurre
+# antes de mergear; desplegar desde un PR abriría la nube a cualquier rama.
 on:
   push:
     branches: [dev, main]
@@ -22,6 +21,9 @@ concurrency:
   # está en marcha: una migración interrumpida a medias es peor que esperar.
   group: deploy-${{ github.ref }}
   cancel-in-progress: false
+
+env:
+  NODE_VERSION: "22"
 
 jobs:
   desplegar:
@@ -46,54 +48,36 @@ jobs:
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "22"
+          node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Comprobar que los secretos están puestos
-        # Sin esto, un secreto que falta se manifiesta como un error del CLI a
-        # mitad del despliegue, con medio esquema aplicado. Mejor no empezar.
+      - name: Comprobar la contraseña de la base
+        # Solo esta: un token o un ref mal puestos mueren en `link`, que es de
+        # solo lectura y da un error claro. La contraseña la consume `db push`,
+        # que sin ella se queda esperando en un prompt hasta agotar el timeout —
+        # quince minutos para acabar sin saber por qué.
         run: |
-          faltan=""
-          [ -n "$SUPABASE_ACCESS_TOKEN" ] || faltan="$faltan SUPABASE_ACCESS_TOKEN"
-          [ -n "$SUPABASE_DB_PASSWORD" ] || faltan="$faltan SUPABASE_DB_PASSWORD"
-          [ -n "$PROJECT_REF" ] || faltan="$faltan SUPABASE_PROJECT_REF"
-          if [ -n "$faltan" ]; then
-            echo "::error::Faltan secretos en el entorno '${{ github.ref_name == 'main' && 'produccion' || 'staging' }}':$faltan"
-            echo "Cárgalos en Settings → Environments. Ver SETUP.md → Desplegar a la nube."
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::Falta SUPABASE_DB_PASSWORD en el entorno '${{ github.ref_name == 'main' && 'produccion' || 'staging' }}'. Ver SETUP.md → Desplegar a la nube."
             exit 1
           fi
 
       - name: Enlazar el proyecto
         run: pnpm exec supabase link --project-ref "$PROJECT_REF"
 
-      - name: Migraciones pendientes
-        # Se listan ANTES de aplicar: si algo sale mal, el log dice exactamente
-        # qué se estaba intentando en vez de obligar a deducirlo.
+      - name: Deriva entre el repositorio y la nube
+        # `db push` ya dice qué va a aplicar. Esto añade la otra mitad: qué hay en
+        # la nube que no está en el repositorio, que es lo que delata un cambio
+        # hecho a mano por el dashboard.
         run: pnpm exec supabase migration list --linked
 
       - name: Aplicar migraciones
-        # `db push` aplica solo las que faltan y NUNCA ejecuta seed.sql. Aun así
-        # el propio seed aborta si lo llaman contra un proyecto remoto: dos
-        # cerrojos para el mismo accidente, porque ese accidente es irreversible.
+        # `db push` nunca ejecuta seed.sql.
         run: pnpm exec supabase db push --linked
 
       - name: Desplegar Edge Functions
-        # `_shared` no es una función: es la carpeta de código común y el CLI
-        # fallaría al intentar desplegarla como si lo fuera.
-        run: |
-          for dir in supabase/functions/*/; do
-            nombre=$(basename "$dir")
-            [ "$nombre" = "_shared" ] && continue
-            echo "→ $nombre"
-            pnpm exec supabase functions deploy "$nombre" --project-ref "$PROJECT_REF"
-          done
-
-      - name: Resumen
-        run: |
-          echo "### Desplegado a \`$PROJECT_REF\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Commit \`${GITHUB_SHA:0:7}\` desde \`${GITHUB_REF_NAME}\`." >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Los **secretos de las funciones** (R2, Resend, OTP) no los pone este workflow: viven en el proyecto Supabase y se cargan una vez con \`supabase secrets set\`. Ver SETUP.md." >> "$GITHUB_STEP_SUMMARY"
+        # Sin nombres: el CLI despliega todas las de `supabase/functions/`. La
+        # carpeta `_shared` no entra porque su nombre no es un slug válido.
+        run: pnpm exec supabase functions deploy

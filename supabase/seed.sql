@@ -4,9 +4,6 @@
 -- NO lo ejecuta (solo `db reset`, en local), pero `db reset --linked` o un
 -- `psql -f seed.sql` contra la nube SÍ — y eso pondría un administrador con
 -- contraseña trivial en la base de datos de un cliente real.
---
--- El aviso de arriba era solo un comentario, y un comentario no ha detenido
--- nunca a nadie a las once de la noche. Esto sí:
 
 do $$
 begin
@@ -14,10 +11,8 @@ begin
   -- se reconoce por su JWT secret de desarrollo — el mismo en todas las
   -- máquinas, publicado en la documentación de Supabase. Un proyecto de la nube
   -- ni siquiera expone ese ajuste (comprobado contra los dos proyectos del
-  -- cliente), así que el `coalesce` lo deja en cadena vacía y esto aborta.
-  --
-  -- Falla CERRADO: cualquier entorno que no sea exactamente el local se rechaza,
-  -- incluido uno que no sepamos identificar.
+  -- cliente), así que el `coalesce` lo deja en cadena vacía y esto aborta. Falla
+  -- CERRADO: lo que no se pueda confirmar como local, se rechaza.
   if coalesce(current_setting('app.settings.jwt_secret', true), '') <>
      'super-secret-jwt-token-with-at-least-32-characters-long'
   then

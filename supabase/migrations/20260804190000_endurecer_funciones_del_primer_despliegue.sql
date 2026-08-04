@@ -2,7 +2,7 @@
 --
 -- Los advisors de Supabase solo corren contra un proyecto desplegado, y hasta
 -- hoy no había ninguno: 21 migraciones escritas sin que nadie pudiera pasarles
--- este linter. Al sembrar staging (MAR-63) aparecieron siete avisos, todos de
+-- este linter. Al sembrar staging aparecieron siete avisos, todos de
 -- funciones creadas después de `20260714190000_fija_search_path_en_funciones`,
 -- que es la migración que estableció esta misma convención por el mismo motivo.
 --
