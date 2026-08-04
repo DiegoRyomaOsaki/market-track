@@ -19,7 +19,11 @@ import {
 // La versión estricta la publica el móvil; la leniente nunca sale del panel (el
 // stream solo replica `publicada = true`).
 
-const nombre = z.string().trim().min(1, "Requerido");
+const nombre = z
+  .string()
+  .trim()
+  .min(1, "Requerido")
+  .max(TOPES_FORMULARIO.etiquetaChars, "Demasiado largo");
 
 /** Marca opcional: "" o ausente significa "todas las marcas del cliente" → null. */
 const marcaOpcional = z

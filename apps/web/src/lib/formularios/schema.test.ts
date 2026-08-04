@@ -1,3 +1,4 @@
+import { TOPES_FORMULARIO } from "@market-track/shared";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -93,12 +94,15 @@ describe("topes del borrador", () => {
   // de si el trabajo está terminado.
 
   it("rechaza un borrador con más pasos de los permitidos", () => {
-    const pasos = Array.from({ length: 21 }, (_, i) => ({
-      id: `p${i}`,
-      titulo: "",
-      orden: i,
-      campos: [],
-    }));
+    const pasos = Array.from(
+      { length: TOPES_FORMULARIO.pasos + 1 },
+      (_, i) => ({
+        id: `p${i}`,
+        titulo: "",
+        orden: i,
+        campos: [],
+      }),
+    );
     expect(borradorDefinicionSchema.safeParse({ pasos }).success).toBe(false);
   });
 
@@ -130,6 +134,57 @@ describe("topes del borrador", () => {
         ],
       }).success,
     ).toBe(true);
+  });
+
+  it("aplica al borrador el resto de topes, no solo pasos y etiqueta", () => {
+    const demasiadasOpciones = Array.from(
+      { length: TOPES_FORMULARIO.opcionesPorCampo + 1 },
+      (_, i) => `O${i}`,
+    );
+    const casos: Record<string, unknown>[] = [
+      {
+        id: "x".repeat(TOPES_FORMULARIO.idChars + 1),
+        tipo: "texto",
+        etiqueta: "",
+      },
+      {
+        id: "c",
+        tipo: "texto",
+        etiqueta: "",
+        ayuda: "x".repeat(TOPES_FORMULARIO.ayudaChars + 1),
+      },
+      {
+        id: "c",
+        tipo: "seleccion",
+        etiqueta: "",
+        opciones: demasiadasOpciones,
+      },
+      {
+        id: "c",
+        tipo: "seleccion",
+        etiqueta: "",
+        opciones: ["x".repeat(TOPES_FORMULARIO.opcionChars + 1)],
+      },
+    ];
+    for (const campo of casos) {
+      expect(
+        borradorDefinicionSchema.safeParse({
+          pasos: [{ id: "p1", titulo: "", orden: 0, campos: [campo] }],
+        }).success,
+      ).toBe(false);
+    }
+  });
+
+  it("rechaza un borrador con más campos de los permitidos en un paso", () => {
+    const campos = Array.from(
+      { length: TOPES_FORMULARIO.camposPorPaso + 1 },
+      (_, i) => ({ id: `c${i}`, tipo: "texto", etiqueta: "" }),
+    );
+    expect(
+      borradorDefinicionSchema.safeParse({
+        pasos: [{ id: "p1", titulo: "", orden: 0, campos }],
+      }).success,
+    ).toBe(false);
   });
 
   it("un rango invertido SÍ se puede guardar como borrador", () => {

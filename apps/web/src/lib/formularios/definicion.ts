@@ -1,7 +1,9 @@
-import type {
-  CampoFormulario,
-  DefinicionFormulario,
-  TipoCampoFormulario,
+import {
+  TOPES_FORMULARIO,
+  excedeTamano,
+  type CampoFormulario,
+  type DefinicionFormulario,
+  type TipoCampoFormulario,
 } from "@market-track/shared";
 
 import type { DefinicionBorrador } from "./schema";
@@ -139,6 +141,11 @@ export function problemasDeDefinicion(pasos: PasoEditable[]): string[] {
   if (pasos.length === 0) {
     problemas.push("Agrega al menos un paso.");
   }
+  if (pasos.length > TOPES_FORMULARIO.pasos) {
+    problemas.push(
+      `El formulario no puede tener más de ${TOPES_FORMULARIO.pasos} pasos.`,
+    );
+  }
 
   const idsVistos = new Set<string>();
 
@@ -148,23 +155,49 @@ export function problemasDeDefinicion(pasos: PasoEditable[]): string[] {
       problemas.push(`El paso ${i + 1} necesita un título.`);
     }
 
+    if (paso.campos.length > TOPES_FORMULARIO.camposPorPaso) {
+      problemas.push(
+        `«${nombrePaso}» supera los ${TOPES_FORMULARIO.camposPorPaso} campos.`,
+      );
+    }
+
     paso.campos.forEach((campo) => {
       const nombreCampo = campo.etiqueta.trim() || "un campo";
       if (campo.etiqueta.trim() === "") {
         problemas.push(`Hay un campo sin etiqueta en «${nombrePaso}».`);
+      }
+      if (campo.etiqueta.trim().length > TOPES_FORMULARIO.etiquetaChars) {
+        problemas.push(
+          `La etiqueta de «${nombreCampo}» supera los ${TOPES_FORMULARIO.etiquetaChars} caracteres.`,
+        );
+      }
+      if (campo.ayuda.trim().length > TOPES_FORMULARIO.ayudaChars) {
+        problemas.push(
+          `La ayuda de «${nombreCampo}» supera los ${TOPES_FORMULARIO.ayudaChars} caracteres.`,
+        );
       }
       if (idsVistos.has(campo.id)) {
         problemas.push(`El campo «${nombreCampo}» está repetido.`);
       }
       idsVistos.add(campo.id);
 
-      if (
-        esSeleccion(campo.tipo) &&
-        opcionesDeTexto(campo.opcionesTexto).length === 0
-      ) {
-        problemas.push(
-          `El campo «${nombreCampo}» es de selección y necesita al menos una opción.`,
-        );
+      if (esSeleccion(campo.tipo)) {
+        const opciones = opcionesDeTexto(campo.opcionesTexto);
+        if (opciones.length === 0) {
+          problemas.push(
+            `El campo «${nombreCampo}» es de selección y necesita al menos una opción.`,
+          );
+        }
+        if (opciones.length > TOPES_FORMULARIO.opcionesPorCampo) {
+          problemas.push(
+            `«${nombreCampo}» supera las ${TOPES_FORMULARIO.opcionesPorCampo} opciones.`,
+          );
+        }
+        if (opciones.some((o) => o.length > TOPES_FORMULARIO.opcionChars)) {
+          problemas.push(
+            `Una opción de «${nombreCampo}» supera los ${TOPES_FORMULARIO.opcionChars} caracteres.`,
+          );
+        }
       }
       if (esNumero(campo.tipo)) {
         if (campo.min.trim() !== "" && !esNumeroFinito(campo.min)) {
@@ -185,6 +218,12 @@ export function problemasDeDefinicion(pasos: PasoEditable[]): string[] {
       }
     });
   });
+
+  if (problemas.length === 0 && excedeTamano(construirDefinicion(pasos))) {
+    problemas.push(
+      "El formulario es demasiado grande para sincronizarse al teléfono.",
+    );
+  }
 
   return problemas;
 }

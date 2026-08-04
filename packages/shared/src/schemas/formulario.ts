@@ -33,6 +33,11 @@ export const TOPES_FORMULARIO = {
   etiquetaChars: 120,
   ayudaChars: 500,
   opcionChars: 120,
+  // Los topes de arriba acotan cada pieza, pero multiplicados dan un peor caso
+  // de varios MB — muy por encima de lo que tiene sentido replicar a un teléfono
+  // por datos móviles. Este es el techo que de verdad importa; los otros evitan
+  // que una sola pieza se desmadre. Un formulario real no pasa de unos pocos KB.
+  bytesTotal: 256 * 1024,
 } as const;
 
 export const campoFormularioSchema = z
@@ -75,6 +80,29 @@ export const pasoFormularioSchema = z.object({
   campos: z.array(campoFormularioSchema).max(TOPES_FORMULARIO.camposPorPaso),
 });
 
+/**
+ * Bytes que ocupa la cadena en UTF-8. Se cuenta a mano y no con `TextEncoder`
+ * porque este paquete es isomorfo (web, móvil y Deno) y no puede dar por hecho
+ * el DOM. Se cuenta en BYTES, no en caracteres, para medir lo mismo que el
+ * `check` de `formulario_version`: en español un solo acento ya son dos.
+ */
+function bytesUtf8(texto: string): number {
+  let bytes = 0;
+  for (const caracter of texto) {
+    const punto = caracter.codePointAt(0) ?? 0;
+    if (punto < 0x80) bytes += 1;
+    else if (punto < 0x800) bytes += 2;
+    else if (punto < 0x10000) bytes += 3;
+    else bytes += 4;
+  }
+  return bytes;
+}
+
+/** El peso real de la definición ya serializada, que es como viaja y se guarda. */
+export function excedeTamano(definicion: unknown): boolean {
+  return bytesUtf8(JSON.stringify(definicion)) > TOPES_FORMULARIO.bytesTotal;
+}
+
 export const definicionFormularioSchema = z
   .object({
     pasos: z.array(pasoFormularioSchema).min(1).max(TOPES_FORMULARIO.pasos),
@@ -85,7 +113,10 @@ export const definicionFormularioSchema = z
       return new Set(ids).size === ids.length;
     },
     { message: "Los id de campo deben ser únicos en todo el formulario" },
-  );
+  )
+  .refine((d) => !excedeTamano(d), {
+    message: "El formulario es demasiado grande para sincronizarse al teléfono",
+  });
 
 export type TipoCampoFormulario = z.infer<typeof tipoCampoFormularioSchema>;
 export type CampoFormulario = z.infer<typeof campoFormularioSchema>;

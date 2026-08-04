@@ -334,6 +334,29 @@ describe("formulario de levantamiento — config del admin, publicar congela", (
     });
   });
 
+  it("la base rechaza una definición enorme aunque no pase por Zod", async () => {
+    // `authenticated` tiene GRANT de insert sobre esta tabla y la política deja
+    // escribir a cualquier admin: una llamada por PostgREST no toca los esquemas
+    // de `packages/shared`. La estructura se sigue confiando a Zod, pero el
+    // TAMAÑO no puede, porque cada versión publicada se replica a todos los
+    // teléfonos. El techo son 256 KB, igual que `TOPES_FORMULARIO.bytesTotal`.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await c.query(
+        `insert into public.formulario_levantamiento (id, tenant_id, nombre)
+         values ($1, $2, 'Para el tope')`,
+        [IDS.nuevoFormulario, TENANTS.maracumango],
+      );
+      await esRechazado(() =>
+        c.query(
+          `insert into public.formulario_version
+             (tenant_id, formulario_id, version, definicion)
+           values ($1, $2, 9, jsonb_build_object('relleno', repeat('x', 300000)))`,
+          [TENANTS.maracumango, IDS.nuevoFormulario],
+        ),
+      );
+    });
+  });
+
   it("el mercaderista no puede crear un formulario (solo el admin)", async () => {
     await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
       await esRechazado(() =>

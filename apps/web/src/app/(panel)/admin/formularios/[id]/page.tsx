@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { ConstructorFormulario } from "@/components/formularios/constructor-formulario";
+import { Aviso } from "@/components/panel/tabla";
 import {
   type DefinicionBorrador,
   borradorDefinicionSchema,
@@ -12,11 +13,22 @@ export const metadata: Metadata = { title: "Editar formulario — Market Track" 
 
 const VACIA: DefinicionBorrador = { pasos: [] };
 
-/** La definición jsonb guardada puede ser un borrador leniente; si no parsea, se
- *  empieza en blanco en vez de reventar la pantalla. */
-function aDefinicion(valor: unknown): DefinicionBorrador {
+/**
+ * La definición jsonb guardada puede ser un borrador leniente.
+ *
+ * Si NO parsea hay que distinguir dos casos, porque tratarlos igual pierde
+ * trabajo: una versión **inexistente** (formulario recién creado) se edita desde
+ * cero, pero una versión **guardada que ya no valida** —por ejemplo una anterior
+ * a los topes de tamaño— no puede abrirse en blanco: el admin vería un editor
+ * vacío, pulsaría "Guardar borrador" y machacaría lo que había. Ahí se avisa y
+ * no se deja editar.
+ */
+function aDefinicion(
+  valor: unknown,
+): { ok: true; definicion: DefinicionBorrador } | { ok: false } {
+  if (valor == null) return { ok: true, definicion: VACIA };
   const parsed = borradorDefinicionSchema.safeParse(valor);
-  return parsed.success ? parsed.data : VACIA;
+  return parsed.success ? { ok: true, definicion: parsed.data } : { ok: false };
 }
 
 export default async function EditarFormularioPage({
@@ -50,6 +62,21 @@ export default async function EditarFormularioPage({
   // Se edita el borrador abierto; si no hay, se parte de la última publicada
   // (una edición abrirá una versión nueva sin tocar la publicada inmutable).
   const trabajo = borrador ?? publicada;
+  const definicion = aDefinicion(trabajo?.definicion);
+
+  if (!definicion.ok) {
+    console.error("[formularios] definición guardada ilegible", {
+      formulario: formulario.id,
+      version: trabajo?.version,
+    });
+    return (
+      <Aviso>
+        La versión guardada de este formulario no se puede leer con las reglas
+        actuales. No se abre el editor para no sobrescribirla: revisa la
+        definición antes de continuar.
+      </Aviso>
+    );
+  }
 
   return (
     <ConstructorFormulario
@@ -58,7 +85,7 @@ export default async function EditarFormularioPage({
       activoInicial={formulario.activo}
       cliente={formulario.tenant?.nombre ?? "—"}
       marca={formulario.marca?.nombre ?? null}
-      definicionInicial={aDefinicion(trabajo?.definicion)}
+      definicionInicial={definicion.definicion}
       versionPublicada={publicada?.version ?? null}
       publicadaAt={publicada?.publicada_at ?? null}
     />
