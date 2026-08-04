@@ -414,6 +414,69 @@ cliente. `tenant_id, modulo, habilitado`. Default: todas habilitadas. Solo el
 admin escribe; el portal lo respeta server-side (una sección deshabilitada no se
 muestra ni es accesible por URL).
 
+### Entidades añadidas tras la 3ª revisión con el cliente (ago 2026)
+
+Las dos métricas nuevas —**Perfect Store** y **Perfect Merchandiser**— no caben
+en el modelo actual: falta el eje por el que se ponderan, falta contra qué
+comparar la llegada del mercaderista, y falta dónde guardar un puntaje sin que se
+reescriba solo cuando alguien cambie los pesos. Ver
+[[04 - Módulos y Funcionalidades]], "Tercera revisión con el cliente". El diseño
+fino de cada tabla vive en su ticket; aquí queda el esbozo.
+
+**`categoria`** — el eje de ponderación que hoy **no existe**. `sku` cuelga de
+`marca` y no hay ningún nivel intermedio, así que no se puede agrupar ni ponderar
+un puntaje "por categoría". `id, tenant_id, nombre, codigo_externo, activo` +
+`sku.categoria_id` **nullable**: la columna primero, la carga después, el consumo
+al final. Es la pieza que bloquea toda la medición.
+
+**Configuración de Perfect Store** — el peso y el objetivo de cada variable, por
+`tenant × marca × categoria × tipo_tienda` con los tres últimos opcionales: la
+fila más específica gana y hay un default de marca. Guarda el peso de las cinco
+variables, el objetivo de share of shelf y **su unidad** (`frentes` |
+`centimetros`), la política de POP (`dentro_del_tope` | `bonus_sobre_100`) y
+cuántos puntos vale cada nivel de la escala cualitativa.
+
+> La **tolerancia de precio no se duplica aquí**: ya vive en
+> `marca.tolerancia_precio_pct` y la usa el motor de alertas. Un segundo dueño
+> divergiría, y el cliente vería dos verdades sobre el mismo SKU.
+
+**`rutero_parada.hora_planificada`** — hora local de Lima esperada en cada
+parada, más una tolerancia en minutos por tenant. Hoy `rutero_parada` solo tiene
+`orden`, así que **no se puede afirmar que alguien llegó tarde**. De aquí salen
+`minutos_desvio` y `asistio`, derivados **en la base** contra `visita.check_in_at`
+(hora de servidor). Una parada sin hora planificada no puntúa puntualidad — no
+penaliza.
+
+**Puntajes de Perfect Store** — el resultado por `levantamiento` (una marca en
+una visita) con su desglose por variable, más los agregados por tienda, marca,
+categoría, tipo de tienda y periodo. Dos invariantes:
+
+- **Cada puntaje guarda con qué configuración se calculó.** Cambiar los pesos no
+  reescribe la historia.
+- **Una variable no evaluada renormaliza el peso, no puntúa cero.** Si el POP no
+  aplica o un paso quedó en contingencia, su peso se reparte entre las evaluadas.
+  Un cero silencioso convierte una visita incompleta en una tienda mal ejecutada.
+
+**Puntajes de Perfect Merchandiser** — por mercaderista y **periodo** (mensual,
+trimestral, anual), con desglose por variable y el nivel de bono alcanzado. Los
+pesos y los rangos de bono son configuración, no código. Un periodo cerrado
+conserva su puntaje.
+
+**Checklist de herramientas del check-in** — ítems sí/no configurables por
+cliente, respondidos en el check-in y enlazados a la `visita`. Obliga a extender
+el formulario configurable al paso de check-in: hoy la definición cuelga de
+cliente + marca, y **el check-in es de la visita, no de una marca**.
+
+**`surtido_ideal`** (🟡) — plantilla `marca × tipo_tienda × sku` que se *expande*
+a `tienda_sku`. No sustituye a la matriz de codificados: `tienda_sku` sigue siendo
+la única fuente de verdad del surtido por tienda, y la plantilla es la forma
+cómoda de rellenarla.
+
+> **Lo que el teléfono descarga.** El mercaderista ve su puntaje y su posición,
+> nunca el de un compañero. Eso no lo resuelve la RLS: la bajada al móvil la
+> deciden las **sync rules**, que deben filtrar por `auth.user_id()` y jamás por
+> un parámetro que mande el cliente. El ranking completo se queda en el panel.
+
 ---
 
 ## Cómo el modelo soporta los flujos del documento
