@@ -5,6 +5,27 @@
 -- `psql -f seed.sql` contra la nube SÍ — y eso pondría un administrador con
 -- contraseña trivial en la base de datos de un cliente real.
 --
+-- El aviso de arriba era solo un comentario, y un comentario no ha detenido
+-- nunca a nadie a las once de la noche. Esto sí:
+
+do $$
+begin
+  -- El único entorno donde este archivo puede correr es el Supabase LOCAL, que
+  -- se reconoce por su JWT secret de desarrollo — el mismo en todas las
+  -- máquinas, publicado en la documentación de Supabase. Un proyecto de la nube
+  -- ni siquiera expone ese ajuste (comprobado contra los dos proyectos del
+  -- cliente), así que el `coalesce` lo deja en cadena vacía y esto aborta.
+  --
+  -- Falla CERRADO: cualquier entorno que no sea exactamente el local se rechaza,
+  -- incluido uno que no sepamos identificar.
+  if coalesce(current_setting('app.settings.jwt_secret', true), '') <>
+     'super-secret-jwt-token-with-at-least-32-characters-long'
+  then
+    raise exception
+      'seed.sql solo corre contra el Supabase LOCAL. Este no lo es: crearía un admin con contraseña "password123" en una base real.';
+  end if;
+end $$;
+--
 -- Datos de prueba. `supabase db reset` los carga solos.
 --
 -- Sirven para dos cosas: verificar los criterios de aceptación de esta migración,

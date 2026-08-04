@@ -94,12 +94,89 @@ pide credenciales. No hay script que lo haga.
 
 ## Cuentas cloud
 
-**Todavía no existe ninguna.** No hay `.env` que copiar ni secretos que pasarse
-por un canal seguro — el proyecto está en Fase 0.
+De momento solo **Supabase**, con dos proyectos en la organización
+`market-track`:
 
-Cuando aparezcan (Supabase, PowerSync, Cloudflare R2, Resend), cada app tendrá
-su `.env.example` y las claves **no** se versionan. Ver `CLAUDE.md` →
-*Environment Variables*.
+| Entorno | Proyecto | Región | Se despliega desde |
+|---|---|---|---|
+| Staging | `market-track-staging` | us-east-2 | `dev` |
+| Producción | `market-track` | us-east-1 | `main` |
+
+PowerSync, Cloudflare R2 y Resend todavía no tienen cuenta. Cuando aparezcan,
+cada app tendrá su `.env.example` y las claves **no** se versionan. Ver
+`CLAUDE.md` → *Environment Variables*.
+
+---
+
+## Desplegar a la nube
+
+**Nadie despliega a mano.** El esquema y las Edge Functions llegan por
+`.github/workflows/deploy-supabase.yml` al hacer push a `dev` (staging) o `main`
+(producción). Un `db push` desde un portátil deja la nube y el repositorio
+contando historias distintas, y quien descubre la diferencia es el cliente.
+
+### Los secretos, y por qué están donde están
+
+Viven en **dos sitios distintos**, y no es arbitrario:
+
+**En GitHub** (Settings → Environments → `staging` / `produccion`) — los que
+necesita el *pipeline* para hablar con Supabase:
+
+| Secreto | Qué es | De dónde sale |
+|---|---|---|
+| `SUPABASE_ACCESS_TOKEN` | Token de tu cuenta para el CLI | [supabase.com/dashboard/account/tokens](https://supabase.com/dashboard/account/tokens) |
+| `SUPABASE_DB_PASSWORD` | Contraseña de la base del proyecto | Al crear el proyecto (o Settings → Database → *Reset password*) |
+| `SUPABASE_PROJECT_REF` | El `ref` del proyecto | Está en la URL del dashboard |
+
+**En Supabase** (`supabase secrets set`) — los que necesitan las *Edge Functions*
+en ejecución. El pipeline **no** los toca: se cargan una vez por entorno y se
+quedan ahí.
+
+```bash
+supabase secrets set --project-ref <REF> \
+  R2_ACCOUNT_ID=… R2_ACCESS_KEY_ID=… R2_SECRET_ACCESS_KEY=… R2_BUCKET=… \
+  RESEND_API_KEY=…
+```
+
+> `SUPABASE_SERVICE_ROLE_KEY` **no se carga a mano**: Supabase ya lo inyecta en
+> las Edge Functions. Ponerlo otra vez sería una copia más que mantener.
+
+Usar el entorno de GitHub y no secretos del repositorio es lo que permite exigir
+**aprobación manual antes de tocar producción** (Settings → Environments →
+*required reviewers*). El workflow no puede imponerlo solo.
+
+### Poner en marcha un entorno por primera vez
+
+1. Carga los tres secretos de GitHub en el entorno que corresponda.
+2. Carga los secretos de las funciones con `supabase secrets set`.
+3. Haz push a la rama del entorno. El workflow enlaza, lista lo pendiente,
+   aplica las migraciones y despliega las funciones.
+4. **Apaga *Allow public access* en Realtime Settings** del dashboard.
+
+> ⚠️ El paso 4 no es opcional ni cosmético. Los feeds en vivo del supervisor y
+> del portal usan **canales privados** cuya autorización son las políticas RLS
+> sobre `realtime.messages`. Con el acceso público encendido, Realtime **no las
+> evalúa** y cualquiera con una sesión puede suscribirse a los canales de
+> cualquier cliente. Es configuración de proyecto, no migración: no hay forma de
+> ponerlo en el repositorio, y por eso está aquí.
+
+### El seed nunca toca la nube
+
+`supabase db push` no ejecuta `seed.sql`, pero `db reset --linked` o un `psql -f`
+sí lo harían — y ese archivo crea un admin con la contraseña `password123`.
+
+El propio `seed.sql` **aborta** si detecta que no está en el Supabase local, así
+que el accidente no depende de que nadie se acuerde. Lo reconoce por el JWT
+secret de desarrollo, que es público e idéntico en todas las máquinas y que los
+proyectos de la nube ni siquiera exponen. Falla cerrado: si no puede confirmar
+que es local, no corre.
+
+### Comprobar que un despliegue quedó bien
+
+```bash
+supabase migration list --project-ref <REF>   # local y remoto deben coincidir
+supabase functions list --project-ref <REF>   # las 6 funciones desplegadas
+```
 
 ---
 
