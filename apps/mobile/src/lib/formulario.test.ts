@@ -1,4 +1,4 @@
-import type { CampoFormulario } from "@market-track/shared";
+import { TOPES_RESPUESTA, type CampoFormulario } from "@market-track/shared";
 import { describe, expect, it } from "@jest/globals";
 
 import {
@@ -134,6 +134,75 @@ describe("coercionValorRespuesta", () => {
     expect(
       coercionValorRespuesta(campo({ tipo: "entero", min: 0 }), "-3"),
     ).toBe(0);
+  });
+
+  it("trunca el texto libre a su tope", () => {
+    // Es la única cota entre el teclado del mercaderista y una tabla que se
+    // replica a todos los teléfonos del cliente. Sin esto, una sesión
+    // comprometida guarda megabytes por campo.
+    const largo = "x".repeat(TOPES_RESPUESTA.textoChars + 500);
+    const r = coercionValorRespuesta(campo({ tipo: "texto" }), largo);
+    expect(typeof r === "string" && r.length).toBe(TOPES_RESPUESTA.textoChars);
+  });
+
+  it("el párrafo tiene su propio tope, más alto que el del texto", () => {
+    const largo = "x".repeat(TOPES_RESPUESTA.parrafoChars + 500);
+    const r = coercionValorRespuesta(campo({ tipo: "parrafo" }), largo);
+    expect(typeof r === "string" && r.length).toBe(
+      TOPES_RESPUESTA.parrafoChars,
+    );
+  });
+
+  it("recorta espacios ANTES de medir: no se gasta el tope en blancos", () => {
+    const conEspacios = "  " + "x".repeat(TOPES_RESPUESTA.textoChars) + "  ";
+    const r = coercionValorRespuesta(campo({ tipo: "texto" }), conEspacios);
+    expect(typeof r === "string" && r.length).toBe(TOPES_RESPUESTA.textoChars);
+  });
+
+  it("un texto dentro del tope no se toca", () => {
+    expect(coercionValorRespuesta(campo({ tipo: "texto" }), "Todo bien")).toBe(
+      "Todo bien",
+    );
+  });
+
+  it("un texto de exactamente el tope no se recorta", () => {
+    const justo = "x".repeat(TOPES_RESPUESTA.textoChars);
+    expect(coercionValorRespuesta(campo({ tipo: "texto" }), justo)).toBe(justo);
+  });
+
+  it("un párrafo de acentos cabe en la base: se mide en bytes, no caracteres", () => {
+    // 10.000 caracteres acentuados son 20.012 bytes —medido contra Postgres— y
+    // el `check` de la tabla permite 16 KB. Recortando por caracteres, la app
+    // guardaría algo que la base rechaza al sincronizar, y el mercaderista lo
+    // descubriría horas después y fuera de la tienda.
+    const acentos = "ñ".repeat(TOPES_RESPUESTA.parrafoChars);
+    const r = coercionValorRespuesta(
+      campo({ tipo: "parrafo" }),
+      acentos,
+    ) as string;
+    expect(Buffer.byteLength(r, "utf8")).toBeLessThanOrEqual(
+      TOPES_RESPUESTA.bytes,
+    );
+  });
+
+  it("no parte un emoji por la mitad", () => {
+    // Cortar por unidades UTF-16 dejaría un surrogate suelto, que al serializar
+    // se vuelve U+FFFD: la respuesta no se cortaría, se corrompería en su último
+    // carácter.
+    const emojis = "😀".repeat(TOPES_RESPUESTA.parrafoChars);
+    const r = coercionValorRespuesta(
+      campo({ tipo: "parrafo" }),
+      emojis,
+    ) as string;
+    expect([...r].every((c) => c === "😀")).toBe(true);
+    expect(Buffer.byteLength(r, "utf8")).toBeLessThanOrEqual(
+      TOPES_RESPUESTA.bytes,
+    );
+  });
+
+  it("la selección múltiple no admite la misma opción repetida", () => {
+    const c = campo({ tipo: "seleccion_multiple", opciones: ["A", "B"] });
+    expect(coercionValorRespuesta(c, ["A", "A", "A", "B"])).toEqual(["A", "B"]);
   });
 
   it("un entero no numérico cae a 0", () => {

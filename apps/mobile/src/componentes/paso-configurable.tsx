@@ -1,4 +1,4 @@
-import type { CampoFormulario } from "@market-track/shared";
+import { topeDeTexto, type CampoFormulario } from "@market-track/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -221,6 +221,10 @@ function Control({
             ? "decimal-pad"
             : "default"
       }
+      // El tope se aplica también al guardar (`coercionValorRespuesta`); aquí
+      // impide que el mercaderista escriba de más y luego pierda lo tecleado sin
+      // saber por qué. Los numéricos no llevan tope de longitud: los acota min/max.
+      maxLength={numerico ? undefined : topeDeTexto(campo.tipo)}
       placeholder={numerico ? "0" : "Escribe aquí…"}
       placeholderTextColor={colores.textoSuave}
       accessibilityLabel={campo.etiqueta}

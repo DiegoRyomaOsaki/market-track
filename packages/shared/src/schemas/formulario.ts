@@ -80,6 +80,67 @@ export const pasoFormularioSchema = z.object({
   campos: z.array(campoFormularioSchema).max(TOPES_FORMULARIO.camposPorPaso),
 });
 
+// Topes de la RESPUESTA, que son otra cosa que los de la definición.
+//
+// La definición la escribe un admin; la respuesta la escribe el MERCADERISTA,
+// que es el actor de menor confianza del sistema. Y una respuesta no se replica
+// una vez: se guarda por cada campo de cada levantamiento de cada visita, así
+// que lo que aquí se deje pasar se multiplica por toda la operación — en
+// Postgres, en la réplica que descarga el resto del tenant y en el SQLite de un
+// Android de gama media.
+export const TOPES_RESPUESTA = {
+  textoChars: 2000,
+  parrafoChars: 10000,
+  // El tope que de verdad manda, y va en BYTES.
+  //
+  // Contar caracteres no sirve para garantizar nada: 10.000 caracteres
+  // acentuados son 20.000 bytes en UTF-8, por encima del techo de la tabla. Si
+  // la app truncara por caracteres, dejaría guardar una respuesta que la base
+  // rechaza al sincronizar — y como el móvil es offline-first, el mercaderista
+  // se enteraría horas después, ya fuera de la tienda.
+  //
+  // 12 KB deja margen sobre los 16 KB del `check` de `levantamiento_respuesta`
+  // para el envoltorio de jsonb. Lo que la app guarda, la base lo acepta.
+  bytes: 12 * 1024,
+} as const;
+
+/** Cuántos caracteres deja teclear este tipo de campo. Es el límite de la UI. */
+export function topeDeTexto(tipo: TipoCampoFormulario): number {
+  return tipo === "parrafo"
+    ? TOPES_RESPUESTA.parrafoChars
+    : TOPES_RESPUESTA.textoChars;
+}
+
+/**
+ * Recorta el texto para que quepa, aplicando el tope de caracteres del tipo y el
+ * de bytes — manda el que corte antes.
+ *
+ * Recorre por CODE POINTS, no por unidades UTF-16: `"abcd😀".slice(0,5)` deja un
+ * surrogate suelto que acaba convertido en U+FFFD al serializar, o sea que la
+ * respuesta no solo se corta, se corrompe en el último carácter.
+ */
+export function recortarRespuesta(
+  texto: string,
+  tipo: TipoCampoFormulario,
+): string {
+  const maxChars = topeDeTexto(tipo);
+  if (texto.length <= maxChars && bytesUtf8(texto) <= TOPES_RESPUESTA.bytes) {
+    return texto;
+  }
+
+  let chars = 0;
+  let bytes = 0;
+  let recortado = "";
+  for (const caracter of texto) {
+    const suBytes = bytesUtf8(caracter);
+    if (chars + 1 > maxChars || bytes + suBytes > TOPES_RESPUESTA.bytes) break;
+    chars += 1;
+    bytes += suBytes;
+    recortado += caracter;
+  }
+  return recortado;
+}
+
 /**
  * Bytes que ocupa la cadena en UTF-8. Se cuenta a mano y no con `TextEncoder`
  * porque este paquete es isomorfo (web, móvil y Deno) y no puede dar por hecho
