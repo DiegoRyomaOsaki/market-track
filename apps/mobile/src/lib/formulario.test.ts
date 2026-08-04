@@ -140,6 +140,22 @@ describe("coercionValorRespuesta", () => {
     expect(coercionValorRespuesta(campo({ tipo: "entero" }), "abc")).toBe(0);
   });
 
+  it("con un rango invertido nunca devuelve por encima del máximo", () => {
+    // {min:10, max:5} ya no se puede publicar —el esquema estricto lo rechaza—
+    // pero puede venir en una definición guardada antes de esa verja. Antes se
+    // devolvía 10: por encima del máximo que declara el propio campo, o sea un
+    // dato que contradice al formulario que lo pidió.
+    expect(
+      coercionValorRespuesta(campo({ tipo: "entero", min: 10, max: 5 }), "3"),
+    ).toBe(5);
+    expect(
+      coercionValorRespuesta(
+        campo({ tipo: "decimal", min: 10, max: 5 }),
+        "7.5",
+      ),
+    ).toBe(5);
+  });
+
   it("el decimal conserva los decimales y acota al rango", () => {
     expect(coercionValorRespuesta(campo({ tipo: "decimal" }), "4.5")).toBe(4.5);
     expect(

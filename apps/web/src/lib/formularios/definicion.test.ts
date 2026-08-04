@@ -177,14 +177,38 @@ describe("problemasDeDefinicion", () => {
     ).toBe(true);
   });
 
-  it("coincide con el veredicto del esquema estricto del servidor", () => {
-    const pasos = [
-      paso({
-        campos: [
-          campo({ tipo: "seleccion", etiqueta: "E", opcionesTexto: "" }),
-        ],
-      }),
-    ];
+  // Las dos verjas —la del constructor, en lenguaje del admin, y la del servidor,
+  // en Zod— tienen que dar el MISMO veredicto. Que divergieran es justo el bug
+  // que arregló MAR-83: `min > max` apagaba el botón pero el esquema estricto lo
+  // dejaba publicar. Este test las ata; si alguien añade una regla a un lado y
+  // no al otro, se cae aquí en vez de en producción.
+  it.each([
+    [
+      "selección sin opciones",
+      [
+        paso({
+          campos: [
+            campo({ tipo: "seleccion", etiqueta: "E", opcionesTexto: "" }),
+          ],
+        }),
+      ],
+    ],
+    [
+      "rango invertido",
+      [
+        paso({
+          campos: [
+            campo({ tipo: "entero", etiqueta: "N", min: "10", max: "5" }),
+          ],
+        }),
+      ],
+    ],
+    ["campo sin etiqueta", [paso({ campos: [campo({ etiqueta: "" })] })]],
+    [
+      "definición válida",
+      [paso({ campos: [campo({ tipo: "texto", etiqueta: "Nota" })] })],
+    ],
+  ])("coincide con el veredicto del esquema estricto: %s", (_caso, pasos) => {
     const hayProblemas = problemasDeDefinicion(pasos).length > 0;
     const estrictoRechaza = !definicionFormularioSchema.safeParse(
       construirDefinicion(pasos),
