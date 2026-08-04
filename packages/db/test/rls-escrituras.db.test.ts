@@ -406,6 +406,71 @@ describe("levantamiento_respuesta — el mercaderista escribe lo que levanta", (
     });
   });
 
+  it("puede corregir el valor de una respuesta suya", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await c.query(
+        `insert into public.levantamiento_respuesta (id, tenant_id, levantamiento_id, campo_id, valor)
+         values ($1, $2, $3, 'temperatura', '4.5'::jsonb)`,
+        [IDS.nuevaRespuesta, TENANTS.maracumango, IDS.levantamientoMrc],
+      );
+      const r = await c.query(
+        `update public.levantamiento_respuesta set valor = '6.0'::jsonb where id = $1`,
+        [IDS.nuevaRespuesta],
+      );
+      expect(r.rowCount).toBe(1);
+    });
+  });
+
+  // Un caso por test: el primer error aborta la transacción del harness, así que
+  // dos rechazos seguidos harían que el segundo fallara por "transaction is
+  // aborted" en vez de por lo que se quiere probar.
+  it.each([
+    ["a otro campo", "campo_id = 'otro_campo'"],
+    ["a otro levantamiento", `levantamiento_id = '${IDS.levantamientoRival}'`],
+    ["a otro cliente", `tenant_id = '${TENANTS.rival}'`],
+  ])("NO puede mover la respuesta %s", async (_caso, asignacion) => {
+    // La app solo escribe `valor`, pero el `grant update` es de tabla y PostgREST
+    // está abierto a cualquiera con la sesión: sin el trigger, un PATCH movería
+    // la respuesta a otro campo y el registro dejaría de decir qué se contestó.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await c.query(
+        `insert into public.levantamiento_respuesta (id, tenant_id, levantamiento_id, campo_id, valor)
+         values ($1, $2, $3, 'temperatura', '4.5'::jsonb)`,
+        [IDS.nuevaRespuesta, TENANTS.maracumango, IDS.levantamientoMrc],
+      );
+      await expect(
+        c.query(
+          `update public.levantamiento_respuesta set ${asignacion} where id = $1`,
+          [IDS.nuevaRespuesta],
+        ),
+      ).rejects.toMatchObject({ code: "23514" });
+    });
+  });
+
+  it("el reintento de PowerSync sigue funcionando: reescribir lo mismo pasa", async () => {
+    // Es la razón de que esto sea un trigger y no `grant update (valor)`. El
+    // conector reenvía como `upsert({...opData, id})`, que sobre una fila que ya
+    // existe actualiza TODAS las columnas. Un grant por columna daría 42501, que
+    // el conector clasifica como rechazo definitivo: descartaría la operación y
+    // el mercaderista perdería la respuesta que capturó en tienda.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await c.query(
+        `insert into public.levantamiento_respuesta (id, tenant_id, levantamiento_id, campo_id, valor)
+         values ($1, $2, $3, 'temperatura', '4.5'::jsonb)`,
+        [IDS.nuevaRespuesta, TENANTS.maracumango, IDS.levantamientoMrc],
+      );
+      // El upsert del reintento: mismas columnas de identidad, valor nuevo.
+      const r = await c.query(
+        `update public.levantamiento_respuesta
+         set tenant_id = $2, levantamiento_id = $3, campo_id = 'temperatura',
+             valor = '7.5'::jsonb
+         where id = $1`,
+        [IDS.nuevaRespuesta, TENANTS.maracumango, IDS.levantamientoMrc],
+      );
+      expect(r.rowCount).toBe(1);
+    });
+  });
+
   it("NO puede guardar una respuesta en el levantamiento de otro cliente", async () => {
     await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
       // Fila 100% coherente con el rival (levantamiento y tenant del rival): la FK
