@@ -85,6 +85,138 @@ describe("reordenar_paradas", () => {
       ).rejects.toThrow(/todas las paradas/);
     });
   });
+
+  it("rechaza una lista con un id repetido, aunque mida lo que debe", async () => {
+    // `[a,a,c]` sobre {a,b,c} mide 3 igual que la lista buena: comparar solo el
+    // tamaño la daría por válida y dejaría a `b` sin renumerar.
+    await comoUsuario(db, USUARIOS.supervisor, async (c) => {
+      const ids = await conTresParadas(c);
+      await expect(
+        c.query(`select public.reordenar_paradas($1, $2::uuid[])`, [
+          RUTERO_MRC,
+          [ids[0], ids[0], ids[2]],
+        ]),
+      ).rejects.toThrow(/una sola vez/);
+    });
+  });
+
+  it("no escribe nada cuando rechaza la lista", async () => {
+    await comoUsuario(db, USUARIOS.supervisor, async (c) => {
+      const antes = await conTresParadas(c);
+      // El `raise exception` aborta la transacción del test: sin el savepoint no
+      // se puede consultar después para comprobar que no escribió nada.
+      await c.query("savepoint intento");
+      await c
+        .query(`select public.reordenar_paradas($1, $2::uuid[])`, [
+          RUTERO_MRC,
+          [antes[2], antes[0]],
+        ])
+        .catch(() => undefined);
+      await c.query("rollback to savepoint intento");
+
+      expect(await ordenActual(c, RUTERO_MRC)).toEqual(antes);
+    });
+  });
+
+  it("no replanifica un rutero que ya salió del borrador", async () => {
+    // El mercaderista está en la calle con él y ya lo tiene replicado.
+    await comoUsuario(db, USUARIOS.supervisor, async (c) => {
+      const ids = await conTresParadas(c);
+      await c.query("set local role postgres");
+      await c.query(
+        `update public.rutero set estado = 'en_curso' where id = $1`,
+        [RUTERO_MRC],
+      );
+      await c.query("set local role authenticated");
+
+      await expect(
+        c.query(`select public.reordenar_paradas($1, $2::uuid[])`, [
+          RUTERO_MRC,
+          [...ids].reverse(),
+        ]),
+      ).rejects.toThrow(/borrador/);
+    });
+  });
+});
+
+describe("la planeación solo se toca en borrador", () => {
+  // La regla vive en un trigger y no solo en las funciones: `quitarParada` del
+  // panel borra por PostgREST, y `parada_staff_escribe` deja a cualquier sesión de
+  // staff escribir la tabla directamente.
+
+  async function conRuteroEnEstado(
+    c: Client,
+    estado: string,
+  ): Promise<string[]> {
+    const ids = await conTresParadas(c);
+    await c.query("set local role postgres");
+    await c.query(`update public.rutero set estado = $2 where id = $1`, [
+      RUTERO_MRC,
+      estado,
+    ]);
+    await c.query("set local role authenticated");
+    return ids;
+  }
+
+  it("un supervisor no puede BORRAR una parada de un rutero en curso", async () => {
+    await comoUsuario(db, USUARIOS.supervisor, async (c) => {
+      const ids = await conRuteroEnEstado(c, "en_curso");
+      await expect(
+        c.query(`delete from public.rutero_parada where id = $1`, [ids[0]]),
+      ).rejects.toThrow(/ya salió del borrador/);
+    });
+  });
+
+  it("tampoco puede colgarle una tienda nueva", async () => {
+    await comoUsuario(db, USUARIOS.supervisor, async (c) => {
+      await conRuteroEnEstado(c, "publicado");
+      await expect(
+        c.query(
+          `insert into public.rutero_parada (tenant_id, rutero_id, tienda_id, orden)
+           values ($1, $2, $3, 99)`,
+          [TENANTS.maracumango, RUTERO_MRC, TIENDA_MRC],
+        ),
+      ).rejects.toThrow(/ya salió del borrador/);
+    });
+  });
+
+  it("tampoco cambiarle el orden a mano", async () => {
+    await comoUsuario(db, USUARIOS.supervisor, async (c) => {
+      const ids = await conRuteroEnEstado(c, "en_curso");
+      await expect(
+        c.query(`update public.rutero_parada set orden = 9 where id = $1`, [
+          ids[0],
+        ]),
+      ).rejects.toThrow(/ya salió del borrador/);
+    });
+  });
+
+  it("pero el ESTADO de la parada sigue avanzando con la jornada", async () => {
+    // Es la columna que se mueve mientras el mercaderista trabaja: congelarla
+    // rompería el seguimiento de la visita.
+    await comoUsuario(db, USUARIOS.supervisor, async (c) => {
+      const ids = await conRuteroEnEstado(c, "en_curso");
+      await c.query(
+        `update public.rutero_parada set estado = 'completada' where id = $1`,
+        [ids[0]],
+      );
+      const r = await c.query<{ estado: string }>(
+        `select estado from public.rutero_parada where id = $1`,
+        [ids[0]],
+      );
+      expect(r.rows[0]?.estado).toBe("completada");
+    });
+  });
+
+  it("en borrador se sigue pudiendo todo", async () => {
+    await comoUsuario(db, USUARIOS.supervisor, async (c) => {
+      const ids = await conRuteroEnEstado(c, "borrador");
+      // La última de las tres: la primera es la del seed y ya tiene una visita
+      // colgando, que su propia FK protege de cualquier borrado.
+      await c.query(`delete from public.rutero_parada where id = $1`, [ids[2]]);
+      expect(await ordenActual(c, RUTERO_MRC)).toHaveLength(2);
+    });
+  });
 });
 
 describe("agregar_parada_rutero", () => {
@@ -104,6 +236,29 @@ describe("agregar_parada_rutero", () => {
       );
       // Nace en borrador: planificar no es publicar.
       expect(creado.rows[0]).toMatchObject({ estado: "borrador", orden: 1 });
+    });
+  });
+
+  it("no le cuelga tiendas a un día que ya salió del borrador", async () => {
+    await comoUsuario(db, USUARIOS.supervisor, async (c) => {
+      const fecha = await c.query<{ fecha: string }>(
+        `select to_char(fecha,'YYYY-MM-DD') as fecha from public.rutero where id = $1`,
+        [RUTERO_MRC],
+      );
+      await c.query("set local role postgres");
+      await c.query(
+        `update public.rutero set estado = 'en_curso' where id = $1`,
+        [RUTERO_MRC],
+      );
+      await c.query("set local role authenticated");
+
+      await expect(
+        c.query(`select public.agregar_parada_rutero($1, $2::date, $3)`, [
+          USUARIOS.mercaderistaMaracumango,
+          fecha.rows[0]?.fecha,
+          TIENDA_MRC,
+        ]),
+      ).rejects.toThrow(/publicado o en curso/);
     });
   });
 

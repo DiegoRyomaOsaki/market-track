@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { sesionDeStaff } from "@/lib/panel/sesion";
 
 export type ResultadoAccion = { ok: true } | { ok: false; error: string };
 
@@ -18,21 +18,6 @@ const SIN_PERMISO = "No encontrado o sin permiso";
 // Postgres no impone y que los ids del propio seed no cumplen.
 const id = z.guid();
 const fecha = z.iso.date();
-
-/**
- * Planificar es cosa del staff. La RLS ya lo exige (`rutero_staff_escribe`),
- * pero una server action es un endpoint POST: no la protege que el botón viva
- * en `/supervisor`. Se comprueba aquí y se falla antes de tocar nada.
- */
-async function clienteDeStaff() {
-  const supabase = await createServerSupabaseClient();
-  const { data: perfil } = await supabase
-    .from("profile")
-    .select("rol")
-    .maybeSingle();
-  const esStaff = perfil?.rol === "admin" || perfil?.rol === "supervisor";
-  return esStaff ? supabase : null;
-}
 
 function fallo(operacion: string, error: { message: string }): ResultadoAccion {
   console.error(`[ruteros] ${operacion}`, error.message.slice(0, 200));
@@ -50,8 +35,9 @@ export async function agregarParada(datos: unknown): Promise<ResultadoAccion> {
   const parsed = agregarSchema.safeParse(datos);
   if (!parsed.success) return { ok: false, error: "Datos inválidos" };
 
-  const supabase = await clienteDeStaff();
-  if (!supabase) return { ok: false, error: SIN_PERMISO };
+  const sesion = await sesionDeStaff();
+  if (!sesion) return { ok: false, error: SIN_PERMISO };
+  const { supabase } = sesion;
 
   const { error } = await supabase.rpc("agregar_parada_rutero", {
     p_mercaderista: parsed.data.mercaderistaId,
@@ -69,8 +55,9 @@ export async function quitarParada(datos: unknown): Promise<ResultadoAccion> {
   const parsed = z.object({ paradaId: id }).safeParse(datos);
   if (!parsed.success) return { ok: false, error: "Datos inválidos" };
 
-  const supabase = await clienteDeStaff();
-  if (!supabase) return { ok: false, error: SIN_PERMISO };
+  const sesion = await sesionDeStaff();
+  if (!sesion) return { ok: false, error: SIN_PERMISO };
+  const { supabase } = sesion;
 
   const { data, error } = await supabase
     .from("rutero_parada")
@@ -84,11 +71,24 @@ export async function quitarParada(datos: unknown): Promise<ResultadoAccion> {
   return { ok: true };
 }
 
+// Una jornada real son cinco u ocho tiendas; el tope está muy por encima de lo
+// que cabe en un día de trabajo y aun así acota el payload.
+const MAX_PARADAS_POR_DIA = 100;
+
 const reordenarSchema = z.object({
   ruteroId: id,
   // La lista COMPLETA, no "sube esta una posición": dos supervisores con
   // operaciones relativas sobre el mismo rutero se pisan.
-  paradas: z.array(id).min(1),
+  paradas: z
+    .array(id)
+    .min(1)
+    .max(MAX_PARADAS_POR_DIA)
+    // Un id repetido colaría el chequeo de tamaño del lado de Postgres dejando
+    // una parada sin renumerar. La base también lo rechaza; aquí se corta antes.
+    .refine(
+      (ids) => new Set(ids).size === ids.length,
+      "Hay paradas repetidas en el orden",
+    ),
 });
 
 export async function reordenarParadas(
@@ -97,8 +97,9 @@ export async function reordenarParadas(
   const parsed = reordenarSchema.safeParse(datos);
   if (!parsed.success) return { ok: false, error: "Datos inválidos" };
 
-  const supabase = await clienteDeStaff();
-  if (!supabase) return { ok: false, error: SIN_PERMISO };
+  const sesion = await sesionDeStaff();
+  if (!sesion) return { ok: false, error: SIN_PERMISO };
+  const { supabase } = sesion;
 
   const { error } = await supabase.rpc("reordenar_paradas", {
     p_rutero_id: parsed.data.ruteroId,
@@ -118,8 +119,9 @@ export async function publicarRutero(datos: unknown): Promise<ResultadoAccion> {
   const parsed = z.object({ ruteroId: id }).safeParse(datos);
   if (!parsed.success) return { ok: false, error: "Datos inválidos" };
 
-  const supabase = await clienteDeStaff();
-  if (!supabase) return { ok: false, error: SIN_PERMISO };
+  const sesion = await sesionDeStaff();
+  if (!sesion) return { ok: false, error: SIN_PERMISO };
+  const { supabase } = sesion;
 
   const { data, error } = await supabase
     .from("rutero")
@@ -153,8 +155,9 @@ export async function duplicarPeriodo(
   const parsed = duplicarSchema.safeParse(datos);
   if (!parsed.success) return { ok: false, error: "Datos inválidos" };
 
-  const supabase = await clienteDeStaff();
-  if (!supabase) return { ok: false, error: SIN_PERMISO };
+  const sesion = await sesionDeStaff();
+  if (!sesion) return { ok: false, error: SIN_PERMISO };
+  const { supabase } = sesion;
 
   const { error } = await supabase.rpc("duplicar_periodo_rutero", {
     p_mercaderista: parsed.data.mercaderistaId,

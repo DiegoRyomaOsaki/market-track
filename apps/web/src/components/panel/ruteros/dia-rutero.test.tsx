@@ -7,6 +7,7 @@ import { DiaRutero } from "./dia-rutero";
 
 const acciones = vi.hoisted(() => ({
   agregarParada: vi.fn(),
+  duplicarPeriodo: vi.fn(),
   publicarRutero: vi.fn(),
   quitarParada: vi.fn(),
   reordenarParadas: vi.fn(),
@@ -32,8 +33,20 @@ function dia(over: Partial<DiaPlaneado> = {}): DiaPlaneado {
   };
 }
 
-function pintar(d: DiaPlaneado) {
-  return render(<DiaRutero dia={d} mercaderistaId="m1" tiendas={TIENDAS} />);
+function pintar(d: DiaPlaneado, compacto = false) {
+  return render(
+    <DiaRutero
+      dia={d}
+      mercaderistaId="m1"
+      tiendas={TIENDAS}
+      compacto={compacto}
+    />,
+  );
+}
+
+/** El `<select>` de tiendas: hay más de un combobox en la pantalla completa. */
+function selectorDeTienda() {
+  return screen.getByRole("combobox", { name: /Añadir tienda/ });
 }
 
 beforeEach(() => {
@@ -64,12 +77,26 @@ describe("DiaRutero", () => {
     );
   });
 
-  it("en los extremos, los botones de orden van deshabilitados", () => {
+  it("en los extremos los botones de orden se anuncian no disponibles PERO siguen enfocables", () => {
+    // `aria-disabled` y no `disabled`: al subir la segunda parada, esta pasa a
+    // primera y su propio botón se desactivaría — el navegador quita el foco de un
+    // elemento recién deshabilitado y lo manda a `<body>`, dejando sin sitio a
+    // quien navega con teclado justo después de actuar.
     pintar(dia());
+    const subirPrimera = screen.getByRole("button", {
+      name: /Subir Plaza Vea/,
+    });
+    expect(subirPrimera).toHaveAttribute("aria-disabled", "true");
+    expect(subirPrimera).not.toBeDisabled();
     expect(
-      screen.getByRole("button", { name: /Subir Plaza Vea/ }),
-    ).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Bajar Tottus/ })).toBeDisabled();
+      screen.getByRole("button", { name: /Bajar Tottus/ }),
+    ).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("un botón inactivo no reordena aunque se pulse", () => {
+    pintar(dia());
+    fireEvent.click(screen.getByRole("button", { name: /Subir Plaza Vea/ }));
+    expect(acciones.reordenarParadas).not.toHaveBeenCalled();
   });
 
   it("cada botón dice QUÉ parada mueve, no solo la flecha", () => {
@@ -81,11 +108,23 @@ describe("DiaRutero", () => {
     ).toBeInTheDocument();
   });
 
-  it("añadir una tienda la asigna a ese día", async () => {
+  it("elegir una tienda NO la añade: hace falta confirmar", async () => {
+    // Un `<select>` cerrado emite `change` en cada flecha del teclado. Con la
+    // escritura colgada del `onChange`, recorrer la lista buscando una tienda
+    // habría insertado todas las de en medio.
+    pintar(dia());
+
+    fireEvent.change(selectorDeTienda(), { target: { value: "t2" } });
+
+    await waitFor(() => expect(acciones.agregarParada).not.toHaveBeenCalled());
+  });
+
+  it("añadir confirma la tienda elegida para ese día", async () => {
     acciones.agregarParada.mockResolvedValue({ ok: true });
     pintar(dia());
 
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "t2" } });
+    fireEvent.change(selectorDeTienda(), { target: { value: "t2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Añadir" }));
 
     await waitFor(() =>
       expect(acciones.agregarParada).toHaveBeenCalledWith({
@@ -94,6 +133,39 @@ describe("DiaRutero", () => {
         tiendaId: "t2",
       }),
     );
+  });
+
+  it("sin tienda elegida no se puede confirmar", () => {
+    pintar(dia());
+    expect(screen.getByRole("button", { name: "Añadir" })).toBeDisabled();
+  });
+
+  it("quitar una parada la quita y anuncia el resultado", async () => {
+    acciones.quitarParada.mockResolvedValue({ ok: true });
+    pintar(dia());
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Quitar Tottus Angamos" }),
+    );
+
+    await waitFor(() =>
+      expect(acciones.quitarParada).toHaveBeenCalledWith({ paradaId: "b" }),
+    );
+    expect(
+      await screen.findByText(/Tottus Angamos quitada/),
+    ).toBeInTheDocument();
+  });
+
+  it("quitar mueve el foco antes de que la fila desaparezca", () => {
+    // Sin esto el foco cae a `<body>` y se pierde el sitio en la lista.
+    acciones.quitarParada.mockResolvedValue({ ok: true });
+    pintar(dia());
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Quitar Tottus Angamos" }),
+    );
+
+    expect(selectorDeTienda()).toHaveFocus();
   });
 
   it("un borrador con paradas se puede publicar", () => {
@@ -113,13 +185,31 @@ describe("DiaRutero", () => {
   it("un rutero EN CURSO no se replanifica ni se republica", () => {
     // El mercaderista está en la calle con él.
     pintar(dia({ estado: "en_curso" }));
-    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("combobox", { name: /Añadir tienda/ }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /Subir/ }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Publicar" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("mientras la acción está en vuelo lo dice y no admite otra", async () => {
+    let resolver: (r: { ok: boolean }) => void = () => {};
+    acciones.publicarRutero.mockReturnValue(
+      new Promise((r) => {
+        resolver = r;
+      }),
+    );
+    pintar(dia());
+
+    fireEvent.click(screen.getByRole("button", { name: "Publicar" }));
+
+    const enVuelo = await screen.findByRole("button", { name: "Publicando…" });
+    expect(enVuelo).toBeDisabled();
+    resolver({ ok: true });
   });
 
   it("si el servidor rechaza, lo dice en vez de tragárselo", async () => {
@@ -133,6 +223,25 @@ describe("DiaRutero", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "No encontrado o sin permiso",
+    );
+  });
+
+  it("en la vista mensual el día nace plegado y se despliega", () => {
+    // Son 31 tarjetas: abrirlas todas convierte la pantalla en un muro.
+    pintar(dia(), true);
+    const cabecera = screen.getByRole("button", { expanded: false });
+    expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
+
+    fireEvent.click(cabecera);
+
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getByRole("button", { expanded: true })).toBeInTheDocument();
+  });
+
+  it("plegado sigue diciendo cuántas paradas tiene el día", () => {
+    pintar(dia(), true);
+    expect(screen.getByRole("button", { expanded: false })).toHaveTextContent(
+      "(2)",
     );
   });
 });

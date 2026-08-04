@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { sesionDeStaff } from "@/lib/panel/sesion";
 
 export type ResultadoAccion = { ok: true } | { ok: false; error: string };
 
@@ -41,15 +41,9 @@ export async function marcarContingenciaAtendida(
     return { ok: false, error: "Identificador de alerta inválido" };
   }
 
-  const supabase = await createServerSupabaseClient();
-
-  const { data: perfil } = await supabase
-    .from("profile")
-    .select("rol")
-    .maybeSingle();
-  if (perfil?.rol !== "admin" && perfil?.rol !== "supervisor") {
-    return { ok: false, error: SIN_PERMISO };
-  }
+  const sesion = await sesionDeStaff();
+  if (!sesion) return { ok: false, error: SIN_PERMISO };
+  const { supabase } = sesion;
 
   const { data, error } = await supabase
     .from("alerta")

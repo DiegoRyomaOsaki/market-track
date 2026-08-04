@@ -71,15 +71,19 @@ export function Planeacion({
           <span className="text-[11.5px] font-semibold">Mercaderista</span>
           <select
             value={mercaderistaId ?? ""}
-            // El router de Next y no `window.location`: una recarga completa
-            // tira el árbol entero por cambiar de mercaderista. La transición da
-            // el estado pendiente para que el cambio no parezca ignorado.
+            // `replace` y no `push`: un `<select>` cerrado emite `change` en CADA
+            // flecha del teclado, así que recorrer la lista con `push` dejaría un
+            // rastro de entradas intermedias y el botón "atrás" tendría que
+            // deshacerlas una a una. Cambiar de mercaderista es cambiar el filtro
+            // de lo que se mira, no navegar a otro sitio.
+            //
+            // Tampoco se deshabilita mientras navega: deshabilitar el elemento
+            // enfocado le quita el foco al usuario a mitad de la selección.
             onChange={(e) => {
               const destino = url({ mercaderista: e.target.value });
-              navegar(() => router.push(destino));
+              navegar(() => router.replace(destino));
             }}
-            disabled={navegando}
-            className="min-h-11 rounded-lg border border-border bg-background px-2 text-[12px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-60"
+            className="min-h-11 rounded-lg border border-border bg-background px-2 text-[12px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             {mercaderistas.map((m) => (
               <option key={m.id} value={m.id}>
@@ -88,6 +92,14 @@ export function Planeacion({
             ))}
           </select>
         </label>
+        {/* La navegación programática no pinta nada hasta que el destino commit-ea:
+            sin esto, cambiar de mercaderista parece un clic ignorado. */}
+        <span
+          aria-live="polite"
+          className="text-[11.5px] text-muted-foreground empty:hidden"
+        >
+          {navegando ? "Cargando…" : ""}
+        </span>
 
         {/* La vista y el periodo son navegación: enlaces, no botones, para que
             la URL siempre describa lo que se está viendo. */}
