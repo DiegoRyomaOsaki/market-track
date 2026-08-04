@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 
 import { marcarContingenciaAtendida } from "@/lib/panel/acciones-tablero";
 import { sinAtender, type Contingencia } from "@/lib/panel/tablero";
@@ -73,12 +73,32 @@ function Fila({
   onAtendida: (id: string) => void;
 }) {
   const [pendiente, iniciar] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const confirmacion = useRef<HTMLSpanElement>(null);
+  const acabaDeAtender = useRef(false);
   const atendida = contingencia.estado === "resuelta";
 
+  // El botón que tenía el foco desaparece al confirmarse la acción. Sin esto el
+  // navegador devuelve el foco al `body` y quien navega con teclado pierde su
+  // sitio en la lista justo después de actuar.
+  useEffect(() => {
+    if (atendida && acabaDeAtender.current) {
+      acabaDeAtender.current = false;
+      confirmacion.current?.focus();
+    }
+  }, [atendida]);
+
   function atender() {
+    setError(null);
     iniciar(async () => {
       const r = await marcarContingenciaAtendida({ id: contingencia.id });
-      if (r.ok) onAtendida(contingencia.id);
+      if (r.ok) {
+        acabaDeAtender.current = true;
+        onAtendida(contingencia.id);
+        return;
+      }
+      // Fallar en silencio dejaría al supervisor creyendo que la cerró.
+      setError(r.error);
     });
   }
 
@@ -92,9 +112,18 @@ function Fila({
           {contingencia.mercaderista_nombre} · {hora(contingencia.creado_at)}
         </div>
         <p className="mt-1 text-[12.5px]">{contingencia.motivo}</p>
+        {error ? (
+          <p role="alert" className="mt-1 text-[11.5px] text-alerta-texto">
+            {error}
+          </p>
+        ) : null}
       </div>
       {atendida ? (
-        <span className="shrink-0 rounded-full bg-completado-suave px-2.5 py-0.5 text-[11.5px] font-bold text-completado-texto">
+        <span
+          ref={confirmacion}
+          tabIndex={-1}
+          className="shrink-0 rounded-full bg-completado-suave px-2.5 py-1 text-[11.5px] font-bold text-completado-texto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
           Atendida
         </span>
       ) : (
@@ -102,7 +131,7 @@ function Fila({
           type="button"
           onClick={atender}
           disabled={pendiente}
-          className="shrink-0 rounded-lg border border-border px-2.5 py-1 text-[11.5px] font-semibold hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-60"
+          className="min-h-11 shrink-0 rounded-lg border border-border px-3 text-[11.5px] font-semibold hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-60"
         >
           {pendiente ? "Marcando…" : "Marcar atendida"}
         </button>

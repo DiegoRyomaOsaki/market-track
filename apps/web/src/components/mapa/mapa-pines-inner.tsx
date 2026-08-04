@@ -44,6 +44,18 @@ function escapar(texto: string): string {
   );
 }
 
+/**
+ * El popup se arma concatenando HTML, así que `escapar` impide romper el
+ * atributo — pero no impide un `href="javascript:…"`, que escapado sigue siendo
+ * ejecutable. Aquí solo entran RUTAS INTERNAS: una sola barra inicial (`//host`
+ * saldría del sitio). Hoy todos los `href` los construye el servidor con un uuid,
+ * pero este componente lo comparten varias pantallas y no debe confiar en que la
+ * siguiente haga lo mismo.
+ */
+function rutaInternaSegura(href: string): string {
+  return /^\/(?!\/)/.test(href) ? href : "#";
+}
+
 function coleccion(pines: readonly PinMapa[]): FeatureCollection {
   return {
     type: "FeatureCollection",
@@ -52,7 +64,7 @@ function coleccion(pines: readonly PinMapa[]): FeatureCollection {
       properties: {
         nombre: p.nombre,
         id: p.id,
-        href: p.href,
+        href: rutaInternaSegura(p.href),
         hex: COLOR_PIN_HEX[p.color],
       },
       geometry: { type: "Point", coordinates: [p.lon, p.lat] },
@@ -131,9 +143,10 @@ export function MapaPinesInner({
       const [lon, lat] = f.geometry.coordinates;
       if (lon === undefined || lat === undefined) return;
       const nombre = escapar(String(f.properties?.nombre ?? ""));
-      // `href` lo arma el servidor y aquí se escapa igual que el nombre: entra
-      // como atributo de un HTML construido a mano.
-      const href = escapar(String(f.properties?.href ?? ""));
+      // Doble filtro: `rutaInternaSegura` ya descartó cualquier esquema que no
+      // sea una ruta interna (escapar entidades NO frena un `javascript:`), y
+      // `escapar` impide además romper el atributo.
+      const href = escapar(rutaInternaSegura(String(f.properties?.href ?? "")));
       new maplibregl.Popup({ closeButton: true, offset: 12 })
         .setLngLat([lon, lat])
         .setHTML(

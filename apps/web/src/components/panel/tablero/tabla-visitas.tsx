@@ -41,17 +41,39 @@ export function TablaVisitas({ filas }: { filas: FilaTablero[] }) {
       </caption>
       <thead className="border-b border-border">
         <tr>
-          <th className={TH}>Mercaderista</th>
-          <th className={TH}>DNI</th>
-          <th className={TH}>Punto de venta</th>
-          <th className={TH}>Entrada</th>
-          <th className={TH}>Salida</th>
-          <th className={TH}>Duración</th>
-          <th className={TH}>Traslado</th>
-          <th className={TH}>Batería</th>
-          <th className={TH}>Fotos</th>
-          <th className={TH}>Estado</th>
-          <th className={TH}>Motivo</th>
+          <th scope="col" className={TH}>
+            Mercaderista
+          </th>
+          <th scope="col" className={TH}>
+            DNI
+          </th>
+          <th scope="col" className={TH}>
+            Punto de venta
+          </th>
+          <th scope="col" className={TH}>
+            Entrada
+          </th>
+          <th scope="col" className={TH}>
+            Salida
+          </th>
+          <th scope="col" className={TH}>
+            Duración
+          </th>
+          <th scope="col" className={TH}>
+            Traslado
+          </th>
+          <th scope="col" className={TH}>
+            Batería
+          </th>
+          <th scope="col" className={TH}>
+            Fotos
+          </th>
+          <th scope="col" className={TH}>
+            Estado
+          </th>
+          <th scope="col" className={TH}>
+            Motivo
+          </th>
         </tr>
       </thead>
       <tbody className="divide-y divide-border">
