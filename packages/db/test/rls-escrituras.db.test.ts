@@ -390,13 +390,19 @@ describe("levantamiento_respuesta — el mercaderista escribe lo que levanta", (
     // fila por campo, por levantamiento, por visita: lo que se cuele se
     // multiplica por toda la operación.
     await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
-      await esRechazado(() =>
+      // Se fija el código 23514 y el nombre del constraint: sin eso, el día que
+      // una política o un trigger rechacen por otra razón, el test seguiría
+      // verde sin proteger nada.
+      await expect(
         c.query(
           `insert into public.levantamiento_respuesta (id, tenant_id, levantamiento_id, campo_id, valor)
            values ($1, $2, $3, 'texto_libre', to_jsonb(repeat('x', 20000)))`,
           [IDS.nuevaRespuesta, TENANTS.maracumango, IDS.levantamientoMrc],
         ),
-      );
+      ).rejects.toMatchObject({
+        code: "23514",
+        constraint: "levantamiento_respuesta_valor_tamano",
+      });
     });
   });
 

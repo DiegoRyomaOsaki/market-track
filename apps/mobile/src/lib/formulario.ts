@@ -2,7 +2,7 @@ import {
   type CampoFormulario,
   type DefinicionFormulario,
   definicionFormularioSchema,
-  topeDeTexto,
+  recortarRespuesta,
 } from "@market-track/shared";
 
 // La lógica pura del formulario configurable en el móvil (MAR-80, ADR-0010):
@@ -121,7 +121,7 @@ export function coercionValorRespuesta(
     case "parrafo":
     case "foto":
       return typeof raw === "string"
-        ? raw.trim().slice(0, topeDeTexto(campo.tipo))
+        ? recortarRespuesta(raw.trim(), campo.tipo)
         : "";
     case "entero": {
       const n = Number(raw);
@@ -140,8 +140,10 @@ export function coercionValorRespuesta(
       return campo.opciones?.includes(v) ? v : "";
     }
     case "seleccion_multiple": {
+      // Sin `Set` una lista con la misma opción válida repetida mil veces pasaría
+      // el filtro entera. No puede haber más respuestas que opciones ofrecidas.
       const lista = Array.isArray(raw) ? raw.map(String) : [];
-      return lista.filter((o) => campo.opciones?.includes(o));
+      return [...new Set(lista)].filter((o) => campo.opciones?.includes(o));
     }
     default:
       return tipoNoManejado(campo.tipo);

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   definicionFormularioSchema,
   excedeTamano,
+  recortarRespuesta,
   topeDeTexto,
   TOPES_FORMULARIO,
   TOPES_RESPUESTA,
@@ -366,5 +367,53 @@ describe("topeDeTexto", () => {
   it("los demás tipos que guardan cadena caen en el tope corto", () => {
     expect(topeDeTexto("foto")).toBe(TOPES_RESPUESTA.textoChars);
     expect(topeDeTexto("seleccion")).toBe(TOPES_RESPUESTA.textoChars);
+  });
+});
+
+describe("recortarRespuesta", () => {
+  // Medida INDEPENDIENTE de la del código: si el test usara el mismo contador
+  // que la implementación, se estaría verificando a sí mismo. `packages/shared`
+  // es isomorfo y no tiene `Buffer` ni `TextEncoder`, así que se cuenta por la
+  // vía estándar: cada byte no-ASCII sale como %XX de `encodeURIComponent`.
+  const bytes = (s: string) =>
+    encodeURIComponent(s).replace(/%[0-9A-F]{2}/gi, "x").length;
+
+  it("deja intacto lo que ya cabe", () => {
+    expect(recortarRespuesta("Todo bien", "texto")).toBe("Todo bien");
+  });
+
+  it("respeta el tope de caracteres del tipo", () => {
+    const largo = "x".repeat(TOPES_RESPUESTA.textoChars + 100);
+    expect(recortarRespuesta(largo, "texto")).toHaveLength(
+      TOPES_RESPUESTA.textoChars,
+    );
+  });
+
+  it("manda el tope de BYTES cuando corta antes que el de caracteres", () => {
+    // 10.000 caracteres acentuados caben en `parrafoChars` pero son 20.000
+    // bytes: por encima del techo. El recorte tiene que mirar los dos.
+    const acentos = "ñ".repeat(TOPES_RESPUESTA.parrafoChars);
+    const r = recortarRespuesta(acentos, "parrafo");
+    expect(bytes(r)).toBeLessThanOrEqual(TOPES_RESPUESTA.bytes);
+    expect(r.length).toBeLessThan(TOPES_RESPUESTA.parrafoChars);
+  });
+
+  it("no deja un surrogate suelto al cortar entre un par", () => {
+    // Con `.slice()` el último carácter quedaría partido y al serializar se
+    // volvería U+FFFD: la respuesta no se corta, se corrompe.
+    const emojis = "😀".repeat(TOPES_RESPUESTA.parrafoChars);
+    const r = recortarRespuesta(emojis, "parrafo");
+    expect([...r].every((c) => c === "😀")).toBe(true);
+    expect(bytes(r)).toBeLessThanOrEqual(TOPES_RESPUESTA.bytes);
+  });
+
+  it("lo que recorta siempre cabe bajo el techo de la tabla", () => {
+    // La garantía que sostiene todo: el `check` de `levantamiento_respuesta`
+    // permite 16 KB y el recorte deja 12 KB, así que lo que la app guarda la
+    // base lo acepta — con acentos, con emojis o con lo que sea.
+    for (const relleno of ["x", "ñ", "😀", "漢"]) {
+      const r = recortarRespuesta(relleno.repeat(20000), "parrafo");
+      expect(bytes(r)).toBeLessThanOrEqual(TOPES_RESPUESTA.bytes);
+    }
   });
 });

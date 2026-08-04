@@ -165,6 +165,46 @@ describe("coercionValorRespuesta", () => {
     );
   });
 
+  it("un texto de exactamente el tope no se recorta", () => {
+    const justo = "x".repeat(TOPES_RESPUESTA.textoChars);
+    expect(coercionValorRespuesta(campo({ tipo: "texto" }), justo)).toBe(justo);
+  });
+
+  it("un párrafo de acentos cabe en la base: se mide en bytes, no caracteres", () => {
+    // 10.000 caracteres acentuados son 20.012 bytes —medido contra Postgres— y
+    // el `check` de la tabla permite 16 KB. Recortando por caracteres, la app
+    // guardaría algo que la base rechaza al sincronizar, y el mercaderista lo
+    // descubriría horas después y fuera de la tienda.
+    const acentos = "ñ".repeat(TOPES_RESPUESTA.parrafoChars);
+    const r = coercionValorRespuesta(
+      campo({ tipo: "parrafo" }),
+      acentos,
+    ) as string;
+    expect(Buffer.byteLength(r, "utf8")).toBeLessThanOrEqual(
+      TOPES_RESPUESTA.bytes,
+    );
+  });
+
+  it("no parte un emoji por la mitad", () => {
+    // Cortar por unidades UTF-16 dejaría un surrogate suelto, que al serializar
+    // se vuelve U+FFFD: la respuesta no se cortaría, se corrompería en su último
+    // carácter.
+    const emojis = "😀".repeat(TOPES_RESPUESTA.parrafoChars);
+    const r = coercionValorRespuesta(
+      campo({ tipo: "parrafo" }),
+      emojis,
+    ) as string;
+    expect([...r].every((c) => c === "😀")).toBe(true);
+    expect(Buffer.byteLength(r, "utf8")).toBeLessThanOrEqual(
+      TOPES_RESPUESTA.bytes,
+    );
+  });
+
+  it("la selección múltiple no admite la misma opción repetida", () => {
+    const c = campo({ tipo: "seleccion_multiple", opciones: ["A", "B"] });
+    expect(coercionValorRespuesta(c, ["A", "A", "A", "B"])).toEqual(["A", "B"]);
+  });
+
   it("un entero no numérico cae a 0", () => {
     expect(coercionValorRespuesta(campo({ tipo: "entero" }), "abc")).toBe(0);
   });
