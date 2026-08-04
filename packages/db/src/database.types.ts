@@ -1583,6 +1583,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      agregar_parada_rutero: {
+        Args: { p_fecha: string; p_mercaderista: string; p_tienda: string }
+        Returns: string
+      }
       bandeja_solicitudes: {
         Args: { p_solo_mi_equipo?: boolean }
         Returns: {
@@ -1662,12 +1666,38 @@ export type Database = {
           visitada: boolean
         }[]
       }
+      duplicar_periodo_rutero: {
+        Args: {
+          p_desde: string
+          p_dias_desplazamiento: number
+          p_hasta: string
+          p_mercaderista: string
+        }
+        Returns: number
+      }
+      planeacion_ruteros: {
+        Args: { p_desde: string; p_hasta: string; p_mercaderista: string }
+        Returns: {
+          estado: Database["public"]["Enums"]["estado_rutero"]
+          fecha: string
+          orden: number
+          parada_estado: Database["public"]["Enums"]["estado_parada"]
+          parada_id: string
+          rutero_id: string
+          tienda_id: string
+          tienda_nombre: string
+        }[]
+      }
       portal_modulos: {
         Args: never
         Returns: {
           habilitado: boolean
           modulo: Database["public"]["Enums"]["modulo_portal"]
         }[]
+      }
+      reordenar_paradas: {
+        Args: { p_paradas: string[]; p_rutero_id: string }
+        Returns: undefined
       }
       tablero_contingencias: {
         Args: { p_fecha: string }

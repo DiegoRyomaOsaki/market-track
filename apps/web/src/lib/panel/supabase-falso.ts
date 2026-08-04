@@ -1,0 +1,112 @@
+// Un doble del cliente de Supabase para los tests de las server actions del panel.
+//
+// Existe por un fallo concreto: las tres primeras pantallas resolvían el rol con
+// `select('rol').maybeSingle()` SIN filtrar por el id del usuario, y sus tests lo
+// daban por bueno porque el mock devolvía una fila viniera la consulta como
+// viniese. En producción `profile` le deja al staff leer la tabla entera, así que
+// esa consulta traía varias filas y `maybeSingle()` la rechazaba.
+//
+// Por eso este doble guarda FILAS y aplica los `.eq(...)`: una consulta sin filtro
+// devuelve todas, y entonces `maybeSingle()` falla igual que la de verdad. Un mock
+// que ignore los filtros vuelve a dar el mismo falso verde.
+
+type Fila = Record<string, unknown>;
+
+export type RespuestaLista = {
+  data: Fila[] | null;
+  error: { message: string } | null;
+};
+
+/** El mismo error de PostgREST cuando se pide una fila y llegan varias. */
+const MULTIPLES_FILAS = {
+  message: "JSON object requested, multiple (or no) rows returned",
+};
+
+function consultaSobre(filas: Fila[]) {
+  const filtros: [string, unknown][] = [];
+
+  const encadenable = {
+    select: () => encadenable,
+    eq: (columna: string, valor: unknown) => {
+      filtros.push([columna, valor]);
+      return encadenable;
+    },
+    maybeSingle: () => {
+      const encajan = filas.filter((f) =>
+        filtros.every(([col, val]) => f[col] === val),
+      );
+      if (encajan.length > 1) {
+        return Promise.resolve({ data: null, error: MULTIPLES_FILAS });
+      }
+      return Promise.resolve({ data: encajan[0] ?? null, error: null });
+    },
+  };
+  return encadenable;
+}
+
+function escrituraSobre(resultado: RespuestaLista) {
+  const encadenable = {
+    update: () => encadenable,
+    delete: () => encadenable,
+    eq: () => encadenable,
+    select: () => Promise.resolve(resultado),
+  };
+  return encadenable;
+}
+
+export type OpcionesFalso = {
+  /** El id del usuario con sesión. `null` = sin sesión. */
+  usuarioId?: string | null;
+  /** Lo que hay en `profile`. Se consulta de verdad, con sus filtros. */
+  perfiles?: Fila[];
+  /** Lo que devuelve cualquier escritura sobre otra tabla. */
+  escritura?: RespuestaLista;
+  /** Lo que devuelve cada `rpc(...)`. */
+  rpc?: { error: { message: string } | null };
+};
+
+/**
+ * Un cliente falso con `auth.getUser()`, un `profile` consultable y una tabla de
+ * escritura. Devuelve también los espías para afirmar sobre lo que se llamó.
+ */
+export function supabaseFalso({
+  usuarioId = "u1",
+  perfiles = [],
+  escritura = { data: [{ id: "x" }], error: null },
+  rpc = { error: null },
+}: OpcionesFalso = {}) {
+  const tablasPedidas: string[] = [];
+  const rpcsPedidas: { nombre: string; argumentos: unknown }[] = [];
+
+  const cliente = {
+    auth: {
+      getUser: () =>
+        Promise.resolve({
+          data: { user: usuarioId === null ? null : { id: usuarioId } },
+          error: null,
+        }),
+    },
+    from: (tabla: string) => {
+      tablasPedidas.push(tabla);
+      return tabla === "profile"
+        ? consultaSobre(perfiles)
+        : escrituraSobre(escritura);
+    },
+    rpc: (nombre: string, argumentos: unknown) => {
+      rpcsPedidas.push({ nombre, argumentos });
+      return Promise.resolve(rpc);
+    },
+  };
+
+  return { cliente, tablasPedidas, rpcsPedidas };
+}
+
+/** Los perfiles del seed: varios, que es justo lo que rompía el gate sin filtro. */
+export function perfilesConStaff(rolDelQueLlama: string | null): Fila[] {
+  const otros = [
+    { id: "otro-1", rol: "mercaderista", nombre: "José Quispe" },
+    { id: "otro-2", rol: "cliente", nombre: "Luis Paredes" },
+  ];
+  if (rolDelQueLlama === null) return otros;
+  return [{ id: "u1", rol: rolDelQueLlama, nombre: "Carla" }, ...otros];
+}

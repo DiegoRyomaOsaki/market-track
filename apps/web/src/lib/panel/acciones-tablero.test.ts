@@ -1,19 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { marcarContingenciaAtendida } from "./acciones-tablero";
+import { perfilesConStaff, supabaseFalso } from "./supabase-falso";
 
 // El gate de autorización de "Marcar atendida". Una server action es un endpoint
 // POST: no la protege que el botón solo se pinte en `/supervisor`, así que estas
 // ramas son la defensa real.
 
-const { from, revalidatePath } = vi.hoisted(() => ({
-  from: vi.fn(),
+const { crearCliente, revalidatePath } = vi.hoisted(() => ({
+  crearCliente: vi.fn(),
   revalidatePath: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("@/lib/supabase/server", () => ({
-  createServerSupabaseClient: () => Promise.resolve({ from }),
+  createServerSupabaseClient: () => Promise.resolve(crearCliente()),
 }));
 
 // Un id con la forma del seed del proyecto: NO cumple los bits de versión del
@@ -21,43 +22,33 @@ vi.mock("@/lib/supabase/server", () => ({
 // la acción lo rechazaría — este test es lo que lo caza.
 const ID = "a0000016-0000-0000-0000-000000000001";
 
-/** El `select('rol').maybeSingle()` con el que la acción resuelve quién llama. */
-function perfil(rol: string | null) {
-  return {
-    select: () => ({
-      maybeSingle: () =>
-        Promise.resolve({ data: rol === null ? null : { rol }, error: null }),
-    }),
-  };
-}
-
 type RespuestaAlerta = {
   data: { id: string }[] | null;
   error: { message: string } | null;
 };
 
-/** El `update(...).eq(...).eq(...).select()` de la alerta. */
-function alerta(resultado: RespuestaAlerta) {
-  const encadenable = {
-    update: () => encadenable,
-    eq: () => encadenable,
-    select: () => Promise.resolve(resultado),
-  };
-  return encadenable;
-}
+/**
+ * El doble mira los perfiles de verdad, con varios en la tabla: si el gate deja
+ * de filtrar por el id del que llama, `maybeSingle()` falla igual que en
+ * producción y estos tests se ponen rojos.
+ */
+let espia: ReturnType<typeof supabaseFalso>;
 
-/** Encadena las respuestas por tabla, en el orden en que la acción las pide. */
 function conSupabase(
   rol: string | null,
   resultadoAlerta: RespuestaAlerta = { data: [{ id: ID }], error: null },
 ) {
-  from.mockImplementation((tabla: string) =>
-    tabla === "profile" ? perfil(rol) : alerta(resultadoAlerta),
-  );
+  const falso = supabaseFalso({
+    perfiles: perfilesConStaff(rol),
+    escritura: resultadoAlerta,
+  });
+  crearCliente.mockReturnValue(falso.cliente);
+  espia = falso;
+  return falso;
 }
 
 beforeEach(() => {
-  from.mockReset();
+  crearCliente.mockReset();
   revalidatePath.mockReset();
 });
 
@@ -84,7 +75,7 @@ describe("marcarContingenciaAtendida", () => {
     conSupabase("mercaderista");
     const r = await marcarContingenciaAtendida({ id: ID });
     expect(r).toEqual({ ok: false, error: "No encontrado o sin permiso" });
-    expect(from).not.toHaveBeenCalledWith("alerta");
+    expect(espia.tablasPedidas).not.toContain("alerta");
   });
 
   it("el cliente-marca tampoco", async () => {
@@ -92,7 +83,7 @@ describe("marcarContingenciaAtendida", () => {
     await expect(marcarContingenciaAtendida({ id: ID })).resolves.toMatchObject(
       { ok: false },
     );
-    expect(from).not.toHaveBeenCalledWith("alerta");
+    expect(espia.tablasPedidas).not.toContain("alerta");
   });
 
   it("sin perfil legible no pasa nadie", async () => {
@@ -109,7 +100,7 @@ describe("marcarContingenciaAtendida", () => {
       ok: false,
       error: "Identificador de alerta inválido",
     });
-    expect(from).not.toHaveBeenCalled();
+    expect(crearCliente).not.toHaveBeenCalled();
   });
 
   it("cero filas afectadas es un fallo, no un éxito silencioso", async () => {

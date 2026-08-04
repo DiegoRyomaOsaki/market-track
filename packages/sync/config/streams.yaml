@@ -41,9 +41,19 @@ streams:
       - SELECT * FROM promocion WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
 
       # Su perfil y su rutero personal.
+      #
+      # El rutero se acota además por ESTADO: un borrador es la planeación a
+      # medio hacer del supervisor —tiendas sin decidir, orden sin cerrar— y no
+      # tiene por qué estar en el teléfono de nadie. `<> 'borrador'` y no
+      # `= 'publicado'` a propósito: en cuanto el mercaderista empieza su día el
+      # rutero pasa a `en_curso`, y filtrar por publicado se lo borraría del
+      # bolsillo a media jornada.
+      #
+      # Y las paradas se acotan al rutero propio, no solo al tenant: si no, cada
+      # mercaderista se descarga la planeación de todos sus compañeros.
       - SELECT * FROM profile WHERE id = auth.user_id()
-      - SELECT * FROM rutero WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND mercaderista_id = auth.user_id()
-      - SELECT * FROM rutero_parada WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
+      - SELECT * FROM rutero WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND mercaderista_id = auth.user_id() AND estado <> 'borrador'
+      - SELECT * FROM rutero_parada WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND rutero_id IN (SELECT id FROM rutero WHERE mercaderista_id = auth.user_id() AND estado <> 'borrador')
 
       # Su trabajo de campo. La visita y el rutero se acotan además al propio
       # mercaderista (menos volumen y nada de ver visitas ajenas); el

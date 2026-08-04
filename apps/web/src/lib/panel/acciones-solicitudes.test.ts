@@ -1,18 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { resolverSolicitud } from "./acciones-solicitudes";
+import { perfilesConStaff, supabaseFalso } from "./supabase-falso";
 
 // El gate de autorización de "resolver". Una server action es un endpoint POST:
 // que el botón solo se pinte en `/supervisor` no protege nada.
 
-const { from, revalidatePath } = vi.hoisted(() => ({
-  from: vi.fn(),
+const { crearCliente, revalidatePath } = vi.hoisted(() => ({
+  crearCliente: vi.fn(),
   revalidatePath: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("@/lib/supabase/server", () => ({
-  createServerSupabaseClient: () => Promise.resolve({ from }),
+  createServerSupabaseClient: () => Promise.resolve(crearCliente()),
 }));
 
 const ID = "a0000020-0000-0000-0000-000000000001";
@@ -23,38 +24,28 @@ type RespuestaUpdate = {
   error: { message: string } | null;
 };
 
-function perfil(rol: string | null) {
-  return {
-    select: () => ({
-      maybeSingle: () =>
-        Promise.resolve({
-          data: rol === null ? null : { id: "p1", rol, nombre: "Carla" },
-          error: null,
-        }),
-    }),
-  };
-}
+let espia: ReturnType<typeof supabaseFalso>;
 
-function solicitudes(resultado: RespuestaUpdate) {
-  const encadenable = {
-    update: () => encadenable,
-    eq: () => encadenable,
-    select: () => Promise.resolve(resultado),
-  };
-  return encadenable;
-}
-
+/**
+ * El doble consulta los perfiles de verdad, con varios en la tabla: si el gate
+ * deja de filtrar por el id del que llama, `maybeSingle()` falla igual que en
+ * producción y estos tests se ponen rojos.
+ */
 function conSupabase(
   rol: string | null,
   resultado: RespuestaUpdate = { data: [{ id: ID }], error: null },
 ) {
-  from.mockImplementation((tabla: string) =>
-    tabla === "profile" ? perfil(rol) : solicitudes(resultado),
-  );
+  const falso = supabaseFalso({
+    perfiles: perfilesConStaff(rol),
+    escritura: resultado,
+  });
+  crearCliente.mockReturnValue(falso.cliente);
+  espia = falso;
+  return falso;
 }
 
 beforeEach(() => {
-  from.mockReset();
+  crearCliente.mockReset();
   revalidatePath.mockReset();
 });
 
@@ -77,7 +68,7 @@ describe("resolverSolicitud", () => {
     conSupabase("mercaderista");
     const r = await resolverSolicitud(VALIDO);
     expect(r).toEqual({ ok: false, error: "No encontrada o sin permiso" });
-    expect(from).not.toHaveBeenCalledWith("solicitud_cambio_ruta");
+    expect(espia.tablasPedidas).not.toContain("solicitud_cambio_ruta");
   });
 
   it("el cliente-marca tampoco: no es asunto suyo", async () => {
@@ -85,7 +76,7 @@ describe("resolverSolicitud", () => {
     await expect(resolverSolicitud(VALIDO)).resolves.toMatchObject({
       ok: false,
     });
-    expect(from).not.toHaveBeenCalledWith("solicitud_cambio_ruta");
+    expect(espia.tablasPedidas).not.toContain("solicitud_cambio_ruta");
   });
 
   it("el comentario es obligatorio, también al aprobar", async () => {
@@ -94,14 +85,14 @@ describe("resolverSolicitud", () => {
     conSupabase("supervisor");
     const r = await resolverSolicitud({ ...VALIDO, comentario: "   " });
     expect(r).toMatchObject({ ok: false });
-    expect(from).not.toHaveBeenCalled();
+    expect(crearCliente).not.toHaveBeenCalled();
   });
 
   it("no se puede devolver una solicitud a `nueva` por esta vía", async () => {
     conSupabase("supervisor");
     const r = await resolverSolicitud({ ...VALIDO, decision: "nueva" });
     expect(r).toMatchObject({ ok: false });
-    expect(from).not.toHaveBeenCalled();
+    expect(crearCliente).not.toHaveBeenCalled();
   });
 
   it("cero filas afectadas es un fallo, no un éxito silencioso", async () => {

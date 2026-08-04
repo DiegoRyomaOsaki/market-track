@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { sesionDeStaff } from "@/lib/panel/sesion";
 
 export type ResultadoAccion =
   | { ok: true; resueltaAt: string; resueltaPorNombre: string }
@@ -43,15 +43,9 @@ export async function resolverSolicitud(
     return { ok: false, error: "Revisa el comentario antes de resolver" };
   }
 
-  const supabase = await createServerSupabaseClient();
-
-  const { data: perfil } = await supabase
-    .from("profile")
-    .select("id, rol, nombre")
-    .maybeSingle();
-  if (perfil?.rol !== "admin" && perfil?.rol !== "supervisor") {
-    return { ok: false, error: SIN_PERMISO };
-  }
+  const sesion = await sesionDeStaff();
+  if (!sesion) return { ok: false, error: SIN_PERMISO };
+  const { supabase, perfil } = sesion;
 
   const resueltaAt = new Date().toISOString();
   const { data, error } = await supabase

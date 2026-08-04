@@ -1,5 +1,6 @@
 import type { Database } from "@market-track/db";
 
+import { diaEnLima } from "@/lib/fecha-lima";
 import type { ColorPin } from "@/lib/mapa/pines";
 
 // La lógica PURA del tablero del día: cómo se lee una fila en pantalla y cómo se
@@ -44,16 +45,7 @@ export type Contingencia = Omit<ContingenciaCruda, "paso" | "motivo"> & {
 };
 
 /** El día de calendario en Lima, que es el "hoy" del negocio — nunca el de UTC. */
-const FORMATO_DIA_LIMA = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "America/Lima",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
-
-export function hoyEnLima(ref: Date): string {
-  return FORMATO_DIA_LIMA.format(ref); // YYYY-MM-DD
-}
+export const hoyEnLima = diaEnLima;
 
 type EstadoVisita = Database["public"]["Enums"]["estado_visita"];
 
