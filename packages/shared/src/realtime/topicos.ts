@@ -10,8 +10,16 @@
 // y haber llamado antes a `supabase.realtime.setAuth()`, o Realtime no evalúa
 // las políticas y el join se rechaza.
 
-/** Las tablas que se transmiten en vivo. El nombre del feed ES el de la tabla. */
-export const FEEDS_EN_VIVO = ["alerta", "visita"] as const;
+// Las tablas que se transmiten en vivo. El nombre del feed ES el de la tabla.
+//
+// `solicitud_cambio_ruta` solo tiene canal de staff: es un asunto interno entre
+// el mercaderista y su supervisor, y la política de `realtime.messages` no deja
+// al cliente-marca unirse a su topic de tenant.
+export const FEEDS_EN_VIVO = [
+  "alerta",
+  "visita",
+  "solicitud_cambio_ruta",
+] as const;
 
 export type FeedEnVivo = (typeof FEEDS_EN_VIVO)[number];
 

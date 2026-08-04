@@ -121,6 +121,16 @@ export const NAV_SUPERVISOR: readonly ItemNav[] = [
       "La agenda semanal de cada mercaderista: se arrastran las tiendas a los días y se publica. El móvil recibe la asignación por push.",
   },
   {
+    href: "/supervisor/solicitudes",
+    label: "Solicitudes",
+    icono: "🙋",
+    area: "supervisor",
+    titulo: "Solicitudes de cambio de ruta",
+    subtitulo: "Peticiones del equipo pendientes de decisión",
+    ayuda:
+      "Lo que el mercaderista pide desde la app cuando no puede seguir su rutero: cambiar de tienda o de día, o no visitar. Llegan con su motivo y se aprueban o rechazan con un comentario, que él lee en el móvil. Aprobar no reordena el rutero solo: desde aquí se pasa a Ruteros para ajustarlo.",
+  },
+  {
     href: "/supervisor/revision",
     label: "Revisión",
     icono: "✅",
