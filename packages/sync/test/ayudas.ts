@@ -53,6 +53,15 @@ export const AppSchema = new Schema({
   visita: new Table({ tenant_id: column.text, mercaderista_id: column.text }),
   cadena: tablaTenant(),
   marca: tablaTenant(),
+  rutero: new Table({
+    tenant_id: column.text,
+    mercaderista_id: column.text,
+    estado: column.text,
+  }),
+  rutero_parada: new Table({
+    tenant_id: column.text,
+    rutero_id: column.text,
+  }),
 });
 
 function anonKey(): string {
@@ -212,10 +221,12 @@ export async function replicarCon(
 }
 
 /** Las filas de una tabla replicada, para inspeccionar de qué tenant son. */
-export async function filasReplicadas(
+export async function filasReplicadas<T = { tenant_id: string }>(
   sesion: Session,
   tabla: string,
-): Promise<{ tenant_id: string }[]> {
+  /** Qué columnas leer. Por defecto basta `tenant_id` para probar aislamiento. */
+  columnas = "tenant_id",
+): Promise<T[]> {
   const nombre = `harness-${randomUUID()}`;
   const db = new PowerSyncDatabase({
     schema: AppSchema,
@@ -226,9 +237,7 @@ export async function filasReplicadas(
   try {
     await esperarPrimerSync(db, 25000);
     await new Promise((r) => setTimeout(r, 1500));
-    return await db.getAll<{ tenant_id: string }>(
-      `SELECT tenant_id FROM ${tabla}`,
-    );
+    return await db.getAll<T>(`SELECT ${columnas} FROM ${tabla}`);
   } finally {
     await db.disconnect();
     await db.close();

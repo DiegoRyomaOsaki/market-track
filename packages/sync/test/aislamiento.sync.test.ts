@@ -67,6 +67,38 @@ describe("aislamiento de las sync rules", () => {
     }
   }, 60000);
 
+  it("un rutero en BORRADOR no baja al teléfono", async () => {
+    // La planeación a medio hacer del supervisor —tiendas sin decidir, orden sin
+    // cerrar— no tiene por qué estar en el bolsillo de nadie. Hasta MAR-50 la
+    // regla no filtraba por estado y los borradores sí bajaban.
+    const sesion = await sesionAal2(USUARIOS.joseMaracumango.email);
+    const ruteros = await filasReplicadas<{ estado: string }>(
+      sesion,
+      "rutero",
+      "estado",
+    );
+
+    expect(ruteros.length).toBeGreaterThan(0); // sí baja lo publicado
+    expect(ruteros.filter((r) => r.estado === "borrador")).toEqual([]);
+  }, 60000);
+
+  it("las paradas que bajan son solo las de SUS ruteros", async () => {
+    // La regla acotaba `rutero_parada` solo por tenant, así que cada
+    // mercaderista se descargaba la planeación de todos sus compañeros.
+    const sesion = await sesionAal2(USUARIOS.joseMaracumango.email);
+    const [ruteros, paradas] = await Promise.all([
+      filasReplicadas<{ id: string }>(sesion, "rutero", "id"),
+      filasReplicadas<{ rutero_id: string }>(
+        sesion,
+        "rutero_parada",
+        "rutero_id",
+      ),
+    ]);
+
+    const suyos = new Set(ruteros.map((r) => r.id));
+    expect(paradas.filter((p) => !suyos.has(p.rutero_id))).toEqual([]);
+  }, 60000);
+
   it("un excliente deja de replicar en cuanto se desactiva su cliente", async () => {
     // El acceso es DERIVADO: el CTE mi_tenant exige t.activo = true. Al apagar el
     // cliente, deja de devolver tenant y no baja nada.
