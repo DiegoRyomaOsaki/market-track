@@ -16,7 +16,14 @@ import {
 // Prerrequisitos: `supabase start`, `supabase functions serve` y
 // `pnpm --filter @market-track/sync sync:up`. Sin ellos el harness no corre.
 
-const TABLAS = ["tienda", "sku", "cadena", "marca", "visita"] as const;
+const TABLAS = [
+  "tienda",
+  "sku",
+  "cadena",
+  "marca",
+  "visita",
+  "revision_visita",
+] as const;
 
 describe("aislamiento de las sync rules", () => {
   beforeAll(() => {
@@ -97,6 +104,24 @@ describe("aislamiento de las sync rules", () => {
 
     const suyos = new Set(ruteros.map((r) => r.id));
     expect(paradas.filter((p) => !suyos.has(p.rutero_id))).toEqual([]);
+  }, 60000);
+
+  it("la revisión que baja es solo la de SUS visitas", async () => {
+    // Es lo que le dice al mercaderista que le rechazaron un reporte y por qué.
+    // La RLS no interviene en la bajada: si la regla no acotara por visita propia,
+    // cada teléfono se traería el control de calidad de todos sus compañeros.
+    const sesion = await sesionAal2(USUARIOS.joseMaracumango.email);
+    const [visitas, revisiones] = await Promise.all([
+      filasReplicadas<{ id: string }>(sesion, "visita", "id"),
+      filasReplicadas<{ visita_id: string }>(
+        sesion,
+        "revision_visita",
+        "visita_id",
+      ),
+    ]);
+
+    const suyas = new Set(visitas.map((v) => v.id));
+    expect(revisiones.filter((r) => !suyas.has(r.visita_id))).toEqual([]);
   }, 60000);
 
   it("un excliente deja de replicar en cuanto se desactiva su cliente", async () => {

@@ -20,6 +20,8 @@ export type ParadaDeHoy = {
   visita_id: string | null;
   visita_estado: string | null;
   check_in_at: string | null;
+  /** Nula mientras el supervisor no haya revisado el reporte de esa visita. */
+  revision_decision: string | null;
 };
 
 /**
@@ -48,11 +50,16 @@ const SQL = `
   SELECT rp.id AS parada_id, rp.tenant_id AS tenant_id, rp.orden, rp.tienda_id,
          t.nombre AS tienda_nombre, t.direccion AS tienda_direccion,
          t.lat AS lat, t.lon AS lon, t.radio_geocerca_m AS radio_geocerca_m,
-         v.id AS visita_id, v.estado AS visita_estado, v.check_in_at AS check_in_at
+         v.id AS visita_id, v.estado AS visita_estado, v.check_in_at AS check_in_at,
+         rv.decision AS revision_decision
   FROM rutero_parada rp
   JOIN rutero r ON r.id = rp.rutero_id
   JOIN tienda t ON t.id = rp.tienda_id
   LEFT JOIN visita v ON v.rutero_parada_id = rp.id
+  -- Si al supervisor le da tiempo de revisarla el mismo día, se ve aquí. Los
+  -- rechazos de días anteriores van al banner de la portada, que es donde el
+  -- mercaderista los verá de verdad.
+  LEFT JOIN revision_visita rv ON rv.visita_id = v.id
   WHERE r.fecha = ? AND r.estado <> 'borrador'
   ORDER BY rp.orden
 `;
@@ -68,10 +75,12 @@ const SQL_PARADA = `
   SELECT rp.id AS parada_id, rp.tenant_id AS tenant_id, rp.orden, rp.tienda_id,
          t.nombre AS tienda_nombre, t.direccion AS tienda_direccion,
          t.lat AS lat, t.lon AS lon, t.radio_geocerca_m AS radio_geocerca_m,
-         v.id AS visita_id, v.estado AS visita_estado, v.check_in_at AS check_in_at
+         v.id AS visita_id, v.estado AS visita_estado, v.check_in_at AS check_in_at,
+         rv.decision AS revision_decision
   FROM rutero_parada rp
   JOIN tienda t ON t.id = rp.tienda_id
   LEFT JOIN visita v ON v.rutero_parada_id = rp.id
+  LEFT JOIN revision_visita rv ON rv.visita_id = v.id
   WHERE rp.id = ?
 `;
 

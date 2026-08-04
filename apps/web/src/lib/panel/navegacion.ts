@@ -136,9 +136,9 @@ export const NAV_SUPERVISOR: readonly ItemNav[] = [
     icono: "✅",
     area: "supervisor",
     titulo: "Revisión de reportes",
-    subtitulo: "Cola de aprobación de levantamientos",
+    subtitulo: "Cola de aprobación de visitas cerradas",
     ayuda:
-      "La cola de levantamientos por aprobar: se revisa la evidencia —fotos antes/después, Share of Shelf— y se aprueba o se rechaza con un motivo.",
+      "La cola de visitas cerradas por aprobar. Se abre el reporte —fotos antes/después, Share of Shelf, stock, precios, contingencias y bitácora— y se aprueba o se rechaza. Rechazar exige un motivo, y el mercaderista lo lee en su app: es lo que le dice qué corregir. Una visita sin cerrar no entra aquí; esa se persigue desde el Tablero.",
   },
 ];
 

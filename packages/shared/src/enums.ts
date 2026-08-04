@@ -22,6 +22,9 @@ import { z } from "zod";
 
 export const rolUsuarioSchema = z.enum(Constants.public.Enums.rol_usuario);
 export const estadoVisitaSchema = z.enum(Constants.public.Enums.estado_visita);
+export const decisionRevisionSchema = z.enum(
+  Constants.public.Enums.decision_revision,
+);
 export const estadoLevantamientoSchema = z.enum(
   Constants.public.Enums.estado_levantamiento,
 );

@@ -44,16 +44,22 @@ const SERVIR_COMO_IMAGEN: Record<string, string> = {
   "response-content-disposition": 'inline; filename="foto.jpg"',
 };
 
+// `z.guid()`, no `z.uuid()`, como en el resto de las Edge Functions. El estricto
+// exige los bits de versión del RFC 9562, que Postgres NO impone: su tipo `uuid`
+// acepta cualquier hexadecimal con el formato correcto. Estas funciones eran las
+// únicas que se habían quedado con el estricto, y rechazaban con un 400 ids que la
+// base considera perfectamente válidos — entre ellos todos los del seed, que es
+// justo con lo que se prueban.
 export const subidaFirmadaSchema = z.object({
-  visita_id: z.uuid(),
+  visita_id: z.guid(),
   // Lo genera el móvil (es el id de la foto en la cola); todavía puede no existir
   // como fila `foto` cuando se pide la URL: el binario y la metadata van por
   // canales distintos y en cualquier orden.
-  foto_id: z.uuid(),
+  foto_id: z.guid(),
 });
 
 export const lecturaFirmadaSchema = z.object({
-  foto_ids: z.array(z.uuid()).min(1).max(TOPE_LOTE_LECTURA),
+  foto_ids: z.array(z.guid()).min(1).max(TOPE_LOTE_LECTURA),
 });
 
 // Fail-closed: sin las cuatro variables no se puede firmar nada, así que la función

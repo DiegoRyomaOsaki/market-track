@@ -1130,6 +1130,61 @@ export type Database = {
           },
         ]
       }
+      revision_visita: {
+        Row: {
+          creado_at: string
+          decision: Database["public"]["Enums"]["decision_revision"]
+          id: string
+          motivo: string | null
+          revisado_at: string
+          revisor_id: string
+          tenant_id: string
+          visita_id: string
+        }
+        Insert: {
+          creado_at?: string
+          decision: Database["public"]["Enums"]["decision_revision"]
+          id?: string
+          motivo?: string | null
+          revisado_at?: string
+          revisor_id: string
+          tenant_id: string
+          visita_id: string
+        }
+        Update: {
+          creado_at?: string
+          decision?: Database["public"]["Enums"]["decision_revision"]
+          id?: string
+          motivo?: string | null
+          revisado_at?: string
+          revisor_id?: string
+          tenant_id?: string
+          visita_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "revision_visita_fk"
+            columns: ["visita_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "visita"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "revision_visita_revisor_id_fkey"
+            columns: ["revisor_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "revision_visita_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rutero: {
         Row: {
           creado_at: string
@@ -1604,6 +1659,31 @@ export type Database = {
           tipo: Database["public"]["Enums"]["tipo_solicitud_ruta"]
         }[]
       }
+      cola_revision: {
+        Args: { p_desde: string; p_hasta: string }
+        Returns: {
+          cadena_nombre: string
+          check_in_at: string
+          check_in_geocerca_ok: boolean
+          check_out_at: string
+          check_out_geocerca_ok: boolean
+          contingencias: number
+          decision: Database["public"]["Enums"]["decision_revision"]
+          duracion_min: number
+          fotos: number
+          fotos_pendientes: number
+          marcas: number
+          mercaderista_id: string
+          mercaderista_nombre: string
+          motivo: string
+          omitidos: number
+          quiebres: number
+          revisado_at: string
+          revisor_nombre: string
+          tienda_nombre: string
+          visita_id: string
+        }[]
+      }
       correos_clientes_del_tenant: {
         Args: { p_tenant: string }
         Returns: {
@@ -1666,6 +1746,7 @@ export type Database = {
           visitada: boolean
         }[]
       }
+      detalle_visita: { Args: { p_visita_id: string }; Returns: Json }
       duplicar_periodo_rutero: {
         Args: {
           p_desde: string
@@ -1698,6 +1779,14 @@ export type Database = {
       reordenar_paradas: {
         Args: { p_paradas: string[]; p_rutero_id: string }
         Returns: undefined
+      }
+      revisar_visita: {
+        Args: {
+          p_decision: Database["public"]["Enums"]["decision_revision"]
+          p_motivo: string
+          p_visita_id: string
+        }
+        Returns: string
       }
       tablero_contingencias: {
         Args: { p_fecha: string }
@@ -1736,6 +1825,7 @@ export type Database = {
     Enums: {
       canal_alerta: "dashboard" | "email" | "whatsapp"
       canal_otp: "correo" | "sms" | "whatsapp"
+      decision_revision: "aprobada" | "rechazada"
       estado_alerta: "nueva" | "vista" | "resuelta"
       estado_importacion:
         | "validando"
@@ -1911,6 +2001,7 @@ export const Constants = {
     Enums: {
       canal_alerta: ["dashboard", "email", "whatsapp"],
       canal_otp: ["correo", "sms", "whatsapp"],
+      decision_revision: ["aprobada", "rechazada"],
       estado_alerta: ["nueva", "vista", "resuelta"],
       estado_importacion: [
         "validando",

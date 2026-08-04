@@ -59,6 +59,11 @@ streams:
       # mercaderista (menos volumen y nada de ver visitas ajenas); el
       # levantamiento cuelga de la visita y se acota por tenant.
       - SELECT * FROM visita WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND mercaderista_id = auth.user_id()
+      # El resultado de la revisión de SUS reportes: la app le enseña la decisión
+      # y, si le rechazaron uno, el motivo. Sin esta regla el criterio "el
+      # mercaderista lo ve" no se cumple — la RLS no interviene en la bajada.
+      # Acotada por las visitas propias, igual que las paradas por su rutero.
+      - SELECT * FROM revision_visita WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND visita_id IN (SELECT id FROM visita WHERE mercaderista_id = auth.user_id())
       - SELECT * FROM levantamiento WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
       - SELECT * FROM levantamiento_sku WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
       # Respuestas de los campos libres del formulario configurable (ADR-0010): la

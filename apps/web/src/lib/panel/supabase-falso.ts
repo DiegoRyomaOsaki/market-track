@@ -62,7 +62,7 @@ export type OpcionesFalso = {
   /** Lo que devuelve cualquier escritura sobre otra tabla. */
   escritura?: RespuestaLista;
   /** Lo que devuelve cada `rpc(...)`. */
-  rpc?: { error: { message: string } | null };
+  rpc?: { data?: unknown; error: { message: string } | null };
 };
 
 /**
@@ -94,7 +94,7 @@ export function supabaseFalso({
     },
     rpc: (nombre: string, argumentos: unknown) => {
       rpcsPedidas.push({ nombre, argumentos });
-      return Promise.resolve(rpc);
+      return Promise.resolve({ data: rpc.data ?? null, error: rpc.error });
     },
   };
 
