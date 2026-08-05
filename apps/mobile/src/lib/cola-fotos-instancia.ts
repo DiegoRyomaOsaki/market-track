@@ -58,14 +58,27 @@ export function fijarUsuarioDeFotos(id: string | null): void {
   usuarioActual = id;
 }
 
+/**
+ * Borra la cola y los binarios del mercaderista anterior.
+ *
+ * Se llama junto a `disconnectAndClear()`: si la réplica del otro usuario se
+ * limpia pero sus fotos se quedan, este teléfono conserva evidencia de campo
+ * —con geo y hora— de alguien que ya no debería tener contexto aquí. La
+ * revocación tiene que alcanzar también a lo capturado, no solo a lo leído.
+ */
+export async function limpiarFotosDelDispositivo(): Promise<void> {
+  await FileSystem.deleteAsync(DIR_FOTOS, { idempotent: true });
+  await FileSystem.deleteAsync(RUTA_MANIFIESTO, { idempotent: true });
+}
+
 /** Pide la URL PUT prefirmada a la Edge Function. */
 async function firmarSubida(visitaId: string, fotoId: string) {
-  const respuesta = await supabase.functions.invoke<{
-    url: string;
-    expira_en_segundos: number;
-  }>("fotos-subida-firmada", {
-    body: { visita_id: visitaId, foto_id: fotoId },
-  });
+  const respuesta = await supabase.functions.invoke<{ url: string }>(
+    "fotos-subida-firmada",
+    {
+      body: { visita_id: visitaId, foto_id: fotoId },
+    },
+  );
   // El SDK tipa `error` como `any`: anotarlo `unknown` corta el contagio en el
   // borde en vez de dejarlo propagarse.
   const fallo: unknown = respuesta.error;
@@ -80,7 +93,7 @@ async function firmarSubida(visitaId: string, fotoId: string) {
   }
   const data = respuesta.data;
   if (!data?.url) throw new ErrorFirmado(0);
-  return { url: data.url, expiraEnSegundos: data.expira_en_segundos };
+  return data.url;
 }
 
 export const subidorFotos = new SubidorFotos({
@@ -210,13 +223,21 @@ export async function encolarFoto(d: DatosFoto): Promise<string> {
 export async function reconciliarFotos(
   mercaderistaId: string,
 ): Promise<number> {
+  // El dueño sale del JOIN con `visita`, igual que en `encolarFoto`. Estampar el
+  // usuario actual sobre lo que se reencuentra anularía el filtro del subidor: en
+  // un teléfono compartido, una foto huérfana del turno anterior volvería a la
+  // cola a nombre de quien esté usándolo ahora.
   const filas = await db.getAll<{
     id: string;
     visita_id: string;
     hash: string | null;
     capturada_at: string;
   }>(
-    `SELECT id, visita_id, hash, capturada_at FROM foto WHERE subida_at IS NULL`,
+    `SELECT f.id, f.visita_id, f.hash, f.capturada_at
+     FROM foto f
+     JOIN visita v ON v.id = f.visita_id
+     WHERE f.subida_at IS NULL AND v.mercaderista_id = ?`,
+    [mercaderistaId],
   );
 
   const enCola = new Set((await colaFotos.listarPendientes()).map((f) => f.id));

@@ -7,6 +7,7 @@ import {
 
 import { env } from "@/lib/env";
 import { supabase } from "@/lib/supabase";
+import { mensajeDeError } from "../error";
 
 // El puente entre la réplica local y el backend (ADR-0001).
 //
@@ -111,6 +112,6 @@ function codigoSqlstate(error: unknown): string | null {
 /** Mensaje de log para una op descartada, sin volcar `opData` ni secretos. */
 function mensajeRechazo(op: CrudEntry, error: unknown): string {
   const code = codigoSqlstate(error) ?? "?";
-  const detalle = error instanceof Error ? error.message : String(error);
+  const detalle = mensajeDeError(error);
   return `Op de sync descartada (${op.op} ${op.table} ${op.id}): ${code} ${detalle.slice(0, 200)}`;
 }

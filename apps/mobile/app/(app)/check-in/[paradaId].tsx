@@ -27,7 +27,6 @@ import { colores, espacio, radio } from "@/tema";
 // Check-in geocercado + selfie con watermark. La geocerca del cliente es SOLO UX
 // (se puede hacer check-in fuera de radio); el servidor re-valida al sincronizar
 // (MAR-30). La selfie se captura con watermark y se encola; enlazarla a la visita
-// (fila `foto` + subida a R2) es MAR-39.
 
 export default function CheckIn() {
   const router = useRouter();

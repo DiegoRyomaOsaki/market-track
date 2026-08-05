@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { db } from "./db";
+import { mensajeDeError } from "../error";
 
 // El estado de sincronización de la réplica local, para el indicador de conexión.
 //
@@ -41,8 +42,7 @@ export function useEstadoSync(): EstadoSync {
       // registra el fallo y se muestra 0 como último recurso.
       const pendientes = await contarPendientes().catch((error: unknown) => {
         console.warn(
-          "No se pudo contar la cola de subida: " +
-            (error instanceof Error ? error.message : String(error)),
+          "No se pudo contar la cola de subida: " + mensajeDeError(error),
         );
         return 0;
       });

@@ -8,8 +8,8 @@ import {
 import {
   ErrorFirmado,
   esperaDeReintento,
+  noMejoraReintentando,
   SubidorFotos,
-  tocaReintentar,
   type DepsSubidor,
 } from "./subidor-fotos";
 
@@ -77,10 +77,7 @@ function montar(
     firmar: (visitaId, fotoId) => {
       espias.firmados.push(fotoId);
       nFirma += 1;
-      return Promise.resolve({
-        url: `https://r2/${fotoId}?firma=${nFirma}`,
-        expiraEnSegundos: 900,
-      });
+      return Promise.resolve(`https://r2/${fotoId}?firma=${nFirma}`);
     },
     subirBinario: async (url) => {
       enVuelo += 1;
@@ -144,19 +141,18 @@ describe("esperaDeReintento", () => {
   });
 });
 
-describe("tocaReintentar", () => {
-  it("una foto nueva es elegible ya", () => {
-    expect(tocaReintentar(foto(), 1000)).toBe(true);
+describe("noMejoraReintentando", () => {
+  it("solo el 400: es un payload que la función rechaza", () => {
+    expect(noMejoraReintentando(400)).toBe(true);
   });
 
-  it("una que espera no se toca hasta su hora", () => {
-    const f = foto({ proximo_intento_at: "2026-08-05T14:00:00.000Z" });
-    expect(tocaReintentar(f, Date.parse("2026-08-05T13:00:00.000Z"))).toBe(
-      false,
-    );
-    expect(tocaReintentar(f, Date.parse("2026-08-05T14:00:01.000Z"))).toBe(
-      true,
-    );
+  it("401 y 403 SÍ mejoran: el token se refresca y la visita acaba subiendo", () => {
+    expect(noMejoraReintentando(401)).toBe(false);
+    expect(noMejoraReintentando(403)).toBe(false);
+  });
+
+  it("un 5xx también se reintenta", () => {
+    expect(noMejoraReintentando(500)).toBe(false);
   });
 });
 
@@ -413,5 +409,104 @@ describe("SubidorFotos", () => {
 
     expect(espias.marcadas).toEqual([foto().id]);
     expect(await cola.contarPendientes()).toBe(0);
+  });
+
+  it("tras un fallo se reprograma sola: el reintento no espera a un disparador", async () => {
+    // Sin esto, una foto que falla queda huérfana hasta que el usuario vuelva a
+    // abrir la app o pulse el botón. Verificado por mutación: quitando
+    // `programarSiguiente()` este test se pone rojo.
+    jest.useFakeTimers();
+    let n = 0;
+    let ahora = Date.parse("2026-08-05T13:00:00.000Z");
+    const { subidor, cola, espias } = montar(
+      [foto()],
+      {
+        entorno: {
+          conectado: () => true,
+          registrosPendientes: () => Promise.resolve(0),
+          usuarioId: () => YO,
+          ahora: () => ahora,
+        },
+      },
+      {
+        subir: () => {
+          n += 1;
+          return Promise.resolve({ estado: n === 1 ? 500 : 200 });
+        },
+      },
+    );
+
+    await subidor.arrancar();
+    expect(await cola.contarPendientes()).toBe(1);
+    expect(espias.subidas).toHaveLength(1);
+
+    // El reloj avanza más allá de la espera del primer fallo y el temporizador
+    // dispara la segunda pasada por su cuenta.
+    ahora += 60_000;
+    await jest.advanceTimersByTimeAsync(60_000);
+
+    expect(espias.subidas).toHaveLength(2);
+    expect(await cola.contarPendientes()).toBe(0);
+    jest.useRealTimers();
+  });
+
+  it("detener() cancela el reintento pendiente", async () => {
+    jest.useFakeTimers();
+    const cancelar = jest.spyOn(global, "clearTimeout");
+    const { subidor } = montar(
+      [foto()],
+      {},
+      {
+        subir: () => Promise.resolve({ estado: 500 }),
+      },
+    );
+
+    await subidor.arrancar();
+    subidor.detener();
+
+    expect(cancelar).toHaveBeenCalled();
+    cancelar.mockRestore();
+    jest.useRealTimers();
+  });
+
+  it("si no queda nada esperando, no deja un temporizador colgado", async () => {
+    jest.useFakeTimers();
+    const { subidor, cola } = montar([foto()]);
+
+    await subidor.arrancar();
+
+    expect(await cola.contarPendientes()).toBe(0);
+    expect(jest.getTimerCount()).toBe(0);
+    jest.useRealTimers();
+  });
+
+  it("a fuerza de fallos transitorios acaba marcándose para revisar", async () => {
+    // No se abandona nunca: sigue reintentando, pero la pantalla lo dice.
+    let ahora = Date.parse("2026-08-05T13:00:00.000Z");
+    const { subidor, cola } = montar(
+      [foto()],
+      {
+        entorno: {
+          conectado: () => true,
+          registrosPendientes: () => Promise.resolve(0),
+          usuarioId: () => YO,
+          ahora: () => ahora,
+        },
+      },
+      { subir: () => Promise.resolve({ estado: 500 }) },
+    );
+
+    for (let i = 0; i < 8; i += 1) {
+      await cola.reintentarTodas();
+      await subidor.arrancar();
+      ahora += 1_000_000;
+    }
+    subidor.detener();
+
+    const [p] = await cola.listarPendientes();
+    expect(p?.intentos).toBe(8);
+    expect(p?.requiere_atencion).toBe(true);
+    // Y sigue en la cola: la evidencia de campo no se abandona por un contador.
+    expect(await cola.contarPendientes()).toBe(1);
   });
 });

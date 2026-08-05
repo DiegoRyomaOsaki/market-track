@@ -7,6 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { IndicadorConexion } from "@/componentes/indicador-conexion";
 import {
   fijarUsuarioDeFotos,
+  limpiarFotosDelDispositivo,
   reconciliarFotos,
   subidorFotos,
 } from "@/lib/cola-fotos-instancia";
@@ -19,6 +20,7 @@ import {
 } from "@/lib/replica-usuario";
 import { useSesion } from "@/sesion";
 import { colores } from "@/tema";
+import { mensajeDeError } from "@/lib/error";
 
 // El shell autenticado. Solo se llega aquí con sesión aal2 (lo garantiza el guard
 // del layout raíz), así que es el sitio para conectar la réplica: PowerSync
@@ -38,6 +40,9 @@ export default function LayoutApp() {
       const anterior = await leerUltimoUsuario();
       if (debeLimpiarReplica(anterior, id)) {
         await db.disconnectAndClear();
+        // La evidencia capturada se va con la réplica: si no, quedan fotos del
+        // mercaderista anterior en un teléfono que ya no es su contexto.
+        await limpiarFotosDelDispositivo();
       }
       await guardarUltimoUsuario(id);
       if (cancelado) return;
@@ -45,10 +50,7 @@ export default function LayoutApp() {
     }
 
     conectar(userId).catch((error: unknown) => {
-      console.error(
-        "PowerSync no pudo conectar: " +
-          (error instanceof Error ? error.message : String(error)),
-      );
+      console.error("PowerSync no pudo conectar: " + mensajeDeError(error));
     });
 
     // Al salir del shell solo se desconecta: los datos se conservan por si vuelve
@@ -72,8 +74,7 @@ export default function LayoutApp() {
       .then(() => subidorFotos.arrancar())
       .catch((error: unknown) => {
         console.warn(
-          "No se pudo reconciliar la cola de fotos: " +
-            (error instanceof Error ? error.message : String(error)),
+          "No se pudo reconciliar la cola de fotos: " + mensajeDeError(error),
         );
       });
 

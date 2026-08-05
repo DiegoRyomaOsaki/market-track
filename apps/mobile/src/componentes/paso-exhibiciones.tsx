@@ -27,7 +27,6 @@ import { colores, espacio, radio } from "@/tema";
 // Paso 4.5 "Exhibiciones": auditar las NEGOCIADAS (pre-carga: instalada,
 // unidades, foto) y registrar las ADICIONALES/conseguidas por el mercaderista
 // (tipo, unidades, foto, vigencia). La foto "Después" es un paso aparte. Las
-// fotos se encolan; su FK queda null hasta MAR-39.
 
 const TIPOS = tipoExhibicionSchema.options;
 

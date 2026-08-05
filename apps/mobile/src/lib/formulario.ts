@@ -5,6 +5,8 @@ import {
   recortarRespuesta,
 } from "@market-track/shared";
 
+import { mensajeDeError } from "./error";
+
 // La lógica pura del formulario configurable en el móvil (MAR-80, ADR-0010):
 //   - parsear la `definicion` sincronizada (texto en SQLite) con Zod al LEER,
 //   - resolver QUÉ versión publicada usa una marca,
@@ -29,10 +31,7 @@ export function parseDefinicionFormulario(
   try {
     json = JSON.parse(raw);
   } catch (err) {
-    console.warn(
-      "[formulario] definición ilegible",
-      err instanceof Error ? err.message : String(err),
-    );
+    console.warn("[formulario] definición ilegible", mensajeDeError(err));
     return null;
   }
 

@@ -21,13 +21,11 @@ import { ubicacionActual } from "@/lib/ubicacion";
 import { colores, espacio } from "@/tema";
 
 // Paso 4.5 (cierre) "Foto Después": la góndola ya trabajada. La miniatura del
-// "Antes" como guía queda pendiente hasta que MAR-39 enlace las fotos (hoy la
-// foto Antes se encola sin FK, así que no hay de dónde leer su miniatura). La
-// foto se encola; su FK queda null hasta MAR-39.
+// "Antes" como guía sigue pendiente: la fila `foto` ya existe, pero mostrarla
+// exige leer el binario local del "Antes", que puede haberse subido y borrado. La
 
 type Props = {
   visitaId: string;
-  marcaId: string;
   levantamientoId: string;
   tenantId: string;
   usuario: string;

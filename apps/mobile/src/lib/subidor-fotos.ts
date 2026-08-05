@@ -1,4 +1,5 @@
 import type { ColaFotos, FotoPendiente } from "./cola-fotos";
+import { mensajeDeError } from "./error";
 
 // El subidor: vacía la cola de disco hacia R2 con enlaces prefirmados.
 //
@@ -9,15 +10,16 @@ import type { ColaFotos, FotoPendiente } from "./cola-fotos";
 // Todo lo que toca el mundo exterior entra por `DepsSubidor`, así que los tests
 // corren sin red, sin disco y sin PowerSync.
 
-/** Qué se pudo firmar, y hasta cuándo vale. */
-export type UrlFirmada = { url: string; expiraEnSegundos: number };
-
 export type ResultadoSubida = { estado: number };
 
 export type DepsSubidor = {
   cola: ColaFotos;
-  /** Pide la URL PUT a la Edge Function `fotos-subida-firmada`. */
-  firmar: (visitaId: string, fotoId: string) => Promise<UrlFirmada>;
+  /**
+   * Pide la URL PUT a la Edge Function `fotos-subida-firmada`. Devuelve solo la
+   * URL: la caducidad no se lee, se descubre — un 403 en el PUT dispara el
+   * refirmado, que es más fiable que fiarse de un reloj.
+   */
+  firmar: (visitaId: string, fotoId: string) => Promise<string>;
   /** Sube el archivo local a esa URL. Devuelve el status HTTP. */
   subirBinario: (url: string, ruta: string) => Promise<ResultadoSubida>;
   archivo: {
@@ -42,10 +44,38 @@ export type DepsSubidor = {
 /** Android de gama media y red móvil: dos subidas a la vez es el techo sensato. */
 const CONCURRENCIA = 2;
 
+/**
+ * Plazo de cada llamada de red. NO es un lujo: `arrancar()` es single-flight, así
+ * que una promesa que nunca se resuelve —radio en ahorro de energía, socket que
+ * deja de emitir sin cerrarse— dejaría `enCurso` fijado y **la cola entera parada
+ * el resto del turno**, sin que el botón de reintento ni los disparadores
+ * automáticos pudieran destrabarla. El uploader nativo no garantiza un tope de
+ * duración total, así que el reloj lo pone la aplicación.
+ *
+ * Generoso a propósito: una foto de 300 KB por 3G en un sótano tarda.
+ */
+const PLAZO_RED_MS = 90_000;
+
+/** Corre la promesa contra un reloj. Al vencer, se trata como fallo transitorio. */
+function conPlazo<T>(promesa: Promise<T>, ms: number): Promise<T> {
+  let cancelar: ReturnType<typeof setTimeout>;
+  const vencido = new Promise<never>((_, rechazar) => {
+    cancelar = setTimeout(
+      () => rechazar(new Error("plazo de red agotado")),
+      ms,
+    );
+  });
+  vencido.catch(() => undefined);
+  return Promise.race([promesa, vencido]).finally(() => clearTimeout(cancelar));
+}
+
 /** A partir de aquí la foto se marca para que el usuario la mire; NO se abandona. */
 const INTENTOS_ANTES_DE_AVISAR = 8;
 
 const ESPERAS_MS = [5_000, 15_000, 45_000, 120_000, 300_000, 900_000];
+
+/** Cuánto esperar cuando lo que bloquea es la cola de registros, no un fallo. */
+const ESPERA_TRAS_REGISTROS_MS = 15_000;
 
 /**
  * Cuánto esperar tras `intentos` fallos. Crece y tiene tope, con un margen
@@ -61,25 +91,23 @@ export function esperaDeReintento(
 }
 
 /** ¿Toca ya reintentar esta foto? */
-export function tocaReintentar(foto: FotoPendiente, ahora: number): boolean {
+function tocaReintentar(foto: FotoPendiente, ahora: number): boolean {
   if (!foto.proximo_intento_at) return true;
   return new Date(foto.proximo_intento_at).getTime() <= ahora;
 }
 
 /**
- * Cómo tratar un fallo.
+ * ¿Reintentar este fallo es inútil?
  *
- * `permanente` NO significa "descartar": significa que reintentar no lo arregla,
- * así que se marca para que alguien lo mire. El archivo no se borra nunca por un
- * fallo — solo el éxito borra.
+ * Solo el 400: es un payload que la función rechaza, y no mejora insistiendo.
+ * 401 y 403 NO lo son — el token se refresca, y un 403 del firmado suele ser que
+ * la `visita` todavía no llegó al servidor.
+ *
+ * "Inútil reintentar" tampoco significa descartar: se marca para que alguien lo
+ * mire, pero el archivo no se borra jamás por un fallo. Solo el éxito borra.
  */
-export type Clasificacion = "transitorio" | "permanente";
-
-export function clasificarEstado(estado: number): Clasificacion {
-  // 400 es un payload que la función rechaza: reintentarlo da lo mismo.
-  // 401/403 sí son transitorios: el token se refresca, y un 403 del firmado suele
-  // ser que la `visita` todavía no llegó al servidor.
-  return estado === 400 ? "permanente" : "transitorio";
+export function noMejoraReintentando(estado: number): boolean {
+  return estado === 400;
 }
 
 /** El error que lanza `firmar` cuando la función responde con un status. */
@@ -89,12 +117,6 @@ export class ErrorFirmado extends Error {
     this.name = "ErrorFirmado";
   }
 }
-
-function mensajeDe(e: unknown): string {
-  return (e instanceof Error ? e.message : String(e)).slice(0, 200);
-}
-
-type Desenlace = "subida" | "descartada" | "reintentar" | "saltada";
 
 export class SubidorFotos {
   private enCurso: Promise<void> | null = null;
@@ -133,7 +155,12 @@ export class SubidorFotos {
     // teléfono, responde 403. Al recuperar señal los dos canales arrancan a la
     // vez, así que sin esta puerta el primer intento de cada foto se quema
     // siempre. El indicador de la pantalla lo explica en vez de callarlo.
-    if ((await entorno.registrosPendientes()) > 0) return;
+    if ((await entorno.registrosPendientes()) > 0) {
+      // Se reprograma en vez de salir en seco: depender solo de que llegue otro
+      // `statusChanged` deja la cola parada si ese evento no vuelve a dispararse.
+      this.programarEn(ESPERA_TRAS_REGISTROS_MS);
+      return;
+    }
 
     const ahora = entorno.ahora();
     const pendientes = (await cola.listarPendientes()).filter(
@@ -159,6 +186,12 @@ export class SubidorFotos {
     await this.programarSiguiente();
   }
 
+  /** Arma el único temporizador de la cola dentro de `ms`. */
+  private programarEn(ms: number): void {
+    this.detener();
+    this.temporizador = setTimeout(() => void this.arrancar(), ms);
+  }
+
   /** Un solo temporizador para toda la cola, al vencimiento más cercano. */
   private async programarSiguiente(): Promise<void> {
     this.detener();
@@ -173,18 +206,17 @@ export class SubidorFotos {
       .filter((t) => t > ahora);
     if (proximos.length === 0) return;
 
-    const espera = Math.max(1_000, Math.min(...proximos) - ahora);
-    this.temporizador = setTimeout(() => void this.arrancar(), espera);
+    this.programarEn(Math.max(1_000, Math.min(...proximos) - ahora));
   }
 
-  private async procesar(foto: FotoPendiente): Promise<Desenlace> {
+  private async procesar(foto: FotoPendiente): Promise<void> {
     const { cola, archivo, replica, entorno } = this.deps;
 
     // Si el proceso murió entre el PUT y el borrado, la fila ya está marcada:
     // no se vuelve a subir, solo se limpia. Es el atajo de idempotencia.
     if (await replica.yaSubida(foto.id)) {
       await this.limpiar(foto);
-      return "subida";
+      return;
     }
 
     if (!(await archivo.existe(foto.ruta))) {
@@ -195,19 +227,31 @@ export class SubidorFotos {
         `Foto ${foto.id}: el archivo local ya no existe, se descarta`,
       );
       await cola.marcarSubida(foto.id);
-      return "descartada";
+      return;
     }
 
     try {
-      const firmada = await this.deps.firmar(foto.visita_id, foto.id);
-      let subida = await this.deps.subirBinario(firmada.url, foto.ruta);
+      const url = await conPlazo(
+        this.deps.firmar(foto.visita_id, foto.id),
+        PLAZO_RED_MS,
+      );
+      let subida = await conPlazo(
+        this.deps.subirBinario(url, foto.ruta),
+        PLAZO_RED_MS,
+      );
 
       // El enlace caduca a los 15 min; una subida lenta en 3G puede pasarse. Se
       // pide otro y se reintenta una vez dentro del mismo intento, en vez de
       // gastar un ciclo de espera entero.
       if (subida.estado === 403) {
-        const otra = await this.deps.firmar(foto.visita_id, foto.id);
-        subida = await this.deps.subirBinario(otra.url, foto.ruta);
+        const otra = await conPlazo(
+          this.deps.firmar(foto.visita_id, foto.id),
+          PLAZO_RED_MS,
+        );
+        subida = await conPlazo(
+          this.deps.subirBinario(otra, foto.ruta),
+          PLAZO_RED_MS,
+        );
       }
 
       if (subida.estado >= 200 && subida.estado < 300) {
@@ -218,20 +262,21 @@ export class SubidorFotos {
           new Date(entorno.ahora()).toISOString(),
         );
         await this.limpiar(foto);
-        return "subida";
+        return;
       }
 
       await this.fallo(
         foto,
-        clasificarEstado(subida.estado),
+        noMejoraReintentando(subida.estado),
         `PUT ${subida.estado}`,
       );
-      return "reintentar";
+      return;
     } catch (e) {
-      const clase =
-        e instanceof ErrorFirmado ? clasificarEstado(e.estado) : "transitorio";
-      await this.fallo(foto, clase, mensajeDe(e));
-      return "reintentar";
+      // Cualquier otro fallo (red, plazo agotado) es transitorio: se reintenta.
+      const definitivo =
+        e instanceof ErrorFirmado && noMejoraReintentando(e.estado);
+      await this.fallo(foto, definitivo, mensajeDeError(e));
+      return;
     }
   }
 
@@ -242,7 +287,7 @@ export class SubidorFotos {
       // Que no se pueda borrar el archivo no invalida la subida: la evidencia ya
       // está en R2. Se registra y se sigue; queda un huérfano, no una pérdida.
       console.warn(
-        `Foto ${foto.id}: no se pudo borrar el archivo — ${mensajeDe(e)}`,
+        `Foto ${foto.id}: no se pudo borrar el archivo — ${mensajeDeError(e)}`,
       );
     }
     await this.deps.cola.marcarSubida(foto.id);
@@ -250,7 +295,7 @@ export class SubidorFotos {
 
   private async fallo(
     foto: FotoPendiente,
-    clase: Clasificacion,
+    definitivo: boolean,
     detalle: string,
   ): Promise<void> {
     const intentos = foto.intentos + 1;
@@ -259,10 +304,11 @@ export class SubidorFotos {
       proximoIntentoAt: new Date(
         this.deps.entorno.ahora() + espera,
       ).toISOString(),
-      // Un permanente se marca a la primera; un transitorio, tras insistir.
-      requiereAtencion:
-        clase === "permanente" || intentos >= INTENTOS_ANTES_DE_AVISAR,
+      // Lo definitivo se marca a la primera; lo transitorio, tras insistir.
+      requiereAtencion: definitivo || intentos >= INTENTOS_ANTES_DE_AVISAR,
     });
-    console.warn(`Foto ${foto.id}: fallo ${clase} — ${detalle}`);
+    console.warn(
+      `Foto ${foto.id}: fallo ${definitivo ? "definitivo" : "transitorio"} — ${detalle}`,
+    );
   }
 }
