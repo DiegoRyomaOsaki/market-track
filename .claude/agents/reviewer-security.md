@@ -88,6 +88,7 @@ Read `CLAUDE.md` for full context. Key facts for this project:
 - [ ] New migrations that create tables enable RLS in the same migration
 - [ ] No Edge Function uses `service_role` to read/write across tenants without an explicit, justified role check
 - [ ] Cross-tenant access attempts covered by tests (one tenant's data unreachable from another tenant's session)
+- [ ] A sensitive *category* of row inside the tenant (personal data, a photo of a person) is excluded by the policy, not only by the view/RPC that consumes it — any endpoint that signs or forwards by id has RLS as its ceiling, not the query
 
 ### Field Evidence Integrity
 - [ ] Check-in coordinates re-validated server-side against the store's PostGIS geofence at sync — client-side validation is UX, not a security boundary

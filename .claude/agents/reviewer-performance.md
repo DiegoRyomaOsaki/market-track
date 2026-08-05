@@ -33,6 +33,7 @@ Read `CLAUDE.md` for full context. Key facts for this project:
 - [ ] Internal service calls distinguish upstream outage (5xx) from business denial (4xx) so fail-closed handling surfaces the correct error to the user
 - [ ] No per-request instantiation of external clients — use module-level singletons to avoid connection-pool exhaustion
 - [ ] Helpers that lazy-import config or modules cache the resolved promise at module level when called more than once per request, instead of re-triggering module evaluation on each call
+- [ ] No aggregate orders by the jsonb it just built (`jsonb_agg(x order by x->>'campo')`) — it re-evaluates the whole `jsonb_build_object`, subqueries included, just for the sort key; order by the raw column
 - [ ] No per-row cast on an indexed column in a filter predicate (`col::date between …` on a `timestamptz` defeats the `(tenant_id, fecha)` index — use a half-open range on the raw column: `col >= $1 and col < ($2 + 1)`)
 
 ### Caching

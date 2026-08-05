@@ -71,6 +71,7 @@ Read `CLAUDE.md` for full context. Key facts for this project:
 
 ### Authorization & isolation
 - [ ] Cross-tenant/cross-user isolation tested — one tenant's data is unreachable from another's context
+- [ ] Negative isolation tests use a REAL id belonging to the other tenant, not an invented one — a nonexistent id proves "not found", not "denied", and passes with RLS switched off
 - [ ] Scope/tier enforcement tested — higher-tier or out-of-scope content is absent, not merely hidden
 - [ ] Permission revocation blocks access immediately — a revoked grant denies on the next request
 
