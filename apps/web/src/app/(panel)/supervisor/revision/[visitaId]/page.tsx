@@ -3,12 +3,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 
-import { detalleVisitaSchema, type FotoRevisada } from "@market-track/shared";
+import { detalleVisitaSchema } from "@market-track/shared";
 
 import { DecisionRevision } from "@/components/panel/revision/decision-revision";
-import { FotoEvidencia } from "@/components/panel/revision/foto-evidencia";
+import {
+  ETIQUETA_FOTO,
+  FotoEvidencia,
+} from "@/components/evidencia/foto-evidencia";
 import { Aviso, Pastilla, TD, TH } from "@/components/panel/tabla";
-import { urlsFirmadas } from "@/lib/panel/fotos-firmadas";
+import { urlsFirmadas } from "@/lib/fotos-firmadas";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -26,16 +29,6 @@ const FECHA = new Intl.DateTimeFormat("es-PE", {
   minute: "2-digit",
   timeZone: "America/Lima",
 });
-
-const ETIQUETA_FOTO: Record<FotoRevisada["tipo"], string> = {
-  selfie: "Selfie de check-in",
-  antes: "Antes",
-  despues: "Después",
-  sos: "Share of Shelf",
-  exhibicion: "Exhibición",
-  precio: "Precio",
-  contingencia: "Contingencia",
-};
 
 function Dato({ etiqueta, valor }: { etiqueta: string; valor: string }) {
   return (
@@ -89,7 +82,7 @@ export default async function DetalleReportePage({
   // Solo se firma lo que ya está en R2: mientras el binario siga en el teléfono no
   // hay objeto que firmar.
   const subidas = detalle.fotos.filter((f) => f.subida_at !== null);
-  const urls = await urlsFirmadas(
+  const { urls, degradado } = await urlsFirmadas(
     supabase,
     subidas.map((f) => f.id),
   );
@@ -101,6 +94,13 @@ export default async function DetalleReportePage({
 
   return (
     <div className="flex flex-col gap-4">
+      {degradado ? (
+        <Aviso>
+          No pudimos preparar los enlaces de algunas fotos. Es un problema
+          nuestro, no del teléfono del mercaderista: vuelve a intentarlo.
+        </Aviso>
+      ) : null}
+
       <Link
         href="/supervisor/revision"
         className="text-[12px] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"

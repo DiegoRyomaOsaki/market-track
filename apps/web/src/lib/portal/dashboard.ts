@@ -46,6 +46,30 @@ export function periodoPorDefecto(ref: Date): Periodo {
   return { desde, hasta };
 }
 
+/**
+ * El período que pidieron los filtros, completando el extremo que falte.
+ *
+ * Con solo "Desde" puesto, caer al default de 30 días ignora en silencio lo que
+ * el usuario escribió: se respeta su extremo y se completa el otro.
+ */
+export function periodoDeFiltros(
+  filtros: { desde: string | null; hasta: string | null },
+  ref: Date,
+): Periodo {
+  const hoy = diaEnLima(ref);
+  if (filtros.desde && filtros.hasta) {
+    return { desde: filtros.desde, hasta: filtros.hasta };
+  }
+  if (filtros.desde) return { desde: filtros.desde, hasta: hoy };
+  if (filtros.hasta) {
+    return {
+      desde: aISO(new Date(desdeISO(filtros.hasta).getTime() - 29 * DIA_MS)),
+      hasta: filtros.hasta,
+    };
+  }
+  return periodoPorDefecto(ref);
+}
+
 /** El período ANTERIOR: misma duración, justo antes de `desde`. Para la tendencia. */
 export function periodoAnterior({ desde, hasta }: Periodo): Periodo {
   const d1 = desdeISO(desde);

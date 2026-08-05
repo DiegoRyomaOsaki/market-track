@@ -44,28 +44,31 @@ beforeEach(() => {
 
 describe("urlsFirmadas", () => {
   it("sin fotos no llama a nadie", async () => {
-    await expect(urlsFirmadas(cliente, [])).resolves.toEqual({});
+    await expect(urlsFirmadas(cliente, [])).resolves.toEqual({
+      urls: {},
+      degradado: false,
+    });
     expect(invoke).not.toHaveBeenCalled();
   });
 
   it("firma un lote y devuelve el mapa", async () => {
     invoke.mockImplementation(firmando());
     await expect(urlsFirmadas(cliente, ["a", "b"])).resolves.toEqual({
-      a: "https://r2/a",
-      b: "https://r2/b",
+      urls: { a: "https://r2/a", b: "https://r2/b" },
+      degradado: false,
     });
   });
 
   it("trocea en lotes de 50: uno mayor lo rechazaría ENTERO", async () => {
     invoke.mockImplementation(firmando());
-    const resultado = await urlsFirmadas(cliente, ids(120));
+    const { urls } = await urlsFirmadas(cliente, ids(120));
 
     expect(invoke).toHaveBeenCalledTimes(3);
     const tamanos = invoke.mock.calls.map(
       (c) => (c[1] as { body: { foto_ids: string[] } }).body.foto_ids.length,
     );
     expect(tamanos).toEqual([50, 50, 20]);
-    expect(Object.keys(resultado)).toHaveLength(120);
+    expect(Object.keys(urls)).toHaveLength(120);
   });
 
   it("los lotes van en PARALELO, no en serie", async () => {
@@ -98,10 +101,13 @@ describe("urlsFirmadas", () => {
     });
     vi.spyOn(console, "error").mockImplementation(() => undefined);
 
-    const resultado = await urlsFirmadas(cliente, ids(60));
+    const { urls, degradado } = await urlsFirmadas(cliente, ids(60));
 
     // El primer lote (50) se pierde; el segundo (10) llega.
-    expect(Object.keys(resultado)).toHaveLength(10);
+    expect(Object.keys(urls)).toHaveLength(10);
+    // Y se DICE: sin esta señal, la galería culparía al teléfono del
+    // mercaderista de un problema nuestro.
+    expect(degradado).toBe(true);
   });
 
   it("una excepción del SDK tampoco tumba el resto", async () => {
@@ -113,9 +119,9 @@ describe("urlsFirmadas", () => {
     });
     vi.spyOn(console, "error").mockImplementation(() => undefined);
 
-    await expect(urlsFirmadas(cliente, ids(60))).resolves.toHaveProperty(
-      "foto-59",
-    );
+    const r = await urlsFirmadas(cliente, ids(60));
+    expect(r.urls).toHaveProperty("foto-59");
+    expect(r.degradado).toBe(true);
   });
 
   it("si nada responde a tiempo, devuelve vacío en vez de colgarse", async () => {
@@ -126,7 +132,7 @@ describe("urlsFirmadas", () => {
     const promesa = urlsFirmadas(cliente, ["a"]);
     await vi.advanceTimersByTimeAsync(11_000);
 
-    await expect(promesa).resolves.toEqual({});
+    await expect(promesa).resolves.toEqual({ urls: {}, degradado: true });
     vi.useRealTimers();
   });
 

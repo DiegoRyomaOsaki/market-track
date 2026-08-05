@@ -146,12 +146,18 @@ export function MapaPinesInner({
       // Doble filtro: `rutaInternaSegura` ya descartó cualquier esquema que no
       // sea una ruta interna (escapar entidades NO frena un `javascript:`), y
       // `escapar` impide además romper el atributo.
-      const href = escapar(rutaInternaSegura(String(f.properties?.href ?? "")));
+      const destino = String(f.properties?.href ?? "");
+      const href = escapar(rutaInternaSegura(destino));
+      // Sin destino no se pinta el enlace. Un ancla que no lleva a ningún sitio
+      // es peor que ninguna: promete algo y no lo cumple. Pasa cuando el cliente
+      // tiene deshabilitada la sección a la que llevaría.
+      const enlace = destino
+        ? `<a href="${href}" style="color:#4f46e5;text-decoration:underline">${escapar(textoEnlaceRef.current)}</a>`
+        : "";
       new maplibregl.Popup({ closeButton: true, offset: 12 })
         .setLngLat([lon, lat])
         .setHTML(
-          `<div style="font-size:13px"><div style="font-weight:700;margin-bottom:4px">${nombre}</div>` +
-            `<a href="${href}" style="color:#4f46e5;text-decoration:underline">${escapar(textoEnlaceRef.current)}</a></div>`,
+          `<div style="font-size:13px"><div style="font-weight:700;margin-bottom:4px">${nombre}</div>${enlace}</div>`,
         )
         .addTo(m);
     });

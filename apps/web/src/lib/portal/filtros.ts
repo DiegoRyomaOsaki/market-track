@@ -1,7 +1,29 @@
+import { TIPOS_FOTO_PORTAL, type TipoFoto } from "@market-track/shared";
+
+/** Los tipos que el portal ofrece filtrar (todos menos la selfie). */
+export type TipoFotoPortal = Exclude<TipoFoto, "selfie">;
+
 // Los filtros globales del portal (MAR-54): rango de fechas · cadena · tienda.
 // Viven en la URL (searchParams) para ser server-first (cada página los lee en el
 // servidor) y COMPARTIBLES por enlace. Aquí, la lógica pura de leerlos/serializarlos
 // —validando forma— para que la UI y las páginas no la repitan.
+
+/**
+ * El tipo de foto de la galería. NO entra en `FiltrosGlobales` a propósito: ese
+ * tipo es el contrato que comparten las cuatro secciones, y las RPC del dashboard
+ * no saben recibirlo — un filtro de "tipo de foto" sobre unos KPI no significa
+ * nada. Es un filtro de sección que vive en la misma URL.
+ *
+ * La selfie no se ofrece: es la cara de un empleado de la outsourcing. Quien la
+ * excluye de verdad es el SQL; esto solo evita ofrecer un filtro que la base va a
+ * ignorar de todas formas.
+ */
+export function leerTipoFoto(params: ParamsBusqueda): TipoFotoPortal | null {
+  const v = primero(params.tipo);
+  return v && (TIPOS_FOTO_PORTAL as readonly string[]).includes(v)
+    ? (v as TipoFotoPortal)
+    : null;
+}
 
 export type FiltrosGlobales = {
   desde: string | null; // fecha YYYY-MM-DD

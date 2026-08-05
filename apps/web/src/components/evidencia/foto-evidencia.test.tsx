@@ -51,4 +51,60 @@ describe("FotoEvidencia", () => {
     );
     expect(screen.getByText("Antes")).toBeInTheDocument();
   });
+
+  it("mientras llegan los bytes lo anuncia, no solo lo anima", () => {
+    // El ticket pide modelar el estado "cargando". Una animación sola no se lo
+    // dice a quien usa lector de pantalla.
+    render(
+      <FotoEvidencia
+        url="https://r2/x"
+        etiqueta="Antes"
+        capturadaAt={CAPTURA}
+      />,
+    );
+    expect(screen.getByRole("figure")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByText("Cargando imagen")).toBeInTheDocument();
+  });
+
+  it("al cargar deja de anunciarlo", () => {
+    render(
+      <FotoEvidencia
+        url="https://r2/x"
+        etiqueta="Antes"
+        capturadaAt={CAPTURA}
+      />,
+    );
+
+    fireEvent.load(screen.getByRole("img"));
+
+    expect(screen.getByRole("figure")).toHaveAttribute("aria-busy", "false");
+    expect(screen.queryByText("Cargando imagen")).not.toBeInTheDocument();
+  });
+
+  it("una imagen YA cacheada no se queda cargando para siempre", () => {
+    // El navegador puede completarla antes de que React enganche el `onLoad`:
+    // sin la comprobación de `complete`, el esqueleto tapa una foto que ya está.
+    Object.defineProperty(HTMLImageElement.prototype, "complete", {
+      configurable: true,
+      get: () => true,
+    });
+
+    render(
+      <FotoEvidencia
+        url="https://r2/x"
+        etiqueta="Antes"
+        capturadaAt={CAPTURA}
+      />,
+    );
+
+    expect(screen.getByRole("figure")).toHaveAttribute("aria-busy", "false");
+    Reflect.deleteProperty(HTMLImageElement.prototype, "complete");
+  });
+
+  it("una foto sin subir no anuncia carga: no hay nada en camino", () => {
+    render(
+      <FotoEvidencia url={undefined} etiqueta="Antes" capturadaAt={CAPTURA} />,
+    );
+    expect(screen.getByRole("figure")).toHaveAttribute("aria-busy", "false");
+  });
 });

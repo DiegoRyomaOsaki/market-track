@@ -57,24 +57,40 @@ function relojDe(ms: number) {
   };
 }
 
+export type Firmadas = {
+  urls: Record<string, string>;
+  /**
+   * ¿Falló algún lote? Distingue dos cosas que se ven idénticas y no lo son:
+   * una foto ausente del mapa puede ser que aún no esté subida (culpa de nadie)
+   * o que el firmador esté caído (culpa nuestra).
+   *
+   * Sin esta señal, un secreto de R2 mal puesto haría que la galería dijera
+   * "pendiente de subida desde el teléfono" en todas las tiendas, y el cliente
+   * llamaría a quejarse de unos mercaderistas que sí hicieron su trabajo.
+   */
+  degradado: boolean;
+};
+
 /**
- * Firma la lectura de las fotos pedidas. Devuelve un mapa `fotoId → url`.
+ * Firma la lectura de las fotos pedidas. Devuelve el mapa `fotoId → url` y si
+ * hubo que degradar.
  *
- * Una foto ausente del mapa NO es un error: la Edge Function omite las que el
- * llamante no puede ver, y aquí se omiten además las que aún no se han subido a
- * R2 — no hay objeto que firmar mientras el binario siga en el teléfono.
+ * Una foto ausente del mapa NO es necesariamente un error: la Edge Function
+ * omite las que el llamante no puede ver, y aquí se omiten además las que aún no
+ * se han subido a R2 — no hay objeto que firmar mientras el binario siga en el
+ * teléfono. Para eso está `degradado`.
  *
  * Si el firmado falla, devuelve lo que haya conseguido en vez de tumbar la
- * pantalla: un detalle sin fotos sigue siendo revisable (datos, contingencias,
- * bitácora), y un detalle que no carga no sirve para nada.
+ * pantalla: media evidencia se revisa; ninguna, no.
  */
 export async function urlsFirmadas(
   supabase: ClienteServidor,
   fotoIds: readonly string[],
-): Promise<Record<string, string>> {
-  if (fotoIds.length === 0) return {};
+): Promise<Firmadas> {
+  if (fotoIds.length === 0) return { urls: {}, degradado: false };
 
   const urls: Record<string, string> = {};
+  let degradado = false;
   const reloj = relojDe(PRESUPUESTO_MS);
 
   // `allSettled` y no `all`: un lote que falle no puede llevarse por delante los
@@ -93,7 +109,8 @@ export async function urlsFirmadas(
 
   for (const lote of lotes) {
     if (lote.status === "rejected") {
-      console.error("[revision] firmar fotos", mensajeDe(lote.reason));
+      degradado = true;
+      console.error("[fotos] firmar", mensajeDe(lote.reason));
       continue;
     }
     // El SDK tipa este campo como `any` (`FunctionsResponseFailure`). Anotarlo
@@ -101,11 +118,12 @@ export async function urlsFirmadas(
     // propague al resto del archivo.
     const fallo: unknown = lote.value.error;
     if (fallo) {
-      console.error("[revision] firmar fotos", mensajeDe(fallo));
+      degradado = true;
+      console.error("[fotos] firmar", mensajeDe(fallo));
       continue;
     }
     Object.assign(urls, lote.value.data?.urls ?? {});
   }
 
-  return urls;
+  return { urls, degradado };
 }

@@ -34,6 +34,8 @@ export const pasoLevantamientoSchema = z.enum(
   Constants.public.Enums.paso_levantamiento,
 );
 export const tipoFotoSchema = z.enum(Constants.public.Enums.tipo_foto);
+/** Los valores del enum, para pintar un desplegable sin escribirlos a mano. */
+export const TIPOS_FOTO = Constants.public.Enums.tipo_foto;
 export const tipoExhibicionSchema = z.enum(
   Constants.public.Enums.tipo_exhibicion,
 );

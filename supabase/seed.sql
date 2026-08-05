@@ -157,9 +157,22 @@ insert into public.contingencia (id, tenant_id, visita_id, paso, motivo, registr
   ('a0000014-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'a0000010-0000-0000-0000-000000000001', 'precios', 'Góndola en remodelación, no se pudo verificar precio', now()),
   ('b0000014-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0000-000000000002', 'b0000010-0000-0000-0000-000000000002', 'exhibiciones', 'Cabecera ocupada por otra marca', now());
 
-insert into public.foto (id, tenant_id, visita_id, tipo, capturada_at) values
-  ('a0000015-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'a0000010-0000-0000-0000-000000000001', 'antes', now()),
-  ('b0000015-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0000-000000000002', 'b0000010-0000-0000-0000-000000000002', 'antes', now());
+-- El PAR antes/después de cada marca, colgado de su levantamiento: es de ahí de
+-- donde lo lee la galería del portal (`foto.tipo` + `foto.levantamiento_id`), no
+-- de `levantamiento.foto_antes_id`, que está muerta a propósito.
+--
+-- Sin el par, cualquier test de galería devolvería un árbol vacío y pasaría igual
+-- con la función bien o rota. Y la selfie está para comprobar que NO sale al
+-- portal: es la cara de un empleado de la outsourcing, no evidencia de tienda.
+--
+-- Ninguna lleva `subida_at`: reproduce el estado real de un teléfono que capturó
+-- pero aún no subió, que es lo que el panel y la galería tienen que saber decir.
+insert into public.foto (id, tenant_id, visita_id, levantamiento_id, tipo, capturada_at) values
+  ('a0000015-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'a0000010-0000-0000-0000-000000000001', 'a0000011-0000-0000-0000-000000000001', 'antes', now()),
+  ('a0000015-0000-0000-0000-000000000003', 'aaaaaaaa-0000-0000-0000-000000000001', 'a0000010-0000-0000-0000-000000000001', 'a0000011-0000-0000-0000-000000000001', 'despues', now()),
+  ('a0000015-0000-0000-0000-000000000004', 'aaaaaaaa-0000-0000-0000-000000000001', 'a0000010-0000-0000-0000-000000000001', null, 'selfie', now()),
+  ('b0000015-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0000-000000000002', 'b0000010-0000-0000-0000-000000000002', 'b0000011-0000-0000-0000-000000000002', 'antes', now()),
+  ('b0000015-0000-0000-0000-000000000005', 'bbbbbbbb-0000-0000-0000-000000000002', 'b0000010-0000-0000-0000-000000000002', 'b0000011-0000-0000-0000-000000000002', 'despues', now());
 
 insert into public.alerta (id, tenant_id, tipo, marca_id, visita_id) values
   ('a0000016-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'quiebre', 'cccccccc-0000-0000-0000-000000000001', 'a0000010-0000-0000-0000-000000000001'),
