@@ -38,6 +38,7 @@ Read `CLAUDE.md` for full context. Key facts for this project:
 - [ ] Security-conditional response branches (e.g. production suppressing sensitive fields) have a dedicated test asserting the suppressed field is absent
 - [ ] When an acceptance criterion requires behavior "in both X and Y" (view/edit, owner/guest, light/dark), tests assert the property in BOTH states
 - [ ] Don't fully mock the domain helper whose output shape a handler depends on — pair the mock-based contract test with at least one integration test using the real helper
+- [ ] Test doubles for a scoped query apply its filters instead of returning a fixed row — a double blind to `.eq(...)` passes whether or not the code scopes the query, which is how an unscoped read ships green
 - [ ] Batched lookups whose result collapses into a Set/dedup have a test with duplicate-keyed input
 - [ ] Error-response tests (401/403/404/500) assert the response body shape, not only the status code
 
@@ -47,6 +48,7 @@ Read `CLAUDE.md` for full context. Key facts for this project:
 - [ ] Tests follow project patterns (descriptive names, minimal setup)
 - [ ] No flaky patterns: sleep, random data, time-dependent assertions
 - [ ] Assertions are meaningful (not just "it renders without crashing")
+- [ ] Any test suspected of passing without the code it claims to exercise is verified by mutation: break that line, confirm the test goes red, restore it
 - [ ] Stubs of callback-registering browser APIs capture the callback so tests can fire it directly
 - [ ] Mocks of framework control-flow functions throw an error carrying the framework's real internal marker/digest, not an invented sentinel string — a fake string passes the test while production breaks
 - [ ] Header/cookie/attribute reads in assertions don't use `?? ""`/`?? null` fallbacks that mask a missing value — assert not-null explicitly before constructing dependent values

@@ -42,7 +42,7 @@ constants) to understand the available token palette.
 - [ ] Form inputs have associated labels
 - [ ] Every input has a real label — a placeholder is not a label (WCAG 1.3.1); standalone search/numeric/toggle inputs need an explicit `aria-label`; toggle-button groups need `role="group"` + `aria-label`
 - [ ] Interactive elements are keyboard-accessible (semantic elements, not divs with click handlers)
-- [ ] Color contrast meets WCAG AA
+- [ ] Color contrast meets WCAG AA — a status token cleared for a fill (3:1) is not automatically cleared for text (4.5:1); compute the ratio of the actual colour/background pair before reusing it
 - [ ] Meaning is never conveyed by color or icon alone — a colored dot, status badge, or trend glyph (esp. `aria-hidden`) needs a text/`sr-only` equivalent (WCAG 1.4.1)
 - [ ] ARIA attributes on dynamic content (modals, toasts, live regions)
 - [ ] `aria-disabled` belongs only on interactive elements; decorative children use `aria-hidden` so they don't pollute the accessible name
