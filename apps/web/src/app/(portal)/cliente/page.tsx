@@ -68,7 +68,10 @@ export default async function DashboardPortalPage({
       lat: p.lat,
       lon: p.lon,
       color,
-      href: `/cliente/galeria?tienda=${encodeURIComponent(p.id)}`,
+      // El detalle de la tienda, que es el destino con contexto propio. Solo si
+      // la galería está habilitada: la sección deshabilitada no es únicamente
+      // invisible, es inaccesible, y ofrecer el enlace llevaría a un 404.
+      href: estado.galeria ? `/cliente/tienda/${encodeURIComponent(p.id)}` : "",
       descripcion: ESTADO_DEL_PIN[color],
     };
   });

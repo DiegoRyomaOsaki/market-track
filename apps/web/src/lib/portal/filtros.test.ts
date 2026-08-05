@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { leerFiltros, serializarFiltros } from "./filtros";
+import { leerFiltros, leerTipoFoto, serializarFiltros } from "./filtros";
 
 const UUID = "aaaaaaaa-0000-0000-0000-000000000001";
 
@@ -76,5 +76,29 @@ describe("serializarFiltros", () => {
       new URLSearchParams(serializarFiltros(filtros)),
     );
     expect(leerFiltros(params)).toEqual(filtros);
+  });
+});
+
+describe("leerTipoFoto", () => {
+  it("acepta un tipo del enum", () => {
+    expect(leerTipoFoto({ tipo: "antes" })).toBe("antes");
+  });
+
+  it("RECHAZA la selfie: no es evidencia de tienda, es la cara de un empleado", () => {
+    expect(leerTipoFoto({ tipo: "selfie" })).toBeNull();
+  });
+
+  it("una cadena desconocida se descarta antes de llegar a Postgres", () => {
+    // Sin esto moriría con `22P02 invalid input value for enum`, que el usuario
+    // vería como "no pudimos cargar la evidencia".
+    expect(leerTipoFoto({ tipo: "'; drop table foto; --" })).toBeNull();
+  });
+
+  it("sin parámetro, sin filtro", () => {
+    expect(leerTipoFoto({})).toBeNull();
+  });
+
+  it("de un array toma el primero", () => {
+    expect(leerTipoFoto({ tipo: ["despues", "antes"] })).toBe("despues");
   });
 });

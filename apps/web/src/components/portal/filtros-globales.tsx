@@ -34,10 +34,14 @@ export function FiltrosGlobales({
   function aplicar(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const datos = new FormData(e.currentTarget);
-    const next = new URLSearchParams();
+    // Se parte de lo que ya hay en la URL, no de cero: cada sección puede tener
+    // filtros propios (el tipo de foto de la galería) y aplicar los globales no
+    // debe borrárselos.
+    const next = new URLSearchParams(params.toString());
     for (const clave of CLAVES) {
       const v = datos.get(clave);
       if (typeof v === "string" && v) next.set(clave, v);
+      else next.delete(clave);
     }
     const qs = next.toString();
     // `scroll: false`: aplicar un filtro no debe saltar el scroll de la vista.

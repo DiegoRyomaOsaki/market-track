@@ -1756,6 +1756,26 @@ export type Database = {
         }
         Returns: number
       }
+      foto_del_levantamiento: {
+        Args: {
+          p_filtro: Database["public"]["Enums"]["tipo_foto"]
+          p_levantamiento: string
+          p_tipo: Database["public"]["Enums"]["tipo_foto"]
+          p_visita: string
+        }
+        Returns: Json
+      }
+      galeria_evidencia: {
+        Args: {
+          p_cadena?: string
+          p_desde: string
+          p_hasta: string
+          p_tienda?: string
+          p_tipo?: Database["public"]["Enums"]["tipo_foto"]
+          p_tope_visitas?: number
+        }
+        Returns: Json
+      }
       planeacion_ruteros: {
         Args: { p_desde: string; p_hasta: string; p_mercaderista: string }
         Returns: {

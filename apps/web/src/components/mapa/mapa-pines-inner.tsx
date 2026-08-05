@@ -56,7 +56,38 @@ function rutaInternaSegura(href: string): string {
   return /^\/(?!\/)/.test(href) ? href : "#";
 }
 
-function coleccion(pines: readonly PinMapa[]): FeatureCollection {
+/**
+ * El HTML de la burbuja. Puro y exportado a propósito: el enlace muerto que
+ * corrigió esta función no lo detectaba ninguna de las dos capas por separado
+ * —`coleccion` saneaba el vacío a "#" y aquí "#" parecía un destino legítimo—,
+ * así que la prueba tiene que poder encadenarlas.
+ */
+export function htmlDeBurbuja(
+  propiedades: { nombre?: unknown; href?: unknown },
+  textoEnlace: string,
+): string {
+  // Las propiedades de un feature GeoJSON no están tipadas: lo que no sea texto
+  // se descarta en vez de acabar en la burbuja como "[object Object]".
+  const texto = (v: unknown) => (typeof v === "string" ? v : "");
+
+  const nombre = escapar(texto(propiedades.nombre));
+  // Sin destino no se pinta el enlace. Un ancla que no lleva a ningún sitio es
+  // peor que ninguna: promete algo y no lo cumple. Pasa cuando el cliente tiene
+  // deshabilitada la sección a la que llevaría.
+  //
+  // Doble filtro en el que sí hay: `rutaInternaSegura` descarta lo que no sea
+  // una ruta interna (escapar entidades NO frena un `javascript:`), y `escapar`
+  // impide además romper el atributo.
+  const destino = texto(propiedades.href);
+  const enlace =
+    destino === ""
+      ? ""
+      : `<a href="${escapar(rutaInternaSegura(destino))}" style="color:#4f46e5;text-decoration:underline">${escapar(textoEnlace)}</a>`;
+
+  return `<div style="font-size:13px"><div style="font-weight:700;margin-bottom:4px">${nombre}</div>${enlace}</div>`;
+}
+
+export function coleccion(pines: readonly PinMapa[]): FeatureCollection {
   return {
     type: "FeatureCollection",
     features: pines.map((p) => ({
@@ -64,7 +95,10 @@ function coleccion(pines: readonly PinMapa[]): FeatureCollection {
       properties: {
         nombre: p.nombre,
         id: p.id,
-        href: rutaInternaSegura(p.href),
+        // El vacío ("sin destino") se conserva tal cual: si se saneara aquí se
+        // convertiría en "#", y abajo ya no habría forma de distinguir "no hay
+        // adónde ir" de "una ruta que no me gustó" — se pintaría un ancla muerta.
+        href: p.href === "" ? "" : rutaInternaSegura(p.href),
         hex: COLOR_PIN_HEX[p.color],
       },
       geometry: { type: "Point", coordinates: [p.lon, p.lat] },
@@ -142,17 +176,9 @@ export function MapaPinesInner({
       if (!f || f.geometry.type !== "Point") return;
       const [lon, lat] = f.geometry.coordinates;
       if (lon === undefined || lat === undefined) return;
-      const nombre = escapar(String(f.properties?.nombre ?? ""));
-      // Doble filtro: `rutaInternaSegura` ya descartó cualquier esquema que no
-      // sea una ruta interna (escapar entidades NO frena un `javascript:`), y
-      // `escapar` impide además romper el atributo.
-      const href = escapar(rutaInternaSegura(String(f.properties?.href ?? "")));
       new maplibregl.Popup({ closeButton: true, offset: 12 })
         .setLngLat([lon, lat])
-        .setHTML(
-          `<div style="font-size:13px"><div style="font-weight:700;margin-bottom:4px">${nombre}</div>` +
-            `<a href="${href}" style="color:#4f46e5;text-decoration:underline">${escapar(textoEnlaceRef.current)}</a></div>`,
-        )
+        .setHTML(htmlDeBurbuja(f.properties ?? {}, textoEnlaceRef.current))
         .addTo(m);
     });
     m.on("mouseenter", FUENTE_PINES, () => {

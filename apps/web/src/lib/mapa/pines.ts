@@ -23,6 +23,7 @@ export type PinMapa = {
   lon: number;
   color: ColorPin;
   /** A dónde lleva el pin al pulsarlo. */
+  /** Vacío si no hay destino: la burbuja no pinta enlace en ese caso. */
   href: string;
   /** Qué se lee en voz alta del estado del pin, p. ej. "visita en curso". */
   descripcion: string;

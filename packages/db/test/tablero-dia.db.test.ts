@@ -91,10 +91,15 @@ describe("tablero_dia", () => {
 
   it("cuenta las fotos de la visita", async () => {
     await comoUsuario(db, USUARIOS.supervisor, async (c) => {
-      const antes = await tablero(c, await hoyEnLima(c));
       const laVisita = (filas: FilaTablero[]) =>
         filas.find((f) => f.visita_id === VISITA_MARACUMANGO);
-      expect(Number(laVisita(antes)?.fotos)).toBe(1);
+      // El conteo se compara consigo mismo, no contra un número fijo: cuántas
+      // fotos trae el seed es asunto del seed, y clavarlo aquí convierte añadir
+      // una en un test roto que no señala nada.
+      const antes = Number(
+        laVisita(await tablero(c, await hoyEnLima(c)))?.fotos,
+      );
+      expect(antes).toBeGreaterThan(0);
 
       await c.query("set local role postgres");
       await c.query(
@@ -105,7 +110,7 @@ describe("tablero_dia", () => {
       await c.query("set local role authenticated");
 
       const despues = await tablero(c, await hoyEnLima(c));
-      expect(Number(laVisita(despues)?.fotos)).toBe(2);
+      expect(Number(laVisita(despues)?.fotos)).toBe(antes + 1);
     });
   });
 

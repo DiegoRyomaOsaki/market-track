@@ -6,6 +6,7 @@ import {
   colorDePin,
   type FilaKpis,
   periodoAnterior,
+  periodoDeFiltros,
   periodoPorDefecto,
 } from "./dashboard";
 
@@ -151,5 +152,42 @@ describe("armarKpis", () => {
   it("exhibiciones sin negociadas se muestra como raya", () => {
     const kpis = armarKpis({ ...FILA, exhib_negociadas: 0 });
     expect(kpis.find((k) => k.clave === "exhibiciones")?.valor).toBe("—");
+  });
+});
+
+describe("periodoDeFiltros", () => {
+  // 2026-08-05T02:00Z son las 21:00 del 4 de agosto en Lima.
+  const ref = new Date("2026-08-05T02:00:00Z");
+
+  it("con los dos extremos, los respeta", () => {
+    expect(
+      periodoDeFiltros({ desde: "2026-07-01", hasta: "2026-07-31" }, ref),
+    ).toEqual({ desde: "2026-07-01", hasta: "2026-07-31" });
+  });
+
+  it("con solo DESDE, completa hasta hoy en vez de ignorarlo", () => {
+    // Caer al default de 30 días descartaría en silencio lo que el usuario
+    // escribió, y no habría forma de saber por qué.
+    expect(periodoDeFiltros({ desde: "2026-07-01", hasta: null }, ref)).toEqual(
+      {
+        desde: "2026-07-01",
+        hasta: "2026-08-04",
+      },
+    );
+  });
+
+  it("con solo HASTA, retrocede 30 días desde ahí", () => {
+    expect(periodoDeFiltros({ desde: null, hasta: "2026-07-31" }, ref)).toEqual(
+      {
+        desde: "2026-07-02",
+        hasta: "2026-07-31",
+      },
+    );
+  });
+
+  it("sin ninguno, el período por defecto", () => {
+    expect(periodoDeFiltros({ desde: null, hasta: null }, ref)).toEqual(
+      periodoPorDefecto(ref),
+    );
   });
 });
