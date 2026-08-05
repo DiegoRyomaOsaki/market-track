@@ -267,7 +267,9 @@ timeout.** SDK defaults are often 30s+; a hung connection blocks the response
 and burns the function budget. Race the call against an explicit deadline (e.g.
 `Promise.race([sdkCall(), timeoutRejection(10_000)])`). Detaching to background
 work is only safe outside serverless — in a serverless runtime, function exit
-kills the background task.
+kills the background task. When the call is split into batches, the deadline
+covers the **whole** operation: a per-batch timeout inside a loop multiplies the
+worst case instead of bounding it.
 
 **Bound fan-out reads.** Cap concurrency (e.g. a `pLimit`-style limiter) and
 result size on cross-entity reads that issue many sub-requests; keep them off
@@ -379,6 +381,10 @@ row or domain shape locally.
 **Zod at every boundary.** Edge Function bodies, webhook payloads, push
 notification payloads, deep link params, and sync-uploaded rows are parsed
 with Zod before use.
+
+**`z.guid()` for ids, never `z.uuid()`.** The strict one enforces the RFC 9562
+version and variant bits, which Postgres does not: it rejects ids the database
+considers perfectly valid, including every id in the project seed.
 
 ## Next.js (apps/web)
 

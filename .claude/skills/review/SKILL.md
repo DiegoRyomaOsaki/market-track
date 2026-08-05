@@ -39,7 +39,9 @@ Run a comprehensive review of the current changes by spawning specialized review
    Only spawn the ones present on disk. Never invoke a `subagent_type` whose file
    was deleted — skip its section in the report instead.
 
-4. Each agent receives the same scope (files/diff) and reviews independently. Pass a `name:` for each agent so it's addressable, and bake an investigation budget and required output format into each spawn prompt (e.g. "Spend at most N tool calls, then emit the structured report. Do not stop without it."). If a final message lacks the structured report, re-spawn with a firmer lead-in; do not synthesize missing findings by hand.
+4. Each agent receives the same scope (files/diff) and reviews independently. Pass a `name:` for each agent so it's addressable, and bake an investigation budget and required output format into each spawn prompt (e.g. "Spend at most N tool calls, then emit the structured report. Do not stop without it."). Tell them to **emit the report before the budget runs out** — a review that stops mid-investigation delivers nothing, so partial findings beat perfect ones never sent. If a final message lacks the structured report, re-spawn with a firmer lead-in; do not synthesize missing findings by hand.
+
+4a. **Reviewers must not mutate shared state.** Every spawn prompt forbids schema changes to the local database (no loose DDL — the migrations are the only schema channel, and `test:db` runs against that same database) and forbids discarding uncommitted work (`git checkout`/`stash` over files the reviewer didn't write). To verify a finding, mutate *source* and restore it, or wrap the experiment in `BEGIN; … ROLLBACK;`. After the reviews, confirm the tree and the database are as you left them before trusting any report.
 
 5. After all agents complete, synthesize their findings into a unified report.
    Include only the sections for reviewers that actually ran:

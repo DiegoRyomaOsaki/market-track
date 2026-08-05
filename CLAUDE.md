@@ -233,6 +233,13 @@ Aún no hay `.env`. Al scaffoldear, crear `.env.example` por app. Previstas:
   `SELECT` a `authenticated`**: sin el `grant`, la consulta muere con
   `42501 permission denied` **antes** de que ninguna política se evalúe — y el
   error parece de RLS sin serlo. Toda tabla nueva necesita **las dos cosas**.
+  Y el grant tiene que cubrir **cada verbo que la política permite**: una política
+  `for all` con un grant de `select, insert, update` muere en el `delete`.
+- **Una consulta de UNA fila bajo una política de lectura permisiva devuelve
+  muchas.** `select(...).maybeSingle()` sin `.eq('id', …)` sobre una tabla que el
+  staff lee entera trae todas las filas, falla por multiplicidad y deja al gate
+  concluyendo lo contrario de lo que debía. Toda consulta que resuelve *quién
+  llama* filtra por el id del que llama.
 - **En una política RLS, las funciones van SIEMPRE envueltas en `(select ...)`.**
   Sin el `select`, Postgres las evalúa **una vez por fila**; con él, una vez por
   consulta. Medido sobre 200.000 filas: **42.480 ms contra 12,9 ms**. En una

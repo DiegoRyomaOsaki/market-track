@@ -32,6 +32,7 @@ Read `CLAUDE.md` for full context. Key facts for this project:
 - [ ] Session TTL enforced
 - [ ] Scoped sessions cannot access resources outside their scope
 - [ ] Permission revocation is immediate (no stale session/cache)
+- [ ] Identity queries that resolve *who is calling* filter by the caller's own id — an unfiltered single-row read under a permissive SELECT policy returns every row, fails on multiplicity, and inverts the gate
 
 ### API Endpoint Security
 - [ ] Every protected endpoint validates session/auth before processing
