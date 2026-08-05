@@ -1,4 +1,4 @@
-import { describe, expect, it, jest } from "@jest/globals";
+import { afterEach, describe, expect, it, jest } from "@jest/globals";
 
 import {
   ColaFotos,
@@ -53,6 +53,17 @@ type Espias = {
   borrados: string[];
   marcadas: string[];
 };
+
+// El subidor arma un `setTimeout` para su próximo reintento. Un temporizador vivo
+// mantiene el proceso de jest en pie: la suite pasa y luego NO termina, que en CI
+// es un job colgado hasta el timeout. Se cancela siempre, gane o falle el test.
+let ultimoSubidor: SubidorFotos | null = null;
+
+afterEach(() => {
+  ultimoSubidor?.detener();
+  ultimoSubidor = null;
+  jest.useRealTimers();
+});
 
 function montar(
   fotos: FotoPendiente[],
@@ -115,6 +126,7 @@ function montar(
   };
 
   const subidor = new SubidorFotos(deps);
+  ultimoSubidor = subidor;
   return {
     subidor,
     cola,
