@@ -56,7 +56,7 @@ export default async function DetalleTiendaPage({
   const [cabecera, evidencia] = await Promise.all([
     supabase
       .from("tienda")
-      .select("id, nombre, direccion, cadena:cadena_id (nombre)")
+      .select("nombre, direccion")
       .eq("id", tiendaId)
       .maybeSingle(),
     supabase.rpc("galeria_evidencia", {

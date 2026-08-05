@@ -11,6 +11,11 @@ const LEVANTAMIENTO_MRC = "a0000011-0000-0000-0000-000000000001";
 const TIENDA_MRC = "a0000002-0000-0000-0000-000000000001";
 const CADENA_MRC = "a0000001-0000-0000-0000-000000000001";
 
+// Los del cliente RIVAL. Existen de verdad: un id inventado prueba "no existe",
+// no "es de otro cliente", que es la superficie que importa.
+const TIENDA_RIVAL = "b0000002-0000-0000-0000-000000000002";
+const CADENA_RIVAL = "b0000001-0000-0000-0000-000000000002";
+
 const TODO = ["2020-01-01", "2030-01-01"] as const;
 
 type Arbol = {
@@ -181,6 +186,16 @@ describe("galeria_evidencia — el par antes/después", () => {
 });
 
 describe("galeria_evidencia — filtros", () => {
+  it("pedir la tienda REAL del rival por parámetro no devuelve nada", async () => {
+    // Distinto de pasar un uuid inventado: aquí la tienda existe y tiene visitas
+    // con fotos. Lo único que la esconde es la RLS. Sin este test, "filtra por
+    // tienda" pasaría igual con la RLS desactivada.
+    await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
+      expect((await galeria(c, { tienda: TIENDA_RIVAL })).tiendas).toEqual([]);
+      expect((await galeria(c, { cadena: CADENA_RIVAL })).tiendas).toEqual([]);
+    });
+  });
+
   it("filtra por cadena", async () => {
     await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
       expect((await galeria(c, { cadena: CADENA_MRC })).tiendas).toHaveLength(
@@ -307,6 +322,50 @@ describe("galeria_evidencia — cotas y forma", () => {
         "id",
         "subida_at",
       ]);
+    });
+  });
+});
+
+describe("la selfie de check-in — el dato personal del mercaderista", () => {
+  it("el cliente-marca NO la lee ni consultando `foto` directamente", async () => {
+    // Excluirla en la galería no bastaba: el cliente podía pedir
+    // `foto?tipo=eq.selfie` por PostgREST, quedarse con el id y hacérselo firmar
+    // por `fotos-url-firmada`, que firma lo que la RLS deje leer. El guardián
+    // tiene que ser la política.
+    await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
+      const r = await c.query(
+        `select id from public.foto where tipo = 'selfie'`,
+      );
+      expect(r.rows).toEqual([]);
+    });
+  });
+
+  it("pero el staff sí la ve: para el supervisor es evidencia de quién fichó", async () => {
+    await comoUsuario(db, USUARIOS.supervisor, async (c) => {
+      const r = await c.query(
+        `select id from public.foto where tipo = 'selfie'`,
+      );
+      expect(r.rows.length).toBeGreaterThan(0);
+    });
+  });
+
+  it("y el mercaderista sigue viendo las suyas: son las que acaba de subir", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const r = await c.query(
+        `select id from public.foto where tipo = 'selfie'`,
+      );
+      expect(r.rows.length).toBeGreaterThan(0);
+    });
+  });
+
+  it("el resto de la evidencia le sigue llegando al cliente", async () => {
+    // El cierre no puede ser un apagón: si la política se pasara de ancha, la
+    // galería se quedaría vacía y este test lo dice.
+    await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
+      const r = await c.query(
+        `select id from public.foto where tipo <> 'selfie'`,
+      );
+      expect(r.rows.length).toBeGreaterThan(0);
     });
   });
 });

@@ -104,11 +104,16 @@ as $$
       and (p_cadena is null or t.cadena_id = p_cadena)
       and (p_tienda is null or v.tienda_id = p_tienda)
   )
+  -- Cada nivel ordena por su COLUMNA, nunca por el jsonb recién construido:
+  -- `order by x->>'campo'` hace que Postgres re-evalúe el `jsonb_build_object`
+  -- entero —subconsultas de quiebres y fotos incluidas— solo para sacar la
+  -- clave de orden. Medido: duplica el subplan por nivel, y aquí hay tres
+  -- anidados.
   select jsonb_build_object(
     'visitas_totales', (select n from total),
     'truncado', (select n from total) > p_tope_visitas,
     'tiendas', coalesce((
-      select jsonb_agg(x order by x->>'nombre')
+      select jsonb_agg(x order by orden)
       from (
         select jsonb_build_object(
           'id', t.id,
@@ -116,14 +121,14 @@ as $$
           'direccion', t.direccion,
           'cadena_nombre', ca.nombre,
           'visitas', (
-            select jsonb_agg(y order by y->>'check_in_at' desc)
+            select jsonb_agg(y order by orden desc)
             from (
               select jsonb_build_object(
                 'id', vv.id,
                 'check_in_at', vv.check_in_at,
                 'check_out_at', vv.check_out_at,
                 'levantamientos', coalesce((
-                  select jsonb_agg(z order by z->>'marca_nombre')
+                  select jsonb_agg(z order by orden)
                   from (
                     select jsonb_build_object(
                       'id', le.id,
@@ -147,7 +152,7 @@ as $$
                           and fo.tipo not in ('selfie', 'antes', 'despues')
                           and (p_tipo is null or fo.tipo = p_tipo)
                       ), '[]'::jsonb)
-                    ) as z
+                    ) as z, ma.nombre as orden
                     from public.levantamiento le
                     join public.marca ma on ma.id = le.marca_id
                     where le.visita_id = vv.id
@@ -169,12 +174,12 @@ as $$
                     and fo.tipo <> 'selfie'
                     and (p_tipo is null or fo.tipo = p_tipo)
                 ), '[]'::jsonb)
-              ) as y
+              ) as y, vv.check_in_at as orden
               from visitas_ventana vv
               where vv.tienda_id = t.id
             ) porVisita
           )
-        ) as x
+        ) as x, t.nombre as orden
         from public.tienda t
         join public.cadena ca on ca.id = t.cadena_id
         where exists (select 1 from visitas_ventana vv where vv.tienda_id = t.id)
@@ -188,3 +193,30 @@ comment on function public.galeria_evidencia(date, date, uuid, uuid, public.tipo
 
 grant execute on function public.galeria_evidencia(date, date, uuid, uuid, public.tipo_foto, integer)
   to authenticated, service_role;
+
+-- La galería siempre busca las fotos de una visita acotando por levantamiento y
+-- tipo, y se queda con la más reciente. Con el índice de `visita_id` a secas,
+-- Postgres traía todas las fotos de la visita y filtraba en memoria.
+create index if not exists foto_visita_lev_tipo_idx
+  on public.foto (visita_id, levantamiento_id, tipo, capturada_at desc);
+
+-- La selfie de check-in es la cara de un empleado de la outsourcing, y el
+-- cliente-marca es una parte externa: no tiene por qué verla.
+--
+-- Excluirla en la galería no basta. `foto_usuario_lee_su_tenant` daba SELECT
+-- sobre TODAS las fotos del tenant a cualquier rol, así que el cliente podía
+-- pedir `foto?tipo=eq.selfie` por PostgREST, quedarse con el id y hacérselo
+-- firmar por la función `fotos-url-firmada`, que firma lo que la RLS deje leer.
+-- Verificado contra la base local: devolvía la fila.
+--
+-- El portador del dato es la política, no la consulta que lo agrupa: cualquier
+-- pantalla futura que liste `foto` heredaba el agujero.
+drop policy foto_usuario_lee_su_tenant on public.foto;
+create policy foto_usuario_lee_su_tenant on public.foto for select to authenticated
+  using (
+    tenant_id = (select app.tenant_actual())
+    and (tipo <> 'selfie' or (select app.rol_actual()) <> 'cliente')
+  );
+
+comment on policy foto_usuario_lee_su_tenant on public.foto is
+  'El cliente-marca no lee la selfie de check-in: es un dato personal del mercaderista y el cliente es una parte externa. El staff y el propio mercaderista sí la ven.';
