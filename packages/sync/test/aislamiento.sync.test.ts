@@ -23,6 +23,7 @@ const TABLAS = [
   "marca",
   "visita",
   "revision_visita",
+  "foto",
 ] as const;
 
 describe("aislamiento de las sync rules", () => {
@@ -122,6 +123,17 @@ describe("aislamiento de las sync rules", () => {
 
     const suyas = new Set(visitas.map((v) => v.id));
     expect(revisiones.filter((r) => !suyas.has(r.visita_id))).toEqual([]);
+  }, 60000);
+
+  it("la metadata de fotos que baja es solo la de SUS visitas", async () => {
+    const sesion = await sesionAal2(USUARIOS.joseMaracumango.email);
+    const [visitas, fotos] = await Promise.all([
+      filasReplicadas<{ id: string }>(sesion, "visita", "id"),
+      filasReplicadas<{ visita_id: string }>(sesion, "foto", "visita_id"),
+    ]);
+
+    const suyas = new Set(visitas.map((v) => v.id));
+    expect(fotos.filter((f) => !suyas.has(f.visita_id))).toEqual([]);
   }, 60000);
 
   it("un excliente deja de replicar en cuanto se desactiva su cliente", async () => {

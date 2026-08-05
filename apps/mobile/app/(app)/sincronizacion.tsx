@@ -1,7 +1,11 @@
 import { useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { useFotosPendientes } from "@/lib/cola-fotos-instancia";
+import {
+  colaFotos,
+  subidorFotos,
+  useFotosPendientes,
+} from "@/lib/cola-fotos-instancia";
 import { useEstadoSync } from "@/lib/powersync/estado";
 import { colores, espacio, radio } from "@/tema";
 
@@ -22,6 +26,15 @@ export default function Sincronizacion() {
   const fotos = useFotosPendientes();
 
   const trabajando = subiendo || bajando;
+  const conProblema = fotos.filter((f) => f.requiere_atencion).length;
+  // Las fotos no se firman mientras la visita siga sin llegar al servidor: la
+  // Edge Function la lee de Postgres y respondería que no existe.
+  const esperandoRegistros = fotos.length > 0 && pendientesRegistros > 0;
+
+  async function reintentarFotos() {
+    await colaFotos.reintentarTodas();
+    await subidorFotos.arrancar();
+  }
 
   return (
     <ScrollView
@@ -79,13 +92,38 @@ export default function Sincronizacion() {
             {fotos.map((f) => (
               <View key={f.id} style={e.foto}>
                 <Text style={e.fotoHash}>{f.hash.slice(0, 8)}</Text>
-                <Text style={e.fotoHora}>capturada {hora(f.encolada_at)}</Text>
+                <Text style={e.fotoHora}>
+                  capturada {hora(f.encolada_at)}
+                  {f.intentos > 0 ? ` · ${f.intentos} intento(s)` : ""}
+                </Text>
+                {/* El problema se DICE, no se pinta de rojo y ya: un punto de
+                    color no le sirve a quien no distingue el color. */}
+                {f.requiere_atencion ? (
+                  <Text style={e.fotoProblema}>No se pudo subir</Text>
+                ) : null}
               </View>
             ))}
             <Text style={e.nota}>
-              Las fotos suben por su propia cola cuando hay conexión; el
-              check-out no las espera.
+              {esperandoRegistros
+                ? "Esperando a que suban los registros: las fotos van después."
+                : "Las fotos suben por su propia cola cuando hay conexión; el check-out no las espera."}
             </Text>
+            {conProblema > 0 ? (
+              <Text style={e.nota}>
+                {conProblema === 1
+                  ? "1 foto lleva varios intentos fallidos. Sigue en la cola: no se ha perdido."
+                  : `${conProblema} fotos llevan varios intentos fallidos. Siguen en la cola: no se han perdido.`}
+              </Text>
+            ) : null}
+            <Pressable
+              onPress={() => void reintentarFotos()}
+              disabled={!conectado}
+              accessibilityRole="button"
+              accessibilityLabel="Reintentar la subida de fotos ahora"
+              style={[e.reintentar, !conectado && { opacity: 0.4 }]}
+            >
+              <Text style={e.reintentarTexto}>Reintentar ahora</Text>
+            </Pressable>
           </>
         )}
       </Seccion>
@@ -163,5 +201,16 @@ const e = StyleSheet.create({
     fontSize: 13,
     fontFamily: "monospace",
   },
+  fotoProblema: { color: colores.alertaTexto, fontSize: 12, fontWeight: "700" },
+  reintentar: {
+    marginTop: espacio.s,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: radio.m,
+    borderWidth: 1,
+    borderColor: colores.borde,
+  },
+  reintentarTexto: { color: colores.texto, fontSize: 14, fontWeight: "700" },
   fotoHora: { color: colores.textoSuave, fontSize: 12 },
 });

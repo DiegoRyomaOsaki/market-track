@@ -1,4 +1,4 @@
-import * as Crypto from "expo-crypto";
+import type { PuntoGeo } from "@market-track/shared";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -14,8 +14,8 @@ import {
 } from "react-native";
 
 import { CamaraFoto } from "@/componentes/camara-foto";
-import { colaFotos } from "@/lib/cola-fotos-instancia";
-import { type FotoProcesada } from "@/lib/foto-captura";
+import { encolarFoto } from "@/lib/cola-fotos-instancia";
+import { type FotoCapturada } from "@/lib/foto-captura";
 import { registrarContingencia } from "@/lib/levantamiento";
 import type { PasoBypass } from "@/lib/pasos-levantamiento";
 import { ubicacionActual } from "@/lib/ubicacion";
@@ -55,11 +55,8 @@ export function ContingenciaModal({
 }: Props) {
   const [modo, setModo] = useState<"form" | "camara">("form");
   const [motivo, setMotivo] = useState("");
-  const [foto, setFoto] = useState<FotoProcesada | null>(null);
-  const [geo, setGeo] = useState<{ lat: number; lng: number }>({
-    lat: 0,
-    lng: 0,
-  });
+  const [foto, setFoto] = useState<FotoCapturada | null>(null);
+  const [geo, setGeo] = useState<PuntoGeo | null>(null);
   const [guardando, setGuardando] = useState(false);
 
   function cerrar() {
@@ -72,7 +69,9 @@ export function ContingenciaModal({
 
   async function abrirCamara() {
     const ubic = await ubicacionActual();
-    if (ubic.ok) setGeo({ lat: ubic.punto.lat, lng: ubic.punto.lng });
+    // Null si el GPS no dio lectura: `0,0` es un punto real en el golfo de
+    // Guinea y acabaría guardado como la coordenada de la evidencia.
+    setGeo(ubic.ok ? ubic.punto : null);
     setModo("camara");
   }
 
@@ -81,14 +80,18 @@ export function ContingenciaModal({
     if (!texto || guardando) return;
     setGuardando(true);
     try {
+      // La fila `foto` se crea ANTES que la contingencia que la referencia. Sin
+      // ella, `cont_foto_fk` rechaza el insert al sincronizar con un 23503 y el
+      // conector descarta la operación entera: la contingencia con foto no
+      // llegaba nunca al servidor, y el supervisor no recibía su alerta.
       let fotoId: string | null = null;
       if (foto) {
-        fotoId = Crypto.randomUUID();
-        await colaFotos.encolar({
-          id: fotoId,
-          ruta: foto.ruta,
-          hash: foto.hash,
-          encolada_at: new Date().toISOString(),
+        fotoId = await encolarFoto({
+          foto,
+          tenantId: tenant_id,
+          visitaId: visita_id,
+          levantamientoId: levantamiento_id,
+          tipo: "contingencia",
         });
       }
       await registrarContingencia({
@@ -115,8 +118,8 @@ export function ContingenciaModal({
       <Modal visible={visible} animationType="slide" onRequestClose={cerrar}>
         <CamaraFoto
           usuario={usuario}
-          lat={geo.lat}
-          lng={geo.lng}
+          lat={geo?.lat ?? null}
+          lng={geo?.lng ?? null}
           facing="back"
           etiqueta="Tomar foto del hallazgo"
           onListo={(f) => {

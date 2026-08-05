@@ -240,6 +240,22 @@ const revision_visita = new Table({
   revisado_at: column.text,
 });
 
+// La METADATA de la foto. El binario nunca entra aquí: va por la cola de disco a
+// R2 (ADR-0003). `subida_at` es la única señal de "ya está en la nube" — la
+// escribe el subidor tras confirmar el PUT, y el panel la lee para saber qué
+// evidencia sigue en el teléfono.
+const foto = new Table({
+  tenant_id: column.text,
+  visita_id: column.text,
+  levantamiento_id: column.text,
+  tipo: column.text,
+  hash: column.text,
+  capturada_at: column.text,
+  // EWKT (`SRID=4326;POINT(lon lat)`), como `visita.check_in_geo`.
+  geo: column.text,
+  subida_at: column.text,
+});
+
 export const AppSchema = new Schema({
   tienda,
   cadena,
@@ -262,4 +278,5 @@ export const AppSchema = new Schema({
   formulario_version,
   levantamiento_respuesta,
   revision_visita,
+  foto,
 });

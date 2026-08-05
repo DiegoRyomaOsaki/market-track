@@ -310,10 +310,10 @@ async function upsertLevantamientoSku(d: {
  * y los frentes por SKU en `levantamiento_sku` (upsert por (levantamiento, sku),
  * conservando las columnas que llena MAR-38: stock, precio).
  *
- * Las fotos (Antes y SOS) ya se encolaron por la cola de disco; sus FK
- * (`foto_antes_id`, `sos_foto_id`) quedan en null: crear la fila `foto` y
- * enlazarla tras subir a R2 es MAR-39 (igual que la selfie de check-in). Poner
- * aquí un id sin fila `foto` rompería la FK al sincronizar.
+ * Las fotos (Antes y SOS) se encolan aparte, con su fila `foto` propia. Sus FK
+ * aquí (`foto_antes_id`, `sos_foto_id`) quedan en null a propósito: nadie las
+ * lee — el panel agrupa la evidencia por `foto.tipo` y `foto.levantamiento_id`—,
+ * y cada enlace añadiría una operación de sync que un 23503 podría descartar.
  */
 export async function guardarAntesSos(d: {
   levantamiento_id: string;
@@ -495,8 +495,8 @@ export function useExhibiciones(
 /**
  * Paso 4.5: guarda la auditoría de exhibiciones. Upsert de las negociadas por
  * (levantamiento, negociada) y alta/edición de las adicionales conseguidas por
- * el mercaderista. Las fotos (opcionales) se encolan aparte; su FK queda null
- * hasta que MAR-39 cree la fila `foto` y la enlace.
+ * el mercaderista. Las fotos (opcionales) se encolan aparte, con su fila `foto`
+ * propia; la FK de aquí queda null porque nadie la lee (ver `guardarAntesSos`).
  */
 export async function guardarExhibiciones(d: {
   levantamiento_id: string;

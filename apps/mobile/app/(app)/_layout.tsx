@@ -1,9 +1,16 @@
 import { PowerSyncContext } from "@powersync/react-native";
 import { Stack } from "expo-router";
 import { useEffect } from "react";
+import { AppState } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { IndicadorConexion } from "@/componentes/indicador-conexion";
+import {
+  fijarUsuarioDeFotos,
+  limpiarFotosDelDispositivo,
+  reconciliarFotos,
+  subidorFotos,
+} from "@/lib/cola-fotos-instancia";
 import { ConectorSupabase } from "@/lib/powersync/conector";
 import { db } from "@/lib/powersync/db";
 import {
@@ -13,6 +20,7 @@ import {
 } from "@/lib/replica-usuario";
 import { useSesion } from "@/sesion";
 import { colores } from "@/tema";
+import { mensajeDeError } from "@/lib/error";
 
 // El shell autenticado. Solo se llega aquí con sesión aal2 (lo garantiza el guard
 // del layout raíz), así que es el sitio para conectar la réplica: PowerSync
@@ -32,6 +40,9 @@ export default function LayoutApp() {
       const anterior = await leerUltimoUsuario();
       if (debeLimpiarReplica(anterior, id)) {
         await db.disconnectAndClear();
+        // La evidencia capturada se va con la réplica: si no, quedan fotos del
+        // mercaderista anterior en un teléfono que ya no es su contexto.
+        await limpiarFotosDelDispositivo();
       }
       await guardarUltimoUsuario(id);
       if (cancelado) return;
@@ -39,10 +50,7 @@ export default function LayoutApp() {
     }
 
     conectar(userId).catch((error: unknown) => {
-      console.error(
-        "PowerSync no pudo conectar: " +
-          (error instanceof Error ? error.message : String(error)),
-      );
+      console.error("PowerSync no pudo conectar: " + mensajeDeError(error));
     });
 
     // Al salir del shell solo se desconecta: los datos se conservan por si vuelve
@@ -50,6 +58,44 @@ export default function LayoutApp() {
     return () => {
       cancelado = true;
       void db.disconnect();
+    };
+  }, [userId]);
+
+  // La cola de fotos hacia R2. Va aparte del efecto de conexión porque no
+  // depende de él: la cola se vacía cuando hay señal, la haya traído quien la
+  // haya traído.
+  useEffect(() => {
+    if (!userId) return;
+    fijarUsuarioDeFotos(userId);
+
+    // Lo que quedó a medias de una sesión anterior (app muerta entre el PUT y el
+    // borrado, manifiesto truncado) vuelve a la cola al entrar.
+    void reconciliarFotos(userId)
+      .then(() => subidorFotos.arrancar())
+      .catch((error: unknown) => {
+        console.warn(
+          "No se pudo reconciliar la cola de fotos: " + mensajeDeError(error),
+        );
+      });
+
+    // Al recuperar señal: es el disparador principal, y el mismo evento que ya
+    // observa el indicador de conexión — no hace falta `netinfo`.
+    const quitarSync = db.registerListener({
+      statusChanged: (s) => {
+        if (s.connected) void subidorFotos.arrancar();
+      },
+    });
+
+    // Al volver al primer plano: cubre el teléfono que estuvo guardado.
+    const suscripcion = AppState.addEventListener("change", (estado) => {
+      if (estado === "active") void subidorFotos.arrancar();
+    });
+
+    return () => {
+      quitarSync();
+      suscripcion.remove();
+      subidorFotos.detener();
+      fijarUsuarioDeFotos(null);
     };
   }, [userId]);
 

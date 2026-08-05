@@ -292,6 +292,7 @@ function PasoActivo({
   }
   return (
     <PasoDespues
+      {...comun}
       usuario={usuario}
       onCompletar={onCompletar}
       onContingencia={onContingencia}
