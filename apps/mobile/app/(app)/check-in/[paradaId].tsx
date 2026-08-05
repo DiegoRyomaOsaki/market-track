@@ -1,4 +1,3 @@
-import * as Crypto from "expo-crypto";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -11,8 +10,8 @@ import {
 
 import { AyudaBoton } from "@/componentes/ayuda-boton";
 import { CamaraFoto } from "@/componentes/camara-foto";
-import { colaFotos } from "@/lib/cola-fotos-instancia";
-import { type FotoProcesada } from "@/lib/foto-captura";
+import { encolarFoto } from "@/lib/cola-fotos-instancia";
+import { type FotoCapturada } from "@/lib/foto-captura";
 import { dentroDeGeocerca, distanciaMetros } from "@/lib/geo";
 import { useParada } from "@/lib/rutero";
 import {
@@ -39,7 +38,7 @@ export default function CheckIn() {
   const [paso, setPaso] = useState<"form" | "camara">("form");
   const [ubic, setUbic] = useState<ResultadoUbicacion | null>(null);
   const [ubicando, setUbicando] = useState(true);
-  const [foto, setFoto] = useState<FotoProcesada | null>(null);
+  const [foto, setFoto] = useState<FotoCapturada | null>(null);
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
@@ -74,8 +73,8 @@ export default function CheckIn() {
     return (
       <CamaraFoto
         usuario={sesion.user.email ?? "Mercaderista"}
-        lat={ubic?.ok ? ubic.punto.lat : 0}
-        lng={ubic?.ok ? ubic.punto.lng : 0}
+        lat={ubic?.ok ? ubic.punto.lat : null}
+        lng={ubic?.ok ? ubic.punto.lng : null}
         etiqueta="Tomar selfie"
         onListo={(f) => {
           setFoto(f);
@@ -91,14 +90,6 @@ export default function CheckIn() {
     setGuardando(true);
     try {
       const ahora = new Date().toISOString();
-      const fotoId = Crypto.randomUUID();
-      // La selfie se persiste en la cola; la subida a R2 y la fila `foto` son MAR-39.
-      await colaFotos.encolar({
-        id: fotoId,
-        ruta: foto.ruta,
-        hash: foto.hash,
-        encolada_at: ahora,
-      });
       // Cierra el cronómetro de tránsito de la tienda anterior: sus minutos son
       // el traslado HACIA esta visita.
       const trasladoDesde = await leerTransito();
@@ -106,6 +97,10 @@ export default function CheckIn() {
         ? minutosDeTraslado(trasladoDesde, ahora)
         : null;
       if (trasladoDesde) await limpiarTransito();
+
+      // La VISITA primero y la selfie después. Al revés, la operación de `foto`
+      // viajaría antes que la de `visita` en la cola del sync y su FK la
+      // rechazaría con un 23503, que el conector descarta como definitivo.
       const visitaId = await crearVisitaCheckIn({
         tenant_id: parada.tenant_id,
         rutero_parada_id: parada.parada_id,
@@ -115,6 +110,14 @@ export default function CheckIn() {
         capturado_at: ahora,
         selfie_foto_id: null,
         tiempo_traslado_min: tiempoTraslado,
+      });
+
+      await encolarFoto({
+        foto,
+        tenantId: parada.tenant_id,
+        visitaId,
+        levantamientoId: null,
+        tipo: "selfie",
       });
       // El levantamiento por marca es el siguiente paso; `replace` deja el
       // check-in fuera de la pila (volver desde el selector regresa a Mi día).

@@ -1,4 +1,4 @@
-import * as Crypto from "expo-crypto";
+import type { PuntoGeo } from "@market-track/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -17,8 +17,8 @@ import {
   Seccion,
   Stepper,
 } from "@/componentes/paso-comun";
-import { colaFotos } from "@/lib/cola-fotos-instancia";
-import { type FotoProcesada } from "@/lib/foto-captura";
+import { encolarFoto } from "@/lib/cola-fotos-instancia";
+import { type FotoCapturada } from "@/lib/foto-captura";
 import {
   guardarAntesSos,
   useLevantamiento,
@@ -50,15 +50,6 @@ type Props = {
   onContingencia: () => void;
 };
 
-async function encolar(foto: FotoProcesada): Promise<void> {
-  await colaFotos.encolar({
-    id: Crypto.randomUUID(),
-    ruta: foto.ruta,
-    hash: foto.hash,
-    encolada_at: new Date().toISOString(),
-  });
-}
-
 export function PasoAntesSos({
   visitaId,
   marcaId,
@@ -75,10 +66,10 @@ export function PasoAntesSos({
   );
 
   const [camaraPara, setCamaraPara] = useState<CamaraPara | null>(null);
-  const [geo, setGeo] = useState({ lat: 0, lng: 0 });
-  const [fotoAntes, setFotoAntes] = useState<FotoProcesada | null>(null);
-  const [fotoSos, setFotoSos] = useState<FotoProcesada | null>(null);
-  const [fotosSku, setFotosSku] = useState<Record<string, FotoProcesada>>({});
+  const [geo, setGeo] = useState<PuntoGeo | null>(null);
+  const [fotoAntes, setFotoAntes] = useState<FotoCapturada | null>(null);
+  const [fotoSos, setFotoSos] = useState<FotoCapturada | null>(null);
+  const [fotosSku, setFotosSku] = useState<Record<string, FotoCapturada>>({});
   const [propios, setPropios] = useState(0);
   const [competidores, setCompetidores] = useState<FrenteCompetidor[]>([]);
   const [frentesPorSku, setFrentesPorSku] = useState<Record<string, number>>(
@@ -118,11 +109,13 @@ export function PasoAntesSos({
 
   async function abrirCamara(para: CamaraPara) {
     const ubic = await ubicacionActual();
-    if (ubic.ok) setGeo({ lat: ubic.punto.lat, lng: ubic.punto.lng });
+    // Null si el GPS no dio lectura: `0,0` es un punto real en el golfo de
+    // Guinea y acabaría guardado como la coordenada de la evidencia.
+    setGeo(ubic.ok ? ubic.punto : null);
     setCamaraPara(para);
   }
 
-  function recibirFoto(foto: FotoProcesada) {
+  function recibirFoto(foto: FotoCapturada) {
     if (!camaraPara) return;
     if (camaraPara.tipo === "antes") setFotoAntes(foto);
     else if (camaraPara.tipo === "sos") setFotoSos(foto);
@@ -134,9 +127,18 @@ export function PasoAntesSos({
     if (!fotoAntes || guardando) return;
     setGuardando(true);
     try {
-      await encolar(fotoAntes);
-      if (fotoSos) await encolar(fotoSos);
-      for (const f of Object.values(fotosSku)) await encolar(f);
+      const comun = {
+        tenantId,
+        visitaId,
+        levantamientoId,
+      };
+      await encolarFoto({ ...comun, foto: fotoAntes, tipo: "antes" });
+      if (fotoSos) await encolarFoto({ ...comun, foto: fotoSos, tipo: "sos" });
+      // Las fotos por SKU viajan como evidencia del levantamiento, sin decir de
+      // qué SKU son: atribuirlas necesita que el panel sepa mostrarlas primero.
+      for (const f of Object.values(fotosSku)) {
+        await encolarFoto({ ...comun, foto: f, tipo: "sos" });
+      }
       await guardarAntesSos({
         levantamiento_id: levantamientoId,
         tenant_id: tenantId,
@@ -158,8 +160,8 @@ export function PasoAntesSos({
     return (
       <CamaraFoto
         usuario={usuario}
-        lat={geo.lat}
-        lng={geo.lng}
+        lat={geo?.lat ?? null}
+        lng={geo?.lng ?? null}
         facing="back"
         etiqueta="Tomar foto"
         onListo={recibirFoto}

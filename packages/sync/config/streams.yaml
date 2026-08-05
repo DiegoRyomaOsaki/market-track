@@ -74,6 +74,10 @@ streams:
       # La exhibición cuelga del levantamiento; la app la ESCRIBE y la relee.
       - SELECT * FROM exhibicion_negociada WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
       - SELECT * FROM exhibicion WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
+      # La metadata de SUS fotos. El binario va por la cola de disco a R2; aquí
+      # solo viaja la fila. Se acota a las visitas propias, igual que la revisión:
+      # sin ese IN, cada teléfono bajaría la evidencia de todos sus compañeros.
+      - SELECT * FROM foto WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND visita_id IN (SELECT id FROM visita WHERE mercaderista_id = auth.user_id())
       # La contingencia (bypass) cuelga de la visita/levantamiento; se acota por
       # tenant como ellos. La app la ESCRIBE (el trigger de MAR-28 dispara la
       # alerta al supervisor) y la relee para mostrar los pasos "⚠ Omitido".

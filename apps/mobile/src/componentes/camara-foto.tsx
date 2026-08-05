@@ -11,7 +11,7 @@ import {
 import { captureRef } from "react-native-view-shot";
 
 import {
-  type FotoProcesada,
+  type FotoCapturada,
   lineasWatermark,
   procesarFoto,
 } from "@/lib/foto-captura";
@@ -24,11 +24,13 @@ import { colores, espacio, radio } from "@/tema";
 
 type Props = {
   usuario: string;
-  lat: number;
-  lng: number;
+  // Nulos si el GPS no dio lectura. No se sustituyen por 0,0: esa coordenada es
+  // un punto real en el golfo de Guinea, y acabaría guardada como evidencia.
+  lat: number | null;
+  lng: number | null;
   facing?: "front" | "back";
   etiqueta?: string;
-  onListo: (foto: FotoProcesada) => void;
+  onListo: (foto: FotoCapturada) => void;
   onCancelar: () => void;
 };
 
@@ -87,7 +89,14 @@ export function CamaraFoto({
     setProcesando(true);
     try {
       const plana = await captureRef(marcoRef, { format: "jpg", quality: 0.9 });
-      onListo(await procesarFoto(plana));
+      const procesada = await procesarFoto(plana);
+      // La hora y las coordenadas viajan CON la foto: son parte de su evidencia y
+      // se sellan al capturar, no al subir (ADR-0006).
+      onListo({
+        ...procesada,
+        capturada_at: capturadoAt,
+        geo: lat === null || lng === null ? null : { lat, lng },
+      });
     } finally {
       setProcesando(false);
     }

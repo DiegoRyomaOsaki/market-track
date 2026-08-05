@@ -1,5 +1,5 @@
+import type { PuntoGeo } from "@market-track/shared";
 import { tipoExhibicionSchema } from "@market-track/shared";
-import * as Crypto from "expo-crypto";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -18,8 +18,8 @@ import {
   SiNo,
   Stepper,
 } from "@/componentes/paso-comun";
-import { colaFotos } from "@/lib/cola-fotos-instancia";
-import { type FotoProcesada } from "@/lib/foto-captura";
+import { encolarFoto } from "@/lib/cola-fotos-instancia";
+import { type FotoCapturada } from "@/lib/foto-captura";
 import { guardarExhibiciones, useExhibiciones } from "@/lib/levantamiento";
 import { ubicacionActual } from "@/lib/ubicacion";
 import { colores, espacio, radio } from "@/tema";
@@ -68,9 +68,9 @@ export function PasoExhibiciones({
   const [estadoNeg, setEstadoNeg] = useState<Record<string, EstadoNeg>>({});
   const [adicionales, setAdicionales] = useState<Adicional[]>([]);
   const [camaraPara, setCamaraPara] = useState<CamaraPara | null>(null);
-  const [geo, setGeo] = useState({ lat: 0, lng: 0 });
-  const [fotosNeg, setFotosNeg] = useState<Record<string, FotoProcesada>>({});
-  const [fotosAdd, setFotosAdd] = useState<Record<number, FotoProcesada>>({});
+  const [geo, setGeo] = useState<PuntoGeo | null>(null);
+  const [fotosNeg, setFotosNeg] = useState<Record<string, FotoCapturada>>({});
+  const [fotosAdd, setFotosAdd] = useState<Record<number, FotoCapturada>>({});
   const [guardando, setGuardando] = useState(false);
   const sembrado = useRef(false);
 
@@ -114,11 +114,13 @@ export function PasoExhibiciones({
 
   async function abrirCamara(para: CamaraPara) {
     const ubic = await ubicacionActual();
-    if (ubic.ok) setGeo({ lat: ubic.punto.lat, lng: ubic.punto.lng });
+    // Null si el GPS no dio lectura: `0,0` es un punto real en el golfo de
+    // Guinea y acabaría guardado como la coordenada de la evidencia.
+    setGeo(ubic.ok ? ubic.punto : null);
     setCamaraPara(para);
   }
 
-  function recibirFoto(foto: FotoProcesada) {
+  function recibirFoto(foto: FotoCapturada) {
     if (!camaraPara) return;
     if (camaraPara.tipo === "neg") {
       setFotosNeg((prev) => ({ ...prev, [camaraPara.id]: foto }));
@@ -132,8 +134,18 @@ export function PasoExhibiciones({
     if (guardando) return;
     setGuardando(true);
     try {
-      for (const f of Object.values(fotosNeg)) await encolar(f);
-      for (const f of Object.values(fotosAdd)) await encolar(f);
+      const comun = {
+        tenantId,
+        visitaId,
+        levantamientoId,
+        tipo: "exhibicion" as const,
+      };
+      for (const f of Object.values(fotosNeg)) {
+        await encolarFoto({ ...comun, foto: f });
+      }
+      for (const f of Object.values(fotosAdd)) {
+        await encolarFoto({ ...comun, foto: f });
+      }
       await guardarExhibiciones({
         levantamiento_id: levantamientoId,
         tenant_id: tenantId,
@@ -158,8 +170,8 @@ export function PasoExhibiciones({
     return (
       <CamaraFoto
         usuario={usuario}
-        lat={geo.lat}
-        lng={geo.lng}
+        lat={geo?.lat ?? null}
+        lng={geo?.lng ?? null}
         facing="back"
         etiqueta="Tomar foto"
         onListo={recibirFoto}
@@ -311,15 +323,6 @@ export function PasoExhibiciones({
       <ContingenciaLink onPress={onContingencia} />
     </ScrollView>
   );
-}
-
-async function encolar(foto: FotoProcesada): Promise<void> {
-  await colaFotos.encolar({
-    id: Crypto.randomUUID(),
-    ruta: foto.ruta,
-    hash: foto.hash,
-    encolada_at: new Date().toISOString(),
-  });
 }
 
 function CamaraBtn({

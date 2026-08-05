@@ -29,6 +29,11 @@ const IDS = {
   levantamientoMrc: "a0000011-0000-0000-0000-000000000001",
   levantamientoRival: "b0000011-0000-0000-0000-000000000002",
   nuevoPortalModulo: "e0000043-0000-0000-0000-000000000099",
+  visitaMrc: "a0000010-0000-0000-0000-000000000001",
+  nuevaFoto: "e0000015-0000-0000-0000-000000000099",
+  otraFoto: "e0000015-0000-0000-0000-000000000098",
+  nuevaContingencia: "e0000014-0000-0000-0000-000000000099",
+  visitaDeCompanero: "e0000010-0000-0000-0000-000000000098",
 } as const;
 
 // Los tests de "no puede escribir en el tenant ajeno" y "revocación en la
@@ -649,6 +654,131 @@ describe("portal_modulo_habilitado — solo el admin configura el portal del cli
   it("el mercaderista tampoco puede configurar el portal", async () => {
     await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
       await esRechazado(() => c.query(...insertar(TENANTS.maracumango)));
+    });
+  });
+});
+
+describe("foto — la metadata sube por el sync, el binario por su propia cola", () => {
+  const SQL_FOTO = `insert into public.foto (id, visita_id, tipo, hash, capturada_at)
+     values ($1, $2, 'antes', 'sha', now())`;
+  const insertar = (c: Client, fotoId: string, visitaId: string) =>
+    c.query(SQL_FOTO, [fotoId, visitaId]);
+
+  it("el mercaderista crea la foto de SU visita sin pasar tenant_id", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await insertar(c, IDS.nuevaFoto, IDS.visitaMrc);
+
+      const r = await c.query<{ tenant_id: string }>(
+        `select tenant_id from public.foto where id = $1`,
+        [IDS.nuevaFoto],
+      );
+      expect(r.rows[0]?.tenant_id).toBe(TENANTS.maracumango);
+    });
+  });
+
+  it("NO puede colgar una foto de la visita de un COMPAÑERO del mismo cliente", async () => {
+    // La visita es del MISMO tenant a propósito: así la FK compuesta está
+    // satisfecha y lo único que puede rechazar el insert es el WITH CHECK de la
+    // política, que exige ser el DUEÑO de la visita (más estricto que el tenant).
+    // Con una visita del tenant rival, el test pasaría por la FK aunque alguien
+    // abriera la política — verificado abriéndola.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await c.query("set local role postgres");
+      await c.query(
+        `insert into public.visita
+           (id, tenant_id, rutero_parada_id, mercaderista_id, tienda_id, estado)
+         values ($1, $2, $3, $4, $5, 'en_curso')`,
+        [
+          IDS.visitaDeCompanero,
+          TENANTS.maracumango,
+          IDS.ruteroParadaMrc,
+          USUARIOS.desvinculado,
+          IDS.tiendaMrc,
+        ],
+      );
+      await c.query("set local role authenticated");
+
+      await esRechazado(() =>
+        insertar(c, IDS.nuevaFoto, IDS.visitaDeCompanero),
+      );
+    });
+  });
+
+  it("marca su propia foto como subida", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await insertar(c, IDS.nuevaFoto, IDS.visitaMrc);
+
+      const r = await c.query(
+        `update public.foto set subida_at = now() where id = $1`,
+        [IDS.nuevaFoto],
+      );
+      expect(r.rowCount).toBe(1);
+    });
+  });
+
+  it("el upsert de PowerSync sobre una foto ya existente no revienta", async () => {
+    // El conector reenvía con `on conflict do update`: un reintento tras un fallo
+    // de red vuelve a mandar la fila entera.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await insertar(c, IDS.nuevaFoto, IDS.visitaMrc);
+      await c.query(
+        `insert into public.foto (id, tenant_id, visita_id, tipo, hash, capturada_at)
+         values ($1, $2, $3, 'antes', 'sha', now())
+         on conflict (id) do update set hash = excluded.hash`,
+        [IDS.nuevaFoto, TENANTS.maracumango, IDS.visitaMrc],
+      );
+
+      const r = await c.query<{ n: string }>(
+        `select count(*)::text as n from public.foto where id = $1`,
+        [IDS.nuevaFoto],
+      );
+      expect(r.rows[0]?.n).toBe("1");
+    });
+  });
+
+  it("una contingencia CON foto se inserta si la fila `foto` existe", async () => {
+    // El bug que este ticket arregla: sin la fila, `cont_foto_fk` rechaza el
+    // insert con 23503, el conector lo trata como definitivo y descarta la
+    // operación entera — la contingencia con foto no llegaba nunca y el
+    // supervisor no recibía su alerta de bypass.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await insertar(c, IDS.nuevaFoto, IDS.visitaMrc);
+
+      await c.query(
+        `insert into public.contingencia
+           (id, visita_id, levantamiento_id, paso, motivo, registrada_at, foto_id)
+         values ($1, $2, $3, 'precios', 'Góndola bloqueada', now(), $4)`,
+        [
+          IDS.nuevaContingencia,
+          IDS.visitaMrc,
+          IDS.levantamientoMrc,
+          IDS.nuevaFoto,
+        ],
+      );
+
+      const r = await c.query<{ foto_id: string }>(
+        `select foto_id from public.contingencia where id = $1`,
+        [IDS.nuevaContingencia],
+      );
+      expect(r.rows[0]?.foto_id).toBe(IDS.nuevaFoto);
+    });
+  });
+
+  it("sin la fila `foto`, la contingencia se rechaza con la FK: el bug congelado", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await expect(
+        c.query(
+          `insert into public.contingencia
+             (id, visita_id, levantamiento_id, paso, motivo, registrada_at, foto_id)
+           values ($1, $2, $3, 'precios', 'Góndola bloqueada', now(), $4)`,
+          [
+            IDS.nuevaContingencia,
+            IDS.visitaMrc,
+            IDS.levantamientoMrc,
+            IDS.otraFoto,
+          ],
+        ),
+      ).rejects.toMatchObject({ code: "23503" });
     });
   });
 });

@@ -45,6 +45,14 @@ describe("streams.yaml — contrato de seguridad", () => {
     );
   });
 
+  it("la metadata de fotos se acota a las visitas del propio usuario", () => {
+    // El binario va por otro canal, pero la fila baja por aquí: sin el IN, cada
+    // teléfono se traería la evidencia de todos sus compañeros.
+    expect(streams).toMatch(
+      /FROM foto WHERE .*visita_id IN \(SELECT id FROM visita WHERE mercaderista_id = auth\.user_id\(\)\)/,
+    );
+  });
+
   it("exige acceso efectivo: usuario activo y su cliente activo", () => {
     // Espeja app.perfil_efectivo(): si el cliente se cancela, deja de replicar.
     expect(streams).toMatch(/p\.activo\s*=\s*true/);

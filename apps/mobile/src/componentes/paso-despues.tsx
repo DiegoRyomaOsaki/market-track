@@ -1,4 +1,4 @@
-import * as Crypto from "expo-crypto";
+import type { PuntoGeo } from "@market-track/shared";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -15,8 +15,8 @@ import {
   pasoEstilos as p,
   Seccion,
 } from "@/componentes/paso-comun";
-import { colaFotos } from "@/lib/cola-fotos-instancia";
-import { type FotoProcesada } from "@/lib/foto-captura";
+import { encolarFoto } from "@/lib/cola-fotos-instancia";
+import { type FotoCapturada } from "@/lib/foto-captura";
 import { ubicacionActual } from "@/lib/ubicacion";
 import { colores, espacio } from "@/tema";
 
@@ -26,20 +26,33 @@ import { colores, espacio } from "@/tema";
 // foto se encola; su FK queda null hasta MAR-39.
 
 type Props = {
+  visitaId: string;
+  marcaId: string;
+  levantamientoId: string;
+  tenantId: string;
   usuario: string;
   onCompletar: () => void;
   onContingencia: () => void;
 };
 
-export function PasoDespues({ usuario, onCompletar, onContingencia }: Props) {
-  const [foto, setFoto] = useState<FotoProcesada | null>(null);
+export function PasoDespues({
+  visitaId,
+  levantamientoId,
+  tenantId,
+  usuario,
+  onCompletar,
+  onContingencia,
+}: Props) {
+  const [foto, setFoto] = useState<FotoCapturada | null>(null);
   const [camara, setCamara] = useState(false);
-  const [geo, setGeo] = useState({ lat: 0, lng: 0 });
+  const [geo, setGeo] = useState<PuntoGeo | null>(null);
   const [guardando, setGuardando] = useState(false);
 
   async function abrirCamara() {
     const ubic = await ubicacionActual();
-    if (ubic.ok) setGeo({ lat: ubic.punto.lat, lng: ubic.punto.lng });
+    // Null si el GPS no dio lectura: `0,0` es un punto real en el golfo de
+    // Guinea y acabaría guardado como la coordenada de la evidencia.
+    setGeo(ubic.ok ? ubic.punto : null);
     setCamara(true);
   }
 
@@ -47,11 +60,12 @@ export function PasoDespues({ usuario, onCompletar, onContingencia }: Props) {
     if (!foto || guardando) return;
     setGuardando(true);
     try {
-      await colaFotos.encolar({
-        id: Crypto.randomUUID(),
-        ruta: foto.ruta,
-        hash: foto.hash,
-        encolada_at: new Date().toISOString(),
+      await encolarFoto({
+        foto,
+        tenantId,
+        visitaId,
+        levantamientoId,
+        tipo: "despues",
       });
       onCompletar();
     } finally {
@@ -63,8 +77,8 @@ export function PasoDespues({ usuario, onCompletar, onContingencia }: Props) {
     return (
       <CamaraFoto
         usuario={usuario}
-        lat={geo.lat}
-        lng={geo.lng}
+        lat={geo?.lat ?? null}
+        lng={geo?.lng ?? null}
         facing="back"
         etiqueta="Tomar foto Después"
         onListo={(f) => {
