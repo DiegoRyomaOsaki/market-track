@@ -17,6 +17,11 @@ import {
   type ParadaDeHoy,
   useRuteroDeHoy,
 } from "@/lib/rutero";
+import {
+  etiquetaDecision,
+  type RevisionLocal,
+  useRechazosRecientes,
+} from "@/lib/revision";
 import { leerTransito } from "@/lib/transito";
 import { colores, espacio, radio } from "@/tema";
 
@@ -42,6 +47,7 @@ function fechaLarga(iso: string): string {
 export default function MiDia() {
   const router = useRouter();
   const { paradas, cargando, fecha } = useRuteroDeHoy();
+  const rechazos = useRechazosRecientes();
   const [transitoDesde, setTransitoDesde] = useState<string | null>(null);
 
   // Al volver a Mi día (p. ej. tras un check-out) se relee el cronómetro de
@@ -85,6 +91,8 @@ export default function MiDia() {
 
       {transitoDesde ? <BannerTransito desde={transitoDesde} /> : null}
 
+      {rechazos.length > 0 ? <BannerRechazos rechazos={rechazos} /> : null}
+
       <Pressable
         onPress={() => router.push("/solicitar-cambio-ruta")}
         style={e.enlaceSolicitud}
@@ -117,6 +125,33 @@ export default function MiDia() {
           )}
         />
       )}
+    </View>
+  );
+}
+
+/**
+ * Los reportes que el supervisor rechazó, con su motivo.
+ *
+ * Va en la portada y no colgando de la parada del día porque una revisión casi
+ * nunca llega el mismo día: si solo estuviera en la tienda de hoy, el
+ * mercaderista no se enteraría nunca de que le rechazaron un trabajo de la semana
+ * pasada. El motivo se muestra ENTERO, sin truncar: es lo único que le dice qué
+ * corregir.
+ */
+function BannerRechazos({ rechazos }: { rechazos: RevisionLocal[] }) {
+  return (
+    <View style={e.rechazos} accessibilityRole="summary">
+      <Text style={e.rechazosTitulo}>
+        {rechazos.length === 1
+          ? "1 reporte rechazado"
+          : `${rechazos.length} reportes rechazados`}
+      </Text>
+      {rechazos.map((r) => (
+        <Text key={r.visita_id} style={e.rechazosLinea}>
+          {r.tienda_nombre ?? "Tienda"}
+          {r.motivo ? ` — ${r.motivo}` : ""}
+        </Text>
+      ))}
     </View>
   );
 }
@@ -155,7 +190,17 @@ function ParadaItem({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${parada.tienda_nombre}, ${ETIQUETA[estado]}`}
+      // La revisión entra en la etiqueta: con un lector de pantalla, el chip de
+      // "Rechazado" es invisible y quedaría solo "Completada".
+      accessibilityLabel={[
+        parada.tienda_nombre,
+        ETIQUETA[estado],
+        parada.revision_decision
+          ? etiquetaDecision(parada.revision_decision)
+          : null,
+      ]
+        .filter(Boolean)
+        .join(", ")}
       style={({ pressed }) => [e.card, pressed && { opacity: 0.7 }]}
     >
       <View style={e.orden}>
@@ -171,6 +216,18 @@ function ParadaItem({
           </Text>
         ) : null}
       </View>
+      {parada.revision_decision ? (
+        <Text
+          style={[
+            e.revision,
+            parada.revision_decision === "rechazada" && {
+              color: colores.alertaTexto,
+            },
+          ]}
+        >
+          {etiquetaDecision(parada.revision_decision)}
+        </Text>
+      ) : null}
       <Semaforo estado={estado} />
     </Pressable>
   );
@@ -237,6 +294,24 @@ const e = StyleSheet.create({
   },
   transitoTexto: { color: colores.texto, fontSize: 14, fontWeight: "700" },
   transitoNota: { color: colores.textoSuave, fontSize: 12 },
+  rechazos: {
+    marginHorizontal: espacio.m,
+    marginTop: espacio.s,
+    paddingHorizontal: espacio.m,
+    paddingVertical: espacio.s,
+    borderRadius: radio.m,
+    borderWidth: 1,
+    borderColor: colores.alerta,
+    backgroundColor: colores.superficie,
+    gap: espacio.xs,
+  },
+  rechazosTitulo: {
+    color: colores.alertaTexto,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  rechazosLinea: { color: colores.texto, fontSize: 13 },
+  revision: { color: colores.textoSuave, fontSize: 11, fontWeight: "700" },
   enlaceSolicitud: {
     marginHorizontal: espacio.m,
     marginTop: espacio.s,

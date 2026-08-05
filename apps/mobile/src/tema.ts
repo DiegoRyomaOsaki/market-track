@@ -11,6 +11,12 @@ export const colores = {
   marca: "#4f46e5",
   marcaTexto: "#ffffff",
   alerta: "#dc2626",
+  // El mismo rojo pero para TEXTO sobre los fondos oscuros. `alerta` es un rojo
+  // de tema claro: medido sobre `superficie` da 3.25:1, por debajo del 4.5:1 que
+  // pide WCAG AA para texto pequeño. Este da 5.67:1 sobre `superficie` y 6.46:1
+  // sobre `fondo`. `alerta` se queda para rellenos y bordes, donde el umbral es
+  // otro.
+  alertaTexto: "#f87171",
   ambar: "#d97706",
   completado: "#16a34a",
 } as const;

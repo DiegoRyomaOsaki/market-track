@@ -226,6 +226,20 @@ const profile = new Table({
   tenant_id: column.text,
 });
 
+// El resultado de la revisión de sus reportes (MAR-51). Solo lectura: el
+// mercaderista no tiene política de escritura sobre esta tabla, y aquí no se
+// declara `revisor_id` porque el nombre del supervisor no está en su réplica —
+// enseñarle un uuid no aporta nada, y denormalizar el nombre metería una copia
+// rancia de un dato de staff en todos los teléfonos. Lo que necesita saber es qué
+// se decidió y por qué.
+const revision_visita = new Table({
+  tenant_id: column.text,
+  visita_id: column.text,
+  decision: column.text,
+  motivo: column.text,
+  revisado_at: column.text,
+});
+
 export const AppSchema = new Schema({
   tienda,
   cadena,
@@ -247,4 +261,5 @@ export const AppSchema = new Schema({
   formulario_levantamiento,
   formulario_version,
   levantamiento_respuesta,
+  revision_visita,
 });

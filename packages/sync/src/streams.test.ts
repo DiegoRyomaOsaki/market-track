@@ -36,6 +36,15 @@ describe("streams.yaml — contrato de seguridad", () => {
     expect(streams).toMatch(/auth\.parameter\('aal'\)\s*=\s*'aal2'/);
   });
 
+  it("la revisión de reportes se acota a las visitas del propio usuario", () => {
+    // Sin el `visita_id IN (... mercaderista_id = auth.user_id())`, la regla se
+    // quedaría en el filtro por tenant y cada teléfono bajaría el control de
+    // calidad de todos sus compañeros.
+    expect(streams).toMatch(
+      /FROM revision_visita WHERE .*visita_id IN \(SELECT id FROM visita WHERE mercaderista_id = auth\.user_id\(\)\)/,
+    );
+  });
+
   it("exige acceso efectivo: usuario activo y su cliente activo", () => {
     // Espeja app.perfil_efectivo(): si el cliente se cancela, deja de replicar.
     expect(streams).toMatch(/p\.activo\s*=\s*true/);

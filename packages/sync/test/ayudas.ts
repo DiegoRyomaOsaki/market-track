@@ -62,6 +62,11 @@ export const AppSchema = new Schema({
     tenant_id: column.text,
     rutero_id: column.text,
   }),
+  revision_visita: new Table({
+    tenant_id: column.text,
+    visita_id: column.text,
+    decision: column.text,
+  }),
 });
 
 function anonKey(): string {
