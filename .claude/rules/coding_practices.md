@@ -122,6 +122,11 @@ check must treat "upstream returned 404" (act) and "upstream errored / timed
 out / 5xx'd" (log and skip) as different outcomes. An upstream outage must
 never trigger a mass destructive action on local state.
 
+**A sanitizer must not erase the distinction its caller decides on.** Replacing
+invalid input with a valid-looking placeholder (`"#"`, `0`, `""`) before a later
+layer has to tell "absent" from "rejected" means that layer's branch never runs.
+Sanitize where the value is used, not where it is carried.
+
 **Fail visibly.** Do not swallow failures. Surface them through logs,
 monitoring, or user-facing error states.
 

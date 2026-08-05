@@ -249,6 +249,17 @@ Aún no hay `.env`. Al scaffoldear, crear `.env.example` por app. Previstas:
   rescan; un rango medio-abierto sobre la columna cruda (`col >= $1 and col <
   ($2 + 1)`) es sargable y sí usa el índice. Gemela de la pitfall de `(select
   ...)` de arriba: ambas son "un dashboard o un timeout".
+- **Nunca `jsonb_agg(x order by x->>'campo')`.** Ordenar por el jsonb recién
+  construido obliga a Postgres a re-evaluar el `jsonb_build_object` entero
+  —subconsultas incluidas— solo para sacar la clave de orden; se ordena por la
+  columna cruda. Medido: duplica el subplan **por nivel**, y estos árboles se
+  anidan tres.
+- **Si un rol no puede ver una fila, lo dice la POLÍTICA, no la consulta que la
+  agrupa.** Excluir un tipo de fila en la vista o la RPC solo la esconde de esa
+  pantalla: sigue siendo legible por PostgREST, y toda Edge Function que actúe
+  de proxy (firmar una URL, reenviar un blob) tiene como techo lo que la RLS
+  permite, no lo que la consulta enseñaba. Medido: el cliente-marca leía la
+  selfie del mercaderista pese a que la galería la excluía.
 - **La regla de acceso tiene un solo dueño: `app.perfil_efectivo()`.** No copiar
   el rol ni el `tenant_id` a los claims del JWT: un claim es una copia rancia y
   el mercaderista de un cliente que canceló seguiría dentro hasta que expire el
