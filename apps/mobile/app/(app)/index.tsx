@@ -221,7 +221,7 @@ function ParadaItem({
           style={[
             e.revision,
             parada.revision_decision === "rechazada" && {
-              color: colores.alerta,
+              color: colores.alertaTexto,
             },
           ]}
         >
@@ -305,7 +305,11 @@ const e = StyleSheet.create({
     backgroundColor: colores.superficie,
     gap: espacio.xs,
   },
-  rechazosTitulo: { color: colores.alerta, fontSize: 14, fontWeight: "700" },
+  rechazosTitulo: {
+    color: colores.alertaTexto,
+    fontSize: 14,
+    fontWeight: "700",
+  },
   rechazosLinea: { color: colores.texto, fontSize: 13 },
   revision: { color: colores.textoSuave, fontSize: 11, fontWeight: "700" },
   enlaceSolicitud: {

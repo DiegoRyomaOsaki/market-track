@@ -91,7 +91,6 @@ export const detalleVisitaSchema = z.object({
     bitacora: z.string().nullable(),
     tiempo_traslado_min: z.number().int().nullable(),
     bateria_inicio_pct: z.number().int().nullable(),
-    selfie_foto_id: uuid.nullable(),
   }),
   revision: z
     .object({

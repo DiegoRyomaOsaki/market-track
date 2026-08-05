@@ -53,6 +53,10 @@ export function FotoEvidencia({
           <img
             src={url}
             alt={`${etiqueta}, capturada el ${pie}`}
+            // Un detalle con varias marcas son decenas de fotos: solo se piden las
+            // que entran en pantalla.
+            loading="lazy"
+            decoding="async"
             onError={() => setCaducada(true)}
             className="size-full object-cover"
           />

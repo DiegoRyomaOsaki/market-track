@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  aplicarDecision,
   estiloDecision,
   etiquetaDecision,
   faltaEvidencia,
@@ -91,45 +90,5 @@ describe("faltaEvidencia", () => {
     expect(faltaEvidencia(visita({ fotos: 0, fotos_pendientes: 0 }))).toBe(
       false,
     );
-  });
-});
-
-describe("aplicarDecision", () => {
-  const decidida = {
-    visitaId: "v2",
-    decision: "rechazada" as const,
-    motivo: "Falta la foto Después",
-    revisorNombre: "Ana Torres",
-    revisadoAt: "2026-08-05T10:00:00Z",
-  };
-
-  it("actualiza solo la visita decidida", () => {
-    const antes = [visita(), visita({ visita_id: "v2" })];
-    const despues = aplicarDecision(antes, decidida);
-
-    expect(despues[0]?.decision).toBeNull();
-    expect(despues[1]).toMatchObject({
-      decision: "rechazada",
-      motivo: "Falta la foto Después",
-      revisor_nombre: "Ana Torres",
-      revisado_at: "2026-08-05T10:00:00Z",
-    });
-  });
-
-  it("no toca el resto de campos de la fila", () => {
-    const antes = [visita({ visita_id: "v2", quiebres: 7 })];
-    expect(aplicarDecision(antes, decidida)[0]?.quiebres).toBe(7);
-  });
-
-  it("si la visita ya no está en la lista, no inventa una fila", () => {
-    const antes = [visita()];
-    expect(aplicarDecision(antes, decidida)).toHaveLength(1);
-    expect(aplicarDecision(antes, decidida)[0]?.decision).toBeNull();
-  });
-
-  it("no muta la lista original", () => {
-    const antes = [visita({ visita_id: "v2" })];
-    aplicarDecision(antes, decidida);
-    expect(antes[0]?.decision).toBeNull();
   });
 });

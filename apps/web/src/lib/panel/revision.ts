@@ -70,30 +70,3 @@ export function pendientes(visitas: readonly VisitaEnCola[]): number {
 export function faltaEvidencia(visita: VisitaEnCola): boolean {
   return visita.fotos_pendientes > 0;
 }
-
-/**
- * Aplica la decisión sobre la lista que ya está en pantalla, sin esperar a que el
- * servidor recargue. Solo toca los campos que la decisión cambia.
- */
-export function aplicarDecision(
-  actuales: readonly VisitaEnCola[],
-  decidida: {
-    visitaId: string;
-    decision: DecisionRevision;
-    motivo: string | null;
-    revisorNombre: string;
-    revisadoAt: string;
-  },
-): VisitaEnCola[] {
-  return actuales.map((v) =>
-    v.visita_id === decidida.visitaId
-      ? {
-          ...v,
-          decision: decidida.decision,
-          motivo: decidida.motivo,
-          revisor_nombre: decidida.revisorNombre,
-          revisado_at: decidida.revisadoAt,
-        }
-      : v,
-  );
-}

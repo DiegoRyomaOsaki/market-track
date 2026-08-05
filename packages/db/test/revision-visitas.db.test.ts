@@ -370,6 +370,92 @@ describe("detalle_visita", () => {
     });
   });
 
+  it("devuelve EXACTAMENTE las claves que espera el schema Zod", async () => {
+    // `detalleVisitaSchema` (packages/shared) y esta función son un contrato entre
+    // dos archivos que nadie compila juntos: si una migración renombra una clave,
+    // el fallo aparecería en producción como "formato que no reconocemos".
+    //
+    // El espejo vive aquí y no allí porque `packages/db` no puede importar
+    // `packages/shared` — sería un ciclo, ya que `shared` deriva sus enums de los
+    // tipos generados de `db`. Al tocar el schema hay que tocar esta lista.
+    await comoUsuario(db, USUARIOS.supervisor, async (c) => {
+      await conVisitaCerrada(c);
+      await conRevision(c, "aprobada", null);
+
+      const r = await c.query<{ d: Record<string, unknown> }>(
+        `select public.detalle_visita($1) as d`,
+        [VISITA_MRC],
+      );
+      const d = r.rows[0]?.d as Record<string, Record<string, unknown>[]> &
+        Record<string, Record<string, unknown>>;
+
+      expect(Object.keys(d).sort()).toEqual([
+        "contingencias",
+        "fotos",
+        "levantamientos",
+        "revision",
+        "visita",
+      ]);
+      expect(Object.keys(d.visita as Record<string, unknown>).sort()).toEqual([
+        "bateria_inicio_pct",
+        "bitacora",
+        "cadena_nombre",
+        "check_in_at",
+        "check_in_geocerca_ok",
+        "check_out_at",
+        "check_out_geocerca_ok",
+        "duracion_min",
+        "id",
+        "mercaderista_nombre",
+        "tiempo_traslado_min",
+        "tienda_nombre",
+      ]);
+      expect(Object.keys(d.revision as Record<string, unknown>).sort()).toEqual(
+        ["decision", "motivo", "revisado_at", "revisor_nombre"],
+      );
+
+      const lev = (d.levantamientos as Record<string, unknown>[])[0];
+      expect(Object.keys(lev ?? {}).sort()).toEqual([
+        "estado",
+        "exhibiciones",
+        "id",
+        "marca_nombre",
+        "respuestas",
+        "skus",
+        "sos_frentes_competencia",
+        "sos_frentes_propios",
+      ]);
+      const sku = (lev?.skus as Record<string, unknown>[])[0];
+      expect(Object.keys(sku ?? {}).sort()).toEqual([
+        "codigo",
+        "diferencia",
+        "hay_promo",
+        "nombre",
+        "precio_registrado",
+        "promo_comunicada",
+        "quiebre",
+        "stock_piso",
+        "stock_sistema",
+      ]);
+      const cont = (d.contingencias as Record<string, unknown>[])[0];
+      expect(Object.keys(cont ?? {}).sort()).toEqual([
+        "comentario",
+        "levantamiento_id",
+        "motivo",
+        "paso",
+        "registrada_at",
+      ]);
+      const foto = (d.fotos as Record<string, unknown>[])[0];
+      expect(Object.keys(foto ?? {}).sort()).toEqual([
+        "capturada_at",
+        "id",
+        "levantamiento_id",
+        "subida_at",
+        "tipo",
+      ]);
+    });
+  });
+
   it("el quiebre viene de la columna generada, no se recalcula", async () => {
     await comoUsuario(db, USUARIOS.supervisor, async (c) => {
       const r = await c.query<{ d: Record<string, unknown> }>(

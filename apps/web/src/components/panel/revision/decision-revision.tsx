@@ -21,6 +21,8 @@ const FECHA_LARGA = new Intl.DateTimeFormat("es-PE", {
   timeZone: "America/Lima",
 });
 
+const ID_ERROR = "motivo-error";
+
 export type RevisionActual = {
   decision: DecisionRevision;
   motivo: string | null;
@@ -43,12 +45,16 @@ export function DecisionRevision({
   const [error, setError] = useState<string | null>(null);
   const [pendiente, iniciar] = useTransition();
   const resumen = useRef<HTMLParagraphElement>(null);
+  const campoMotivo = useRef<HTMLTextAreaElement>(null);
 
   function decidir(decision: DecisionRevision) {
     // Se valida aquí, en la acción y en la base. Aquí es para no gastar un viaje
     // y para poder señalar el campo.
     if (decision === "rechazada" && motivo.trim() === "") {
       setError("Explica por qué se rechaza: el mercaderista lee este texto.");
+      // El foco va al campo que hay que corregir, no se queda en el botón: si no,
+      // quien navega con teclado tiene que buscar a mano cuál era el problema.
+      campoMotivo.current?.focus();
       return;
     }
     setError(null);
@@ -118,11 +124,17 @@ export function DecisionRevision({
           </span>
         </span>
         <textarea
+          ref={campoMotivo}
           value={motivo}
           onChange={(e) => setMotivo(e.target.value)}
           maxLength={500}
           rows={3}
           disabled={pendiente}
+          // Sin esto, el error se anuncia una vez al aparecer y desaparece: al
+          // volver al campo para corregirlo, un lector de pantalla ya no dice ni
+          // que es inválido ni por qué.
+          aria-invalid={error !== null}
+          aria-describedby={error === null ? undefined : ID_ERROR}
           className="rounded-lg border border-border bg-background px-2 py-1.5 text-[12px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-60"
           placeholder="Qué falta o qué está mal. Lo lee el mercaderista en su app."
         />
@@ -150,7 +162,11 @@ export function DecisionRevision({
       </div>
 
       {error ? (
-        <p role="alert" className="text-[11.5px] text-alerta-texto">
+        <p
+          id={ID_ERROR}
+          role="alert"
+          className="text-[11.5px] text-alerta-texto"
+        >
           {error}
         </p>
       ) : null}

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { z } from "zod";
 
 import { detalleVisitaSchema, type FotoRevisada } from "@market-track/shared";
 
@@ -56,6 +57,11 @@ export default async function DetalleReportePage({
   params: Promise<{ visitaId: string }>;
 }) {
   const { visitaId } = await params;
+
+  // Un route param es entrada externa. Sin esta guarda, cualquier basura en la URL
+  // llega hasta Postgres y vuelve como un error de cast que se pinta como "no
+  // pudimos cargar el reporte" — cuando lo honesto es un 404.
+  if (!z.guid().safeParse(visitaId).success) notFound();
 
   const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase.rpc("detalle_visita", {

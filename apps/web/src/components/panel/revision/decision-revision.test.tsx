@@ -62,6 +62,40 @@ describe("DecisionRevision", () => {
     expect(revisarVisita).not.toHaveBeenCalled();
   });
 
+  it("el campo queda marcado como inválido y ligado a su error", async () => {
+    // El `role="alert"` se anuncia una vez y se acabó: al volver al campo para
+    // corregirlo, sin estos atributos el lector de pantalla ya no dice ni que es
+    // inválido ni por qué.
+    pintar();
+
+    fireEvent.click(screen.getByRole("button", { name: "Rechazar" }));
+
+    const campo = await screen.findByRole("textbox");
+    expect(campo).toHaveAttribute("aria-invalid", "true");
+    const idError = campo.getAttribute("aria-describedby");
+    expect(idError).toBeTruthy();
+    expect(document.getElementById(idError as string)).toHaveTextContent(
+      "Explica por qué se rechaza",
+    );
+  });
+
+  it("sin error, el campo no se anuncia como inválido", () => {
+    pintar();
+    const campo = screen.getByRole("textbox");
+    expect(campo).toHaveAttribute("aria-invalid", "false");
+    expect(campo).not.toHaveAttribute("aria-describedby");
+  });
+
+  it("al faltar el motivo, el foco va al campo que hay que corregir", () => {
+    // Si el foco se queda en el botón, quien navega con teclado tiene que buscar
+    // a mano cuál era el problema.
+    pintar();
+
+    fireEvent.click(screen.getByRole("button", { name: "Rechazar" }));
+
+    expect(screen.getByRole("textbox")).toHaveFocus();
+  });
+
   it("el botón de rechazar NO se deshabilita para forzar el motivo", () => {
     // Un botón deshabilitado no se enfoca y no explica por qué: se pulsa y se
     // explica.

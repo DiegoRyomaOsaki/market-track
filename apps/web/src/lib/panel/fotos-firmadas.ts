@@ -23,11 +23,15 @@ function trocear<T>(items: readonly T[], tamano: number): T[][] {
 }
 
 /**
- * Una llamada de red en el camino de la petición necesita su propio plazo: los
- * defaults del SDK rondan los 30 s y una conexión colgada se come el presupuesto
- * de la función entera antes de que el supervisor vea nada.
+ * El presupuesto TOTAL del firmado, no el de cada lote.
+ *
+ * Los defaults del SDK rondan los 30 s y una conexión colgada se come el
+ * presupuesto de la petición entera antes de que el supervisor vea nada. Pero un
+ * plazo POR LOTE tampoco acota nada: con los lotes en serie, una visita de varias
+ * marcas son N llamadas y el peor caso es N × plazo. Los lotes van en paralelo
+ * contra un único reloj, así que el tiempo total lo marca el lote más lento.
  */
-const DEADLINE_MS = 10_000;
+const PRESUPUESTO_MS = 10_000;
 
 /**
  * El mensaje de un fallo, acotado. Los errores de un cliente de infraestructura
@@ -38,13 +42,19 @@ function mensajeDe(e: unknown): string {
   return (e instanceof Error ? e.message : String(e)).slice(0, 200);
 }
 
-function conPlazo<T>(promesa: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    promesa,
-    new Promise<never>((_, rechazar) =>
-      setTimeout(() => rechazar(new Error("plazo agotado")), ms),
-    ),
-  ]);
+/** Un reloj único que todos los lotes comparten. */
+function relojDe(ms: number) {
+  let cancelar: ReturnType<typeof setTimeout>;
+  const agotado = new Promise<never>((_, rechazar) => {
+    cancelar = setTimeout(() => rechazar(new Error("plazo agotado")), ms);
+  });
+  // Sin `catch` vacío, el rechazo del reloj queda sin manejar cuando todos los
+  // lotes terminan antes y nadie llega a esperarlo.
+  agotado.catch(() => undefined);
+  return {
+    correr: <T>(promesa: Promise<T>) => Promise.race([promesa, agotado]),
+    parar: () => clearTimeout(cancelar),
+  };
 }
 
 /**
@@ -65,28 +75,36 @@ export async function urlsFirmadas(
   if (fotoIds.length === 0) return {};
 
   const urls: Record<string, string> = {};
+  const reloj = relojDe(PRESUPUESTO_MS);
 
-  for (const grupo of trocear(fotoIds, TOPE_LOTE)) {
-    try {
-      const respuesta = await conPlazo(
+  // `allSettled` y no `all`: un lote que falle no puede llevarse por delante los
+  // que sí firmaron. Media evidencia se revisa; ninguna, no.
+  const lotes = await Promise.allSettled(
+    trocear(fotoIds, TOPE_LOTE).map((grupo) =>
+      reloj.correr(
         supabase.functions.invoke<{ urls: Record<string, string> }>(
           "fotos-url-firmada",
           { body: { foto_ids: grupo } },
         ),
-        DEADLINE_MS,
-      );
-      // El SDK tipa este campo como `any` (`FunctionsResponseFailure`). Anotarlo
-      // `unknown` corta el contagio aquí, en el borde, en vez de dejar que se
-      // propague al resto del archivo.
-      const fallo: unknown = respuesta.error;
-      if (fallo) {
-        console.error("[revision] firmar fotos", mensajeDe(fallo));
-        continue;
-      }
-      Object.assign(urls, respuesta.data?.urls ?? {});
-    } catch (e) {
-      console.error("[revision] firmar fotos", mensajeDe(e));
+      ),
+    ),
+  );
+  reloj.parar();
+
+  for (const lote of lotes) {
+    if (lote.status === "rejected") {
+      console.error("[revision] firmar fotos", mensajeDe(lote.reason));
+      continue;
     }
+    // El SDK tipa este campo como `any` (`FunctionsResponseFailure`). Anotarlo
+    // `unknown` corta el contagio aquí, en el borde, en vez de dejar que se
+    // propague al resto del archivo.
+    const fallo: unknown = lote.value.error;
+    if (fallo) {
+      console.error("[revision] firmar fotos", mensajeDe(fallo));
+      continue;
+    }
+    Object.assign(urls, lote.value.data?.urls ?? {});
   }
 
   return urls;

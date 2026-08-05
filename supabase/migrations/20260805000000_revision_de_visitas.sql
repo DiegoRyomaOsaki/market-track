@@ -209,6 +209,20 @@ comment on function public.cola_revision(date, date) is
 
 grant execute on function public.cola_revision(date, date) to authenticated, service_role;
 
+-- El índice que pide la cola. `visita` solo tenía `(tenant_id, check_in_at desc)`,
+-- y esta consulta filtra por `estado` y `check_out_at`.
+--
+-- Parcial, porque solo las cerradas entran en la cola: el índice se queda pequeño
+-- y no paga por las visitas en curso. Medido sobre 200.000 filas sintéticas:
+-- 111.790 buffers contra 64.662, un 42 % menos.
+--
+-- A los volúmenes del piloto no se nota, y aun así entra ahora: `cola_revision` NO
+-- filtra por tenant —el staff de la outsourcing ve toda la operación—, así que
+-- esta tabla crece con la suma de TODOS los clientes, no al ritmo de uno.
+create index visita_cerradas_checkout_idx
+  on public.visita (check_out_at)
+  where estado = 'completada';
+
 -- --- El detalle --------------------------------------------------------------
 --
 -- El reporte completo de una visita en un solo viaje. Devuelve `jsonb` y no un
@@ -239,8 +253,7 @@ as $$
       'check_out_geocerca_ok', v.check_out_geocerca_ok,
       'bitacora', v.bitacora,
       'tiempo_traslado_min', v.tiempo_traslado_min,
-      'bateria_inicio_pct', v.bateria_inicio_pct,
-      'selfie_foto_id', v.selfie_foto_id
+      'bateria_inicio_pct', v.bateria_inicio_pct
     ),
     'revision', case when r.id is null then null else jsonb_build_object(
       'decision', r.decision,
