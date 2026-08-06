@@ -1,5 +1,10 @@
 import type { SeveridadAlerta, TipoAlerta } from "@market-track/shared";
 
+import {
+  ESTILO_SEVERIDAD,
+  ETIQUETA_SEVERIDAD,
+  ETIQUETA_TIPO_ALERTA,
+} from "@/lib/portal/alertas";
 import { cn } from "@/lib/utils";
 
 // El feed de alertas recientes del dashboard: tipo · severidad · tienda · hora.
@@ -12,21 +17,6 @@ export type AlertaFeed = {
   severidad: SeveridadAlerta;
   tienda_nombre: string;
   creado_at: string;
-};
-
-const ETIQUETA_TIPO: Record<TipoAlerta, string> = {
-  quiebre: "Quiebre de stock",
-  diferencia_stock: "Diferencia de stock",
-  desviacion_precio: "Desviación de precio",
-  promo_no_activa: "Promoción no activa",
-  exhibicion_incompleta: "Exhibición incompleta",
-  contingencia: "Contingencia",
-};
-
-const ESTILO_SEVERIDAD: Record<SeveridadAlerta, string> = {
-  critica: "bg-alerta-suave text-alerta-texto",
-  alta: "bg-en-curso-suave text-en-curso-texto",
-  info: "bg-muted text-muted-foreground",
 };
 
 function formatoHora(iso: string): string {
@@ -56,11 +46,11 @@ export function FeedAlertas({ alertas }: { alertas: AlertaFeed[] }) {
                   ESTILO_SEVERIDAD[a.severidad],
                 )}
               >
-                {a.severidad}
+                {ETIQUETA_SEVERIDAD[a.severidad]}
               </span>
               <div className="min-w-0 flex-1">
                 <div className="text-[13px] font-semibold">
-                  {ETIQUETA_TIPO[a.tipo]}
+                  {ETIQUETA_TIPO_ALERTA[a.tipo]}
                 </div>
                 <div className="truncate text-[11.5px] text-muted-foreground">
                   {a.tienda_nombre} · {formatoHora(a.creado_at)}

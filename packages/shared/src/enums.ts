@@ -40,10 +40,14 @@ export const tipoExhibicionSchema = z.enum(
   Constants.public.Enums.tipo_exhibicion,
 );
 export const tipoAlertaSchema = z.enum(Constants.public.Enums.tipo_alerta);
+/** Los valores del enum, para pintar un desplegable sin escribirlos a mano. */
+export const TIPOS_ALERTA = Constants.public.Enums.tipo_alerta;
 export const severidadAlertaSchema = z.enum(
   Constants.public.Enums.severidad_alerta,
 );
+export const SEVERIDADES_ALERTA = Constants.public.Enums.severidad_alerta;
 export const estadoAlertaSchema = z.enum(Constants.public.Enums.estado_alerta);
+export const ESTADOS_ALERTA = Constants.public.Enums.estado_alerta;
 export const canalAlertaSchema = z.enum(Constants.public.Enums.canal_alerta);
 export const canalOtpSchema = z.enum(Constants.public.Enums.canal_otp);
 export const tipoTiendaSchema = z.enum(Constants.public.Enums.tipo_tienda);

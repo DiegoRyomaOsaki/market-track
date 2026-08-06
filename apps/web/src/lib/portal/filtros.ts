@@ -1,4 +1,13 @@
-import { TIPOS_FOTO_PORTAL, type TipoFoto } from "@market-track/shared";
+import {
+  ESTADOS_ALERTA,
+  type EstadoAlerta,
+  SEVERIDADES_ALERTA,
+  type SeveridadAlerta,
+  TIPOS_ALERTA,
+  type TipoAlerta,
+  TIPOS_FOTO_PORTAL,
+  type TipoFoto,
+} from "@market-track/shared";
 
 /** Los tipos que el portal ofrece filtrar (todos menos la selfie). */
 export type TipoFotoPortal = Exclude<TipoFoto, "selfie">;
@@ -67,4 +76,47 @@ export function serializarFiltros(filtros: Partial<FiltrosGlobales>): string {
   if (filtros.tienda) p.set("tienda", filtros.tienda);
   const s = p.toString();
   return s ? `?${s}` : "";
+}
+
+/**
+ * Los filtros propios de la bandeja de alertas: tipo · severidad · estado · página.
+ *
+ * Como el tipo de foto de la galería, son de SECCIÓN y no globales: las RPC del
+ * dashboard no saben recibirlos. Viven en la misma URL para que la bandeja se
+ * comparta por enlace tal y como uno la dejó.
+ */
+export type FiltrosAlerta = {
+  tipo: TipoAlerta | null;
+  severidad: SeveridadAlerta | null;
+  estado: EstadoAlerta | null;
+  pagina: number;
+};
+
+/** El primer valor de una lista de valores permitidos, o null si no encaja. */
+function unoDe<T extends string>(
+  v: string | undefined,
+  permitidos: readonly T[],
+): T | null {
+  return v && (permitidos as readonly string[]).includes(v) ? (v as T) : null;
+}
+
+export function leerFiltrosAlerta(params: ParamsBusqueda): FiltrosAlerta {
+  return {
+    tipo: unoDe(primero(params.tipo), TIPOS_ALERTA),
+    severidad: unoDe(primero(params.severidad), SEVERIDADES_ALERTA),
+    estado: unoDe(primero(params.estado), ESTADOS_ALERTA),
+    pagina: leerPagina(primero(params.pagina)),
+  };
+}
+
+/**
+ * La página, siempre un entero ≥ 1.
+ *
+ * Nada de confiar en que la UI mande un número: la URL la escribe cualquiera.
+ * El tope de tamaño lo pone el SQL —es la última palabra—; aquí solo se evita
+ * pedir un offset absurdo.
+ */
+function leerPagina(v: string | undefined): number {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 1 ? n : 1;
 }
