@@ -1783,15 +1783,6 @@ export type Database = {
         }
         Returns: number
       }
-      foto_de_la_alerta: {
-        Args: {
-          p_marca: string
-          p_payload: Json
-          p_tipo: Database["public"]["Enums"]["tipo_alerta"]
-          p_visita: string
-        }
-        Returns: Json
-      }
       foto_del_levantamiento: {
         Args: {
           p_filtro: Database["public"]["Enums"]["tipo_foto"]
