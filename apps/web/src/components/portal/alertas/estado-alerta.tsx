@@ -25,13 +25,22 @@ export function EstadoDeAlerta({
   const router = useRouter();
   const [pendiente, arrancar] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [aviso, setAviso] = useState("");
 
   function cambiar(nuevo: EstadoAlerta) {
     setError(null);
+    setAviso("");
     arrancar(async () => {
       const r = await marcarEstadoAlerta({ alertaId, estado: nuevo });
-      if (r.ok) router.refresh();
-      else setError(r.error);
+      if (r.ok) {
+        // El éxito también se anuncia. Quien usa lector de pantalla no ve que la
+        // pastilla del encabezado cambió de color: sin esto, la única señal de
+        // que se guardó es que el botón deja de decir "Guardando…".
+        setAviso(`Alerta marcada como ${ETIQUETA_ESTADO[nuevo].toLowerCase()}`);
+        router.refresh();
+      } else {
+        setError(r.error);
+      }
     });
   }
 
@@ -53,11 +62,15 @@ export function EstadoDeAlerta({
           </button>
         ))}
       </div>
-      {error === null ? null : (
-        <p role="alert" className="text-[12px] text-alerta-texto">
-          {error}
-        </p>
-      )}
+      {/* Las dos regiones se montan SIEMPRE y solo cambia su texto: un
+          `role="alert"` que aparece después del render inicial se lo pierden
+          algunos lectores de pantalla, justo en el primer intento. */}
+      <p role="alert" className="text-[12px] text-alerta-texto empty:hidden">
+        {error ?? ""}
+      </p>
+      <p role="status" className="sr-only">
+        {aviso}
+      </p>
     </div>
   );
 }

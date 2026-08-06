@@ -78,13 +78,35 @@ describe("EstadoDeAlerta", () => {
     });
     render(<EstadoDeAlerta alertaId={ALERTA} estado="nueva" />);
     fireEvent.click(screen.getByRole("button", { name: "Marcar vista" }));
-    await screen.findByRole("alert");
+    // Se espera al TEXTO, no a la región: la región ya está desde el principio.
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(/sin permiso/),
+    );
 
     marcar.mockResolvedValue({ ok: true, estado: "vista" });
     fireEvent.click(screen.getByRole("button", { name: "Marcar vista" }));
 
+    // La región sigue en el DOM —a propósito—, pero vacía.
     await waitFor(() =>
-      expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
+      expect(screen.getByRole("alert")).toBeEmptyDOMElement(),
     );
+  });
+
+  it("ANUNCIA el éxito, no solo el fallo", async () => {
+    // Sin esto, quien usa lector de pantalla no tiene ninguna señal de que se
+    // guardó: la pastilla del encabezado cambia en silencio.
+    render(<EstadoDeAlerta alertaId={ALERTA} estado="nueva" />);
+    fireEvent.click(screen.getByRole("button", { name: "Marcar vista" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      /marcada como vista/i,
+    );
+  });
+
+  it("la región de error existe desde el primer render, aunque esté vacía", () => {
+    // Un `role="alert"` que se monta al fallar se lo pierden algunos lectores.
+    render(<EstadoDeAlerta alertaId={ALERTA} estado="nueva" />);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toBeEmptyDOMElement();
   });
 });

@@ -112,6 +112,20 @@ describe("marcarEstadoAlerta", () => {
     expect(falso.tablasPedidas).toEqual([]);
   });
 
+  it("apunta a LA alerta pedida, no a cualquiera", async () => {
+    // Sin esta afirmación, un update sin filtrar por id (o filtrando por otro)
+    // pasaría igual: el doble devuelve su resultado venga como venga la consulta.
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    const falso = conEscritura({
+      data: [{ id: ALERTA, estado: "vista" }],
+      error: null,
+    });
+
+    await marcarEstadoAlerta({ alertaId: ALERTA, estado: "vista" });
+
+    expect(falso.filtrosDeEscritura).toEqual([["id", ALERTA]]);
+  });
+
   it("escribe SOLO sobre `alerta`: la evidencia no se toca", async () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
     const falso = conEscritura({

@@ -47,6 +47,12 @@ grant execute on function app.uuid_del_payload(jsonb, text) to authenticated, se
 create index alerta_tenant_creado_id_idx
   on public.alerta (tenant_id, creado_at desc, id desc);
 
+-- Y se retira el que acaba de quedar de sobra: `(tenant_id)` es prefijo estricto
+-- del de arriba, así que toda consulta que lo usara puede usar el nuevo. Mantener
+-- los dos solo cuesta escrituras, y aquí eso pesa: las ~40 alertas de un mismo
+-- levantamiento se insertan de una vez.
+drop index public.alerta_tenant_id_idx;
+
 -- --- La bandeja ----------------------------------------------------------------
 --
 -- `returns table` y no jsonb: esto es una tabla, no un árbol. El jsonb de la
@@ -120,10 +126,21 @@ $$;
 comment on function public.bandeja_alertas(date, date, uuid, uuid, public.tipo_alerta, public.severidad_alerta, public.estado_alerta, integer, integer) is
   'La bandeja de alertas del portal, paginada. `total` es el conteo de la ventana entera, no el de la página. La ventana se resuelve en America/Lima. La RLS acota al tenant de quien llama.';
 
+-- Los DOS revokes, no uno: local concede vía PUBLIC y la nube deja un default
+-- privilege explícito a `anon` sobre el esquema `public`. Revocar de uno solo
+-- deja el agujero abierto en el otro entorno — está documentado en
+-- `20260804190000_endurecer_funciones_del_primer_despliegue.sql`.
+revoke execute on function public.bandeja_alertas(date, date, uuid, uuid, public.tipo_alerta, public.severidad_alerta, public.estado_alerta, integer, integer) from public;
+revoke execute on function public.bandeja_alertas(date, date, uuid, uuid, public.tipo_alerta, public.severidad_alerta, public.estado_alerta, integer, integer) from anon;
 grant execute on function public.bandeja_alertas(date, date, uuid, uuid, public.tipo_alerta, public.severidad_alerta, public.estado_alerta, integer, integer)
   to authenticated, service_role;
 
 -- --- La foto de una alerta -----------------------------------------------------
+--
+-- Vive en el esquema `app` y no en `public` a propósito: PostgREST solo expone
+-- `public`, así que aquí nadie puede invocarla por RPC eligiendo a mano la
+-- visita, la marca y el payload. La llama `detalle_alerta`, que corre como el
+-- llamante y por tanto bajo su misma RLS.
 --
 -- El payload no guarda un `foto_id`, y las FK que parecerían servir están MUERTAS:
 -- `levantamiento_sku.sos_foto_id` y `exhibicion.foto_id` no las escribe nadie —el
@@ -135,7 +152,7 @@ grant execute on function public.bandeja_alertas(date, date, uuid, uuid, public.
 -- la de este SKU concreto. La pantalla tiene que decirlo. Enseñar la foto de
 -- precio de la góndola como si fuera la del SKU que disparó la alerta es
 -- inventarse la evidencia.
-create function public.foto_de_la_alerta(
+create function app.foto_de_la_alerta(
   p_visita uuid,
   p_marca uuid,
   p_tipo public.tipo_alerta,
@@ -189,10 +206,11 @@ as $$
   limit 1;
 $$;
 
-comment on function public.foto_de_la_alerta(uuid, uuid, public.tipo_alerta, jsonb) is
+comment on function app.foto_de_la_alerta(uuid, uuid, public.tipo_alerta, jsonb) is
   'La foto que respalda una alerta, o null si no hay ninguna. `del_hallazgo` en false significa que es la foto del paso de la visita y no la del hallazgo concreto: la pantalla debe rotularla como tal.';
 
-grant execute on function public.foto_de_la_alerta(uuid, uuid, public.tipo_alerta, jsonb)
+revoke execute on function app.foto_de_la_alerta(uuid, uuid, public.tipo_alerta, jsonb) from public;
+grant execute on function app.foto_de_la_alerta(uuid, uuid, public.tipo_alerta, jsonb)
   to authenticated, service_role;
 
 -- --- El detalle ----------------------------------------------------------------
@@ -223,7 +241,7 @@ as $$
     'sku_nombre', sk.nombre,
     'visita_id', a.visita_id,
     'visita_check_in_at', v.check_in_at,
-    'foto', public.foto_de_la_alerta(a.visita_id, a.marca_id, a.tipo, a.payload)
+    'foto', app.foto_de_la_alerta(a.visita_id, a.marca_id, a.tipo, a.payload)
   )
   from public.alerta a
   left join public.visita v on v.id = a.visita_id
@@ -237,4 +255,6 @@ $$;
 comment on function public.detalle_alerta(uuid) is
   'El detalle de una alerta con su evidencia resuelta, o null si no existe o no es del tenant de quien llama (indistinguibles a propósito). El payload va crudo: darle forma es cosa de la app.';
 
+revoke execute on function public.detalle_alerta(uuid) from public;
+revoke execute on function public.detalle_alerta(uuid) from anon;
 grant execute on function public.detalle_alerta(uuid) to authenticated, service_role;
