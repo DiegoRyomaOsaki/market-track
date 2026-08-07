@@ -88,6 +88,16 @@ export const NAV_ADMIN: readonly ItemNav[] = [
       "Alta y gestión de mercaderistas, supervisores, clientes y admins, con su rol y cliente-marca. Dar de baja a un cliente revoca el acceso de todos sus mercaderistas.",
   },
   {
+    href: "/admin/acceso",
+    label: "Acceso y 2FA",
+    icono: "🔐",
+    area: "admin",
+    titulo: "Acceso y segundo factor",
+    subtitulo: "Canales del código y pases de acceso temporal",
+    ayuda:
+      "Por qué canales puede llegar el código de segundo factor (una sola política para toda la plataforma, no por cliente) y el pase de acceso temporal para el mercaderista que no lo recibe y está en tienda. La bitácora deja constancia de quién emitió cada pase y por qué; un pase vigente se puede revocar.",
+  },
+  {
     href: "/admin/importar",
     label: "Importar Excel",
     icono: "📄",
@@ -129,6 +139,16 @@ export const NAV_SUPERVISOR: readonly ItemNav[] = [
     subtitulo: "Peticiones del equipo pendientes de decisión",
     ayuda:
       "Lo que el mercaderista pide desde la app cuando no puede seguir su rutero: cambiar de tienda o de día, o no visitar. Llegan con su motivo y se aprueban o rechazan con un comentario, que él lee en el móvil. Aprobar no reordena el rutero solo: desde aquí se pasa a Ruteros para ajustarlo.",
+  },
+  {
+    href: "/supervisor/acceso",
+    label: "Acceso y 2FA",
+    icono: "🔐",
+    area: "supervisor",
+    titulo: "Acceso y segundo factor",
+    subtitulo: "Pases de acceso temporal de tu equipo",
+    ayuda:
+      "El pase de acceso temporal para el mercaderista de tu equipo que no recibe su código y está en tienda: se emite con un motivo, se dicta una sola vez y vence a los 15 minutos. Queda registrado a tu nombre, y se puede revocar mientras siga vigente.",
   },
   {
     href: "/supervisor/revision",

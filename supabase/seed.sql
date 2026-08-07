@@ -53,7 +53,8 @@ from (values
   ('33333333-3333-3333-3333-333333333333'::uuid, 'brand@maracumango.pe'),
   ('44444444-4444-4444-4444-444444444444'::uuid, 'jose.quispe@markettrack.pe'),
   ('55555555-5555-5555-5555-555555555555'::uuid, 'desvinculado@markettrack.pe'),
-  ('66666666-6666-6666-6666-666666666666'::uuid, 'merca.rival@markettrack.pe')
+  ('66666666-6666-6666-6666-666666666666'::uuid, 'merca.rival@markettrack.pe'),
+  ('77777777-7777-7777-7777-777777777777'::uuid, 'supervisor2@markettrack.pe')
 ) as u (id, email);
 
 -- Dos CLIENTES distintos: sin un segundo cliente no se puede probar que el
@@ -79,7 +80,11 @@ insert into public.profile (id, rol, tenant_id, nombre, dni, supervisor_id, acti
   -- Caso de borde: desvinculado. Debe ver 0 marcas, pero SÍ su propia fila.
   ('55555555-5555-5555-5555-555555555555', 'mercaderista', 'aaaaaaaa-0000-0000-0000-000000000001', 'Merca Desvinculado', '10000005', '22222222-2222-2222-2222-222222222222', false),
   -- Caso de borde: mercaderista del OTRO cliente. Jamás debe ver nada de Maracumango.
-  ('66666666-6666-6666-6666-666666666666', 'mercaderista', 'bbbbbbbb-0000-0000-0000-000000000002', 'Merca Rival', '10000006', null, true);
+  ('66666666-6666-6666-6666-666666666666', 'mercaderista', 'bbbbbbbb-0000-0000-0000-000000000002', 'Merca Rival', '10000006', null, true),
+  -- Un SEGUNDO supervisor, sin equipo. Con uno solo, "el supervisor ve lo de los
+  -- SUYOS" es indemostrable: cualquier fila que viera sería de un mercaderista
+  -- suyo por descarte, y una política que dejara pasar todo pasaría el test igual.
+  ('77777777-7777-7777-7777-777777777777', 'supervisor', null, 'Rosa Medina',       '10000007', null, true);
 
 -- ---------------------------------------------------------------------------
 -- Una CADENA OPERATIVA COMPLETA por cliente: de la cadena de retail hasta la

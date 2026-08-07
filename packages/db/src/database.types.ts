@@ -136,23 +136,34 @@ export type Database = {
       configuracion_plataforma: {
         Row: {
           actualizado_at: string
+          actualizado_por: string | null
           id: boolean
           otp_canales_habilitados: Database["public"]["Enums"]["canal_otp"][]
           otp_requerido: boolean
         }
         Insert: {
           actualizado_at?: string
+          actualizado_por?: string | null
           id?: boolean
           otp_canales_habilitados?: Database["public"]["Enums"]["canal_otp"][]
           otp_requerido?: boolean
         }
         Update: {
           actualizado_at?: string
+          actualizado_por?: string | null
           id?: boolean
           otp_canales_habilitados?: Database["public"]["Enums"]["canal_otp"][]
           otp_requerido?: boolean
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "configuracion_plataforma_actualizado_por_fkey"
+            columns: ["actualizado_por"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       contingencia: {
         Row: {
@@ -1685,6 +1696,23 @@ export type Database = {
           tipo: Database["public"]["Enums"]["tipo_solicitud_ruta"]
         }[]
       }
+      bitacora_pases: {
+        Args: {
+          p_estado?: Database["public"]["Enums"]["estado_pase"]
+          p_limite?: number
+          p_profile_id?: string
+        }
+        Returns: {
+          emisor_nombre: string
+          estado: Database["public"]["Enums"]["estado_pase"]
+          expira_at: string
+          generado_at: string
+          id: string
+          motivo: string
+          profile_id: string
+          usuario_nombre: string
+        }[]
+      }
       cola_revision: {
         Args: { p_desde: string; p_hasta: string }
         Returns: {
@@ -1882,6 +1910,7 @@ export type Database = {
         | "cancelada"
       estado_levantamiento: "pendiente" | "en_curso" | "completado" | "omitido"
       estado_parada: "pendiente" | "en_curso" | "completada"
+      estado_pase: "vigente" | "usado" | "vencido" | "revocado"
       estado_rutero: "borrador" | "publicado" | "en_curso" | "completado"
       estado_solicitud_ruta: "nueva" | "vista" | "resuelta" | "rechazada"
       estado_visita: "en_curso" | "completada" | "bloqueada"
@@ -2059,6 +2088,7 @@ export const Constants = {
       ],
       estado_levantamiento: ["pendiente", "en_curso", "completado", "omitido"],
       estado_parada: ["pendiente", "en_curso", "completada"],
+      estado_pase: ["vigente", "usado", "vencido", "revocado"],
       estado_rutero: ["borrador", "publicado", "en_curso", "completado"],
       estado_solicitud_ruta: ["nueva", "vista", "resuelta", "rechazada"],
       estado_visita: ["en_curso", "completada", "bloqueada"],

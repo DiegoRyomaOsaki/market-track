@@ -20,6 +20,8 @@ export const USUARIOS = {
   mercaderistaMaracumango: "44444444-4444-4444-4444-444444444444",
   desvinculado: "55555555-5555-5555-5555-555555555555",
   mercaderistaRival: "66666666-6666-6666-6666-666666666666",
+  /** Un supervisor SIN equipo: lo que hace demostrable "solo los suyos". */
+  supervisorSinEquipo: "77777777-7777-7777-7777-777777777777",
 } as const;
 
 export const TENANTS = {
