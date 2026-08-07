@@ -1,6 +1,6 @@
 import type { CanalOtp, EstadoPase } from "@market-track/shared";
 
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { type SesionStaff, sesionDeStaff } from "@/lib/panel/sesion";
 
 // La lectura de servidor de la pantalla de acceso.
 //
@@ -26,13 +26,26 @@ export type DatosAcceso = {
 /**
  * Lo que necesita la pantalla de acceso, para admin y para supervisor.
  *
- * Sin filtro de alcance por parámetro: la bitácora la acota la RLS —el admin lo
- * ve todo, el supervisor solo los pases de sus mercaderistas— y los elegibles se
- * acotan igual por la política de `profile`. Elegir el alcance aquí sería una
- * segunda regla que se puede desincronizar de la primera.
+ * La bitácora la acota la RLS: el admin la ve entera, el supervisor solo los
+ * pases de sus mercaderistas.
+ *
+ * La lista de elegibles NO se puede dejar a la RLS: `profile_staff_lee_todo` deja
+ * a cualquier staff leer toda la plantilla, así que un supervisor vería el nombre
+ * y el DNI de los mercaderistas de otros supervisores —y de otros clientes— solo
+ * por abrir esta pantalla. Emitirles un pase le fallaría, pero el dato personal ya
+ * se le habría enseñado. Se acota aquí, y por eso hace falta saber quién llama.
  */
 export async function datosDeAcceso(): Promise<DatosAcceso> {
-  const supabase = await createServerSupabaseClient();
+  const sesion = await sesionDeStaff();
+  if (sesion === null) {
+    return {
+      canales: ["correo"],
+      pases: [],
+      elegibles: [],
+      error: "No se pudo cargar la configuración de acceso.",
+    };
+  }
+  const { supabase, perfil } = sesion;
 
   const [config, bitacora, elegibles] = await Promise.all([
     supabase
@@ -41,14 +54,7 @@ export async function datosDeAcceso(): Promise<DatosAcceso> {
       .eq("id", true)
       .maybeSingle(),
     supabase.rpc("bitacora_pases"),
-    supabase
-      .from("profile")
-      .select("id, nombre, dni")
-      .eq("rol", "mercaderista")
-      // Un pase para alguien dado de baja no sirve: el acceso es derivado y se
-      // le negaría igual al canjearlo.
-      .eq("activo", true)
-      .order("nombre"),
+    elegiblesDe(supabase, perfil).order("nombre"),
   ]);
 
   const fallo = config.error ?? bitacora.error ?? elegibles.error;
@@ -68,4 +74,26 @@ export async function datosDeAcceso(): Promise<DatosAcceso> {
     elegibles: elegibles.data ?? [],
     error: null,
   };
+}
+
+/**
+ * A quién se le puede emitir un pase: mercaderistas activos, y —si quien mira no
+ * es admin— solo los de su propio equipo.
+ *
+ * Un pase para alguien dado de baja no sirve: el acceso es derivado y se le
+ * negaría igual al canjearlo.
+ */
+function elegiblesDe(
+  supabase: SesionStaff["supabase"],
+  perfil: SesionStaff["perfil"],
+) {
+  const consulta = supabase
+    .from("profile")
+    .select("id, nombre, dni")
+    .eq("rol", "mercaderista")
+    .eq("activo", true);
+
+  return perfil.rol === "admin"
+    ? consulta
+    : consulta.eq("supervisor_id", perfil.id);
 }

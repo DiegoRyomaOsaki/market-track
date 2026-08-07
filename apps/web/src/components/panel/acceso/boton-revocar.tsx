@@ -9,7 +9,14 @@ import { revocarPase } from "@/lib/panel/acciones-acceso";
 // solo QUITA acceso — por eso no pide confirmación: el daño de un clic accidental
 // es que alguien tenga que pedir otro pase.
 
-export function BotonRevocar({ paseId }: { paseId: string }) {
+export function BotonRevocar({
+  paseId,
+  usuario,
+}: {
+  paseId: string;
+  /** Sin esto, una bitácora de N filas ofrece N botones llamados «Revocar». */
+  usuario: string;
+}) {
   const router = useRouter();
   const [pendiente, arrancar] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -29,6 +36,7 @@ export function BotonRevocar({ paseId }: { paseId: string }) {
         type="button"
         onClick={revocar}
         disabled={pendiente}
+        aria-label={`Revocar el pase de ${usuario}`}
         className="min-h-11 rounded-lg border border-border px-3 text-[12px] font-semibold disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
         {pendiente ? "Revocando…" : "Revocar"}

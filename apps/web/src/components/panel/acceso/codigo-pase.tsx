@@ -40,27 +40,40 @@ export function CodigoPase({
     return () => clearInterval(id);
   }, [expiraAt, alVencer]);
 
-  if (restante === "00:00") {
-    return (
-      <p role="status" className="text-[13px] text-muted-foreground">
-        El pase venció. Si todavía hace falta, genera otro.
-      </p>
-    );
-  }
+  const vencido = restante === "00:00";
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-en-curso-texto bg-en-curso-suave p-4">
-      <p className="text-[12px] font-semibold text-en-curso-texto">
-        Dicta este código. No se puede volver a ver.
+    <div className="flex flex-col gap-2">
+      {/* UNA sola región, montada desde el primer render: si apareciera al
+          generar o al vencer, algunos lectores de pantalla no la registrarían —
+          justo en el momento que más importa. Solo cambia su texto. */}
+      <p role="status" className="sr-only">
+        {vencido
+          ? "El pase venció"
+          : `Pase generado. El código se muestra en pantalla y vence en ${restante}`}
       </p>
-      <p className="font-mono text-[30px] font-bold tracking-[0.3em] text-en-curso-texto">
-        {codigo}
-      </p>
-      <p className="text-[12px] text-en-curso-texto">
-        {/* `aria-live="off"`: con un anuncio por segundo, un lector de pantalla
-            taparía todo lo demás. El vencimiento sí se anuncia, arriba. */}
-        Vence en <span aria-live="off">{restante}</span>
-      </p>
+
+      {vencido ? (
+        <p className="text-[13px] text-muted-foreground">
+          El pase venció. Si todavía hace falta, genera otro.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2 rounded-xl border border-en-curso-texto bg-en-curso-suave p-4">
+          <p className="text-[12px] font-semibold text-en-curso-texto">
+            Dicta este código. No se puede volver a ver.
+          </p>
+          {/* Agrupado de tres en tres: se dicta por teléfono y un bloque de seis
+              cifras seguidas se repite mal. */}
+          <p className="font-mono text-[30px] font-bold tracking-[0.3em] text-en-curso-texto">
+            {codigo.slice(0, 3)} {codigo.slice(3)}
+          </p>
+          <p className="text-[12px] text-en-curso-texto">
+            {/* `aria-live="off"`: con un anuncio por segundo taparía todo lo
+                demás. El vencimiento sí se anuncia, en la región de arriba. */}
+            Vence en <span aria-live="off">{restante}</span>
+          </p>
+        </div>
+      )}
     </div>
   );
 }

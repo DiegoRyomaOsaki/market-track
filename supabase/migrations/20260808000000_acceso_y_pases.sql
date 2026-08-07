@@ -64,7 +64,13 @@ create policy pase_supervisor_lee_los_suyos on public.pase_acceso_temporal
     (select app.rol_actual()) = 'supervisor'
     and exists (
       select 1 from public.profile p
-      where p.id = profile_id and p.supervisor_id = (select auth.uid())
+      where p.id = profile_id
+        and p.supervisor_id = (select auth.uid())
+        -- El rol, además del organigrama: hoy solo un mercaderista tiene
+        -- `supervisor_id`, pero esa invariante vive en la disciplina de quien da
+        -- de alta, no en un CHECK. Si un día se le asignara supervisor a un
+        -- perfil de staff, sin esto pasaría a ser sujeto de pase.
+        and p.rol = 'mercaderista'
     )
   );
 
@@ -86,6 +92,15 @@ create policy pase_admin_emite on public.pase_acceso_temporal
     and generado_por = (select auth.uid())
     and usado_at is null
     and revocado_at is null
+    -- El pase es el rescate del MERCADERISTA que no recibe su código en tienda.
+    -- La Edge Function ya lo restringe así, pero por PostgREST directo un admin
+    -- podía emitirse uno para un supervisor, para otro admin o para el usuario
+    -- de un cliente — o sea, un camino a la sesión de cualquiera. La RLS es la
+    -- última línea y tiene que replicar el mismo alcance.
+    and exists (
+      select 1 from public.profile p
+      where p.id = profile_id and p.rol = 'mercaderista'
+    )
   );
 
 create policy pase_admin_revoca on public.pase_acceso_temporal
@@ -102,14 +117,26 @@ create policy pase_supervisor_revoca_los_suyos on public.pase_acceso_temporal
     (select app.rol_actual()) = 'supervisor'
     and exists (
       select 1 from public.profile p
-      where p.id = profile_id and p.supervisor_id = (select auth.uid())
+      where p.id = profile_id
+        and p.supervisor_id = (select auth.uid())
+        -- El rol, además del organigrama: hoy solo un mercaderista tiene
+        -- `supervisor_id`, pero esa invariante vive en la disciplina de quien da
+        -- de alta, no en un CHECK. Si un día se le asignara supervisor a un
+        -- perfil de staff, sin esto pasaría a ser sujeto de pase.
+        and p.rol = 'mercaderista'
     )
   )
   with check (
     (select app.rol_actual()) = 'supervisor'
     and exists (
       select 1 from public.profile p
-      where p.id = profile_id and p.supervisor_id = (select auth.uid())
+      where p.id = profile_id
+        and p.supervisor_id = (select auth.uid())
+        -- El rol, además del organigrama: hoy solo un mercaderista tiene
+        -- `supervisor_id`, pero esa invariante vive en la disciplina de quien da
+        -- de alta, no en un CHECK. Si un día se le asignara supervisor a un
+        -- perfil de staff, sin esto pasaría a ser sujeto de pase.
+        and p.rol = 'mercaderista'
     )
   );
 

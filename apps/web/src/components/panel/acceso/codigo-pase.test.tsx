@@ -28,9 +28,21 @@ function pintar(props: Partial<Parameters<typeof CodigoPase>[0]> = {}) {
 }
 
 describe("CodigoPase", () => {
+  it("agrupa las cifras de tres en tres: se dicta por teléfono", () => {
+    // Seis cifras seguidas se repiten mal al otro lado de la línea.
+    pintar();
+    expect(screen.getByText("482 913")).toBeInTheDocument();
+  });
+
+  it("anuncia desde el primer render que hay un código en pantalla", () => {
+    // La región no puede aparecer al generar: algunos lectores no la registran.
+    pintar();
+    expect(screen.getByRole("status")).toHaveTextContent(/Pase generado/i);
+  });
+
   it("enseña el código y avisa de que no se vuelve a ver", () => {
     pintar();
-    expect(screen.getByText("482913")).toBeInTheDocument();
+    expect(screen.getByText("482 913")).toBeInTheDocument();
     expect(screen.getByText(/no se puede volver a ver/i)).toBeInTheDocument();
   });
 
@@ -65,7 +77,7 @@ describe("CodigoPase", () => {
       vi.advanceTimersByTime(15 * 60 * 1000);
     });
 
-    expect(screen.queryByText("482913")).not.toBeInTheDocument();
+    expect(screen.queryByText("482 913")).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent(/venció/i);
   });
 

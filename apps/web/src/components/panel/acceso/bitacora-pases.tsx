@@ -77,7 +77,12 @@ export function BitacoraPases({ pases }: { pases: FilaPase[] }) {
               {FECHA.format(new Date(p.generado_at))}
             </td>
             <td className={TD}>
-              {sePuedeRevocar(p.estado) ? <BotonRevocar paseId={p.id} /> : null}
+              {sePuedeRevocar(p.estado) ? (
+                <BotonRevocar
+                  paseId={p.id}
+                  usuario={oGuion(p.usuario_nombre)}
+                />
+              ) : null}
             </td>
           </tr>
         ))}

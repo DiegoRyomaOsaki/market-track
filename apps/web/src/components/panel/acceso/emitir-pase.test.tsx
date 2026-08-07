@@ -93,7 +93,7 @@ describe("EmitirPase", () => {
     escribirMotivo("motivo");
     generar();
 
-    expect(await screen.findByText("482913")).toBeInTheDocument();
+    expect(await screen.findByText("482 913")).toBeInTheDocument();
   });
 
   it("si falla lo dice y NO enseña ningún código", async () => {
@@ -103,7 +103,47 @@ describe("EmitirPase", () => {
     generar();
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/Límite diario/);
-    expect(screen.queryByText("482913")).not.toBeInTheDocument();
+    expect(screen.queryByText("482 913")).not.toBeInTheDocument();
+  });
+
+  it("mientras la emisión está en vuelo se deshabilita y lo dice", async () => {
+    // Sin esto, dos clics seguidos emiten dos pases y gastan el límite diario.
+    let resolver: (v: { ok: boolean }) => void = () => {};
+    emitir.mockReturnValue(
+      new Promise<{ ok: boolean }>((r) => {
+        resolver = r;
+      }),
+    );
+    pintar();
+    escribirMotivo("motivo");
+    generar();
+
+    const boton = await screen.findByRole("button", { name: /Generando/ });
+    expect(boton).toBeDisabled();
+
+    resolver({ ok: false });
+  });
+
+  it("con varios mercaderistas, emite para el que se ELIGE", async () => {
+    // Con una sola opción el test pasaría aunque el campo no viajara.
+    const otro = {
+      id: "55555555-5555-5555-5555-555555555555",
+      nombre: "Rosa Medina",
+      dni: "10000007",
+    };
+    pintar([...USUARIOS, otro]);
+    fireEvent.change(screen.getByLabelText(/Mercaderista/), {
+      target: { value: otro.id },
+    });
+    escribirMotivo("motivo");
+    generar();
+
+    await waitFor(() =>
+      expect(emitir).toHaveBeenCalledWith({
+        profileId: otro.id,
+        motivo: "motivo",
+      }),
+    );
   });
 
   it("la región de error existe desde el primer render, aunque esté vacía", () => {

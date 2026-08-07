@@ -251,6 +251,88 @@ describe("bitacora_pases — el estado derivado", () => {
   });
 });
 
+describe("quién puede emitir un pase, por la política de verdad", () => {
+  // Todo lo demás de este archivo siembra con `set local role postgres` para
+  // poder fabricar estados terminales. Estos casos NO: pasan por la RLS como lo
+  // haría PostgREST, que es el único camino que prueba el `with check`.
+
+  it("el admin emite un pase a un mercaderista", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const r = await c.query(
+        `insert into public.pase_acceso_temporal
+           (profile_id, codigo_hash, motivo, generado_por)
+         values ($1, 'h', 'No le llega el OTP', $2) returning id`,
+        [JOSE, USUARIOS.admin],
+      );
+      expect(r.rowCount).toBe(1);
+    });
+  });
+
+  it("el supervisor emite a SU mercaderista", async () => {
+    await comoUsuario(db, USUARIOS.supervisor, async (c) => {
+      const r = await c.query(
+        `insert into public.pase_acceso_temporal
+           (profile_id, codigo_hash, motivo, generado_por)
+         values ($1, 'h', 'Está en tienda sin señal', $2) returning id`,
+        [JOSE, USUARIOS.supervisor],
+      );
+      expect(r.rowCount).toBe(1);
+    });
+  });
+
+  it("otro supervisor NO puede emitirle un pase al mercaderista ajeno", async () => {
+    await comoUsuario(db, USUARIOS.supervisorSinEquipo, async (c) => {
+      expect(
+        await alIntentar(
+          c,
+          `insert into public.pase_acceso_temporal
+             (profile_id, codigo_hash, motivo, generado_por)
+           values ($1, 'h', 'no es mío', $2)`,
+          [JOSE, USUARIOS.supervisorSinEquipo],
+        ),
+      ).toMatch(/row-level security/i);
+    });
+  });
+
+  it("un mercaderista no se emite un pase a sí mismo", async () => {
+    // Sería darse acceso permanente saltándose el segundo factor.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      expect(
+        await alIntentar(
+          c,
+          `insert into public.pase_acceso_temporal
+             (profile_id, codigo_hash, motivo, generado_por)
+           values ($1, 'h', 'me lo doy yo', $1)`,
+          [JOSE],
+        ),
+      ).toMatch(/row-level security/i);
+    });
+  });
+
+  it("el pase es SOLO para mercaderistas, ni para staff ni para un cliente", async () => {
+    // La Edge Function ya lo restringe así, pero por PostgREST directo un admin
+    // podía emitirse uno para un supervisor, para otro admin o para el usuario de
+    // un cliente — un camino a la sesión de cualquiera. La RLS es la última línea.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      for (const objetivo of [
+        USUARIOS.supervisor,
+        USUARIOS.admin,
+        USUARIOS.clienteMaracumango,
+      ]) {
+        expect(
+          await alIntentar(
+            c,
+            `insert into public.pase_acceso_temporal
+               (profile_id, codigo_hash, motivo, generado_por)
+             values ($1, 'h', 'escalada', $2)`,
+            [objetivo, USUARIOS.admin],
+          ),
+        ).toMatch(/row-level security/i);
+      }
+    });
+  });
+});
+
 describe("la bitácora no se puede reescribir", () => {
   it("nadie cambia el motivo ni quién emitió: eso es lo que la bitácora audita", async () => {
     await comoUsuario(db, USUARIOS.admin, async (c) => {
