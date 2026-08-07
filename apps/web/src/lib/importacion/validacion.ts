@@ -125,8 +125,16 @@ function comoNumero(celda: unknown): number | null {
   return Number(t.replace(",", "."));
 }
 
-function comoBooleano(celda: unknown): boolean {
+/**
+ * Una celda a sí/no.
+ *
+ * Devuelve `null` cuando está VACÍA: "no lo marcó" no es lo mismo que "dijo que
+ * no". Confundirlos hacía que un reimport con la casilla en blanco apagara una
+ * promoción que sí estaba comunicada.
+ */
+function comoBooleano(celda: unknown): boolean | null {
   const t = comoTexto(celda).toLowerCase();
+  if (t === "") return null;
   return ["si", "sí", "true", "1", "x", "verdadero"].includes(t);
 }
 

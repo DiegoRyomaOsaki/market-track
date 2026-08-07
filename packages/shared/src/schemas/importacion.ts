@@ -91,7 +91,8 @@ export const filaPromocionSchema = z
     precio_promo: z.number().min(0).max(1_000_000),
     fecha_inicio: fecha,
     fecha_fin: fecha,
-    comunicada: z.boolean(),
+    /** Nulo si la casilla venía vacía: se conserva lo que hubiera. */
+    comunicada: z.boolean().nullable(),
   })
   .refine((p) => p.fecha_fin >= p.fecha_inicio, {
     path: ["fecha_fin"],

@@ -306,6 +306,114 @@ describe("aplicar_importacion — nunca desactiva por ausencia", () => {
       expect(Number(r.rows[0]?.lat)).toBeCloseTo(-12.1, 4);
     });
   });
+  it("una celda VACÍA no borra lo que ya estaba: tolerancia y geocerca", async () => {
+    // El caso real: el cliente manda el maestro completo una vez y luego uno
+    // recortado sin esas columnas. Sin esto, la tolerancia volvía a 0 y el radio
+    // de geocerca al default — y los mercaderistas de esa tienda dejaban de poder
+    // fichar sin que nadie hubiera pedido ese cambio.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await aplicar(c, await nuevaImportacion(c), {
+        ...LOTE_COMPLETO,
+        marca: [{ ...MARCA, tolerancia_precio_pct: 7 }],
+        tienda: [{ ...TIENDA, radio_geocerca_m: 250 }],
+      });
+
+      await aplicar(c, await nuevaImportacion(c), {
+        ...LOTE_COMPLETO,
+        marca: [{ ...MARCA, tolerancia_precio_pct: null }],
+        tienda: [{ ...TIENDA, radio_geocerca_m: null }],
+      });
+
+      const r = await c.query<{ tol: string; radio: number }>(
+        `select (select tolerancia_precio_pct::text from public.marca
+                 where codigo_externo = 'IMP-MRC') as tol,
+                (select radio_geocerca_m from public.tienda
+                 where codigo_externo = 'IMP-TDA') as radio`,
+      );
+      expect(Number(r.rows[0]?.tol)).toBe(7);
+      expect(r.rows[0]?.radio).toBe(250);
+    });
+  });
+
+  it("una casilla de «comunicada» en blanco no apaga una promoción que sí lo estaba", async () => {
+    // «No lo marcó» no es «dijo que no».
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await aplicar(c, await nuevaImportacion(c), LOTE_COMPLETO);
+      await aplicar(c, await nuevaImportacion(c), {
+        ...LOTE_COMPLETO,
+        promocion: [{ ...LOTE_COMPLETO.promocion[0], comunicada: null }],
+      });
+
+      const r = await c.query<{ comunicada: boolean }>(
+        `select p.comunicada from public.promocion p
+         join public.sku s on s.id = p.sku_id
+         where s.codigo_externo = 'IMP-SKU'`,
+      );
+      expect(r.rows[0]?.comunicada).toBe(true);
+    });
+  });
+});
+
+describe("aplicar_importacion — los contadores de las siete hojas", () => {
+  // Cada `join` puede descartar filas en silencio. Los de `sku` y `tienda` ya
+  // tienen su caso arriba; estos cierran las tres que faltaban.
+
+  it("un vínculo tienda-sku que no resuelve aborta el lote", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const id = await nuevaImportacion(c);
+      const error = await alIntentar(c, () =>
+        aplicar(c, id, {
+          ...LOTE_COMPLETO,
+          tienda_sku: [
+            {
+              tienda_codigo_externo: "IMP-TDA",
+              sku_codigo_externo: "NO-EXISTE",
+            },
+          ],
+        }),
+      );
+
+      expect(error).toMatch(/^tienda_sku: llegaron 1 filas/m);
+      expect(await contar(c, "marca", "IMP-MRC")).toBe(0);
+    });
+  });
+
+  it("un precio cuya cadena no resuelve aborta el lote", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const id = await nuevaImportacion(c);
+      const error = await alIntentar(c, () =>
+        aplicar(c, id, {
+          ...LOTE_COMPLETO,
+          precio_regular: [
+            {
+              ...LOTE_COMPLETO.precio_regular[0],
+              cadena_codigo_externo: "NO-EXISTE",
+            },
+          ],
+        }),
+      );
+
+      expect(error).toMatch(/^precio_regular: llegaron 1 filas/m);
+      expect(await contar(c, "sku", "IMP-SKU")).toBe(0);
+    });
+  });
+
+  it("una promoción cuyo sku no resuelve aborta el lote", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const id = await nuevaImportacion(c);
+      const error = await alIntentar(c, () =>
+        aplicar(c, id, {
+          ...LOTE_COMPLETO,
+          promocion: [
+            { ...LOTE_COMPLETO.promocion[0], sku_codigo_externo: "NO-EXISTE" },
+          ],
+        }),
+      );
+
+      expect(error).toMatch(/^promocion: llegaron 1 filas/m);
+      expect(await contar(c, "marca", "IMP-MRC")).toBe(0);
+    });
+  });
 });
 
 describe("aplicar_importacion — todo o nada", () => {

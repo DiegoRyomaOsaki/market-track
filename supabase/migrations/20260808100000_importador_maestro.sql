@@ -74,10 +74,16 @@ begin
   -- panel.
 
   insert into public.marca (tenant_id, codigo_externo, nombre, tolerancia_precio_pct)
+  -- El `coalesce` se resuelve AQUÍ, contra la fila que ya existe, y no en el
+  -- `do update`: la columna es NOT NULL, así que si se coalesciera al default en
+  -- el select, `excluded` llegaría con un 0 indistinguible de un 0 de verdad y
+  -- pisaría la tolerancia que el panel hubiera puesto.
   select v_tenant, f.codigo_externo, f.nombre,
-         coalesce(f.tolerancia_precio_pct, 0)
+         coalesce(f.tolerancia_precio_pct, m0.tolerancia_precio_pct, 0)
   from jsonb_to_recordset(coalesce(p_lote->'marca', '[]'::jsonb))
     as f(codigo_externo text, nombre text, tolerancia_precio_pct numeric)
+  left join public.marca m0
+    on m0.tenant_id = v_tenant and m0.codigo_externo = f.codigo_externo
   on conflict (tenant_id, codigo_externo) do update
     set nombre = excluded.nombre,
         tolerancia_precio_pct = excluded.tolerancia_precio_pct;
@@ -129,7 +135,11 @@ begin
               else extensions.ST_SetSRID(
                      extensions.ST_MakePoint(f.lon, f.lat), 4326)::extensions.geography
          end,
-         coalesce(f.radio_geocerca_m, 100),
+         -- Igual que en `marca`, y aquí importa más: una geocerca ajustada a
+         -- mano —«en un centro comercial denso, 100 m abarcan la tienda de al
+         -- lado»— se resetearía al default y los mercaderistas de esa tienda
+         -- dejarían de poder fichar.
+         coalesce(f.radio_geocerca_m, t0.radio_geocerca_m, 100),
          f.cluster
   from jsonb_to_recordset(coalesce(p_lote->'tienda', '[]'::jsonb))
     as f(codigo_externo text, cadena_codigo_externo text, nombre text,
@@ -137,6 +147,8 @@ begin
          radio_geocerca_m integer, cluster text)
   join public.cadena c
     on c.tenant_id = v_tenant and c.codigo_externo = f.cadena_codigo_externo
+  left join public.tienda t0
+    on t0.tenant_id = v_tenant and t0.codigo_externo = f.codigo_externo
   on conflict (tenant_id, codigo_externo) do update
     set cadena_id = excluded.cadena_id,
         nombre = excluded.nombre,
@@ -199,12 +211,16 @@ begin
   insert into public.promocion (tenant_id, sku_id, precio_promo, fecha_inicio,
                                 fecha_fin, comunicada)
   select v_tenant, s.id, f.precio_promo, f.fecha_inicio, f.fecha_fin,
-         coalesce(f.comunicada, false)
+         -- Una casilla en blanco no es un «no»: se conserva lo que hubiera.
+         coalesce(f.comunicada, p0.comunicada, false)
   from jsonb_to_recordset(coalesce(p_lote->'promocion', '[]'::jsonb))
     as f(sku_codigo_externo text, precio_promo numeric, fecha_inicio date,
          fecha_fin date, comunicada boolean)
   join public.sku s
     on s.tenant_id = v_tenant and s.codigo_externo = f.sku_codigo_externo
+  left join public.promocion p0
+    on p0.tenant_id = v_tenant and p0.sku_id = s.id
+       and p0.fecha_inicio = f.fecha_inicio
   on conflict (tenant_id, sku_id, fecha_inicio) do update
     set precio_promo = excluded.precio_promo,
         fecha_fin = excluded.fecha_fin,

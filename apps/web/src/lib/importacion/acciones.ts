@@ -45,7 +45,7 @@ function hashDe(bytes: Buffer): string {
 }
 
 /** Lee, valida y guarda el informe. No escribe NADA en el maestro. */
-async function revisar(archivo: Buffer) {
+async function revisar(archivo: Buffer, tenantId: string) {
   const parseo = await parsearMaestro(archivo);
   if (!parseo.ok) return { ok: false as const, error: parseo.error };
 
@@ -59,6 +59,7 @@ async function revisar(archivo: Buffer) {
 
   const existentes = await clavesExistentes(
     sesion.supabase,
+    tenantId,
     codigosReferenciados(parseo.hojas),
   );
   const { lote, errores, erroresOmitidos } = validarMaestro(
@@ -97,7 +98,7 @@ export async function validarImportacion(
     return { ok: false, error: "El archivo es demasiado grande" };
   }
 
-  const revision = await revisar(archivo);
+  const revision = await revisar(archivo, parsed.data.tenantId);
   if (!revision.ok) return revision;
 
   const { data, error } = await revision.supabase
@@ -152,18 +153,16 @@ export async function aplicarImportacion(
   const parsed = aplicarSchema.safeParse(datos);
   if (!parsed.success) return { ok: false, error: "Datos inválidos" };
 
-  const revision = await revisar(archivo);
-  if (!revision.ok) return revision;
-  if (revision.errores.length > 0) {
-    return {
-      ok: false,
-      error: "El archivo tiene errores. Corrígelos y vuelve a previsualizar.",
-    };
+  const sesion = await sesionDeStaff();
+  if (sesion === null || sesion.perfil.rol !== "admin") {
+    return { ok: false, error: "Solo un administrador importa el maestro" };
   }
 
-  const { data: importacion, error: errorLectura } = await revision.supabase
+  // El tenant sale de la FILA, igual que dentro de la transacción: validar contra
+  // el catálogo de un cliente y aplicar sobre otro sería incoherente.
+  const { data: importacion, error: errorLectura } = await sesion.supabase
     .from("importacion")
-    .select("archivo_hash")
+    .select("tenant_id, archivo_hash")
     .eq("id", parsed.data.importacionId)
     .maybeSingle();
 
@@ -172,6 +171,15 @@ export async function aplicarImportacion(
     return { ok: false, error: "No se pudo leer la importación" };
   }
   if (!importacion) return { ok: false, error: "No encontrada o sin permiso" };
+
+  const revision = await revisar(archivo, importacion.tenant_id);
+  if (!revision.ok) return revision;
+  if (revision.errores.length > 0) {
+    return {
+      ok: false,
+      error: "El archivo tiene errores. Corrígelos y vuelve a previsualizar.",
+    };
+  }
 
   // Se previsualizó un archivo y se está aplicando otro: sin esta comprobación,
   // el operador revisaría unos errores y aplicaría datos distintos.
