@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { leerFiltros, leerTipoFoto, serializarFiltros } from "./filtros";
+import {
+  leerFiltros,
+  leerFiltrosAlerta,
+  leerTipoFoto,
+  serializarFiltros,
+} from "./filtros";
 
 const UUID = "aaaaaaaa-0000-0000-0000-000000000001";
 
@@ -100,5 +105,56 @@ describe("leerTipoFoto", () => {
 
   it("de un array toma el primero", () => {
     expect(leerTipoFoto({ tipo: ["despues", "antes"] })).toBe("despues");
+  });
+});
+
+describe("leerFiltrosAlerta", () => {
+  it("lee los tres filtros de la bandeja cuando son válidos", () => {
+    expect(
+      leerFiltrosAlerta({
+        tipo: "contingencia",
+        severidad: "critica",
+        estado: "resuelta",
+      }),
+    ).toEqual({
+      tipo: "contingencia",
+      severidad: "critica",
+      estado: "resuelta",
+      pagina: 1,
+    });
+  });
+
+  it("descarta lo que no está en el enum en vez de pasarlo a la base", () => {
+    // La URL la escribe cualquiera: sin esto, un valor inventado llegaría al
+    // parámetro tipado de la RPC y moriría en un error de cast.
+    expect(
+      leerFiltrosAlerta({
+        tipo: "inventado",
+        severidad: "urgentisima",
+        estado: "archivada",
+      }),
+    ).toMatchObject({ tipo: null, severidad: null, estado: null });
+  });
+
+  it("un parámetro repetido no cuela un segundo valor", () => {
+    expect(leerFiltrosAlerta({ tipo: ["quiebre", "contingencia"] }).tipo).toBe(
+      "quiebre",
+    );
+  });
+
+  it("la página es siempre un entero desde 1", () => {
+    expect(leerFiltrosAlerta({ pagina: "3" }).pagina).toBe(3);
+    for (const v of ["0", "-2", "abc", "1.5", "", undefined]) {
+      expect(leerFiltrosAlerta({ pagina: v }).pagina).toBe(1);
+    }
+  });
+
+  it("sin parámetros no filtra nada y arranca en la primera página", () => {
+    expect(leerFiltrosAlerta({})).toEqual({
+      tipo: null,
+      severidad: null,
+      estado: null,
+      pagina: 1,
+    });
   });
 });

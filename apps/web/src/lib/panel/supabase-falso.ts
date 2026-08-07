@@ -44,11 +44,22 @@ function consultaSobre(filas: Fila[]) {
   return encadenable;
 }
 
-function escrituraSobre(resultado: RespuestaLista) {
+function escrituraSobre(
+  resultado: RespuestaLista,
+  filtros: [string, unknown][],
+) {
   const encadenable = {
     update: () => encadenable,
     delete: () => encadenable,
-    eq: () => encadenable,
+    // Los filtros se APUNTAN, igual que en la lectura. Un doble que ignora el
+    // `.eq(...)` deja pasar una escritura que apunta a la fila equivocada: el
+    // test sigue verde porque el doble devuelve lo mismo venga como venga la
+    // consulta. Es el mismo falso verde que motivó este archivo, en el otro
+    // sentido.
+    eq: (columna: string, valor: unknown) => {
+      filtros.push([columna, valor]);
+      return encadenable;
+    },
     select: () => Promise.resolve(resultado),
   };
   return encadenable;
@@ -77,6 +88,8 @@ export function supabaseFalso({
 }: OpcionesFalso = {}) {
   const tablasPedidas: string[] = [];
   const rpcsPedidas: { nombre: string; argumentos: unknown }[] = [];
+  /** Los `.eq(...)` de la última escritura, para afirmar A QUÉ FILA apuntó. */
+  const filtrosDeEscritura: [string, unknown][] = [];
 
   const cliente = {
     auth: {
@@ -90,7 +103,7 @@ export function supabaseFalso({
       tablasPedidas.push(tabla);
       return tabla === "profile"
         ? consultaSobre(perfiles)
-        : escrituraSobre(escritura);
+        : escrituraSobre(escritura, filtrosDeEscritura);
     },
     rpc: (nombre: string, argumentos: unknown) => {
       rpcsPedidas.push({ nombre, argumentos });
@@ -98,7 +111,7 @@ export function supabaseFalso({
     },
   };
 
-  return { cliente, tablasPedidas, rpcsPedidas };
+  return { cliente, tablasPedidas, rpcsPedidas, filtrosDeEscritura };
 }
 
 /** Los perfiles del seed: varios, que es justo lo que rompía el gate sin filtro. */

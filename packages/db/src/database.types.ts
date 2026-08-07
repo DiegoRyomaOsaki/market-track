@@ -1642,6 +1642,32 @@ export type Database = {
         Args: { p_fecha: string; p_mercaderista: string; p_tienda: string }
         Returns: string
       }
+      bandeja_alertas: {
+        Args: {
+          p_cadena?: string
+          p_desde: string
+          p_estado?: Database["public"]["Enums"]["estado_alerta"]
+          p_hasta: string
+          p_pagina?: number
+          p_por_pagina?: number
+          p_severidad?: Database["public"]["Enums"]["severidad_alerta"]
+          p_tienda?: string
+          p_tipo?: Database["public"]["Enums"]["tipo_alerta"]
+        }
+        Returns: {
+          cadena_nombre: string
+          creado_at: string
+          estado: Database["public"]["Enums"]["estado_alerta"]
+          id: string
+          marca_nombre: string
+          severidad: Database["public"]["Enums"]["severidad_alerta"]
+          sku_codigo: string
+          sku_nombre: string
+          tienda_nombre: string
+          tipo: Database["public"]["Enums"]["tipo_alerta"]
+          total: number
+        }[]
+      }
       bandeja_solicitudes: {
         Args: { p_solo_mi_equipo?: boolean }
         Returns: {
@@ -1746,6 +1772,7 @@ export type Database = {
           visitada: boolean
         }[]
       }
+      detalle_alerta: { Args: { p_alerta_id: string }; Returns: Json }
       detalle_visita: { Args: { p_visita_id: string }; Returns: Json }
       duplicar_periodo_rutero: {
         Args: {
