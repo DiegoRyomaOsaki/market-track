@@ -1642,6 +1642,10 @@ export type Database = {
         Args: { p_fecha: string; p_mercaderista: string; p_tienda: string }
         Returns: string
       }
+      aplicar_importacion: {
+        Args: { p_importacion_id: string; p_lote: Json }
+        Returns: Json
+      }
       bandeja_alertas: {
         Args: {
           p_cadena?: string

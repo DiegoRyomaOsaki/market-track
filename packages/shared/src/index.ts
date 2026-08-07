@@ -19,5 +19,6 @@ export * from "./realtime/topicos";
 export * from "./schemas/formulario";
 export * from "./schemas/alerta";
 export * from "./schemas/galeria";
+export * from "./schemas/importacion";
 export * from "./schemas/levantamiento";
 export * from "./schemas/revision";
