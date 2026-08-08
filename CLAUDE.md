@@ -254,6 +254,12 @@ Aún no hay `.env`. Al scaffoldear, crear `.env.example` por app. Previstas:
   —subconsultas incluidas— solo para sacar la clave de orden; se ordena por la
   columna cruda. Medido: duplica el subplan **por nivel**, y estos árboles se
   anidan tres.
+- **En un upsert, `coalesce(valor, DEFAULT)` en el SELECT no protege lo que ya
+  había.** `excluded` llega con el default y el `do update` lo escribe encima del
+  valor real; para conservarlo, el `coalesce` se resuelve contra la fila existente
+  con un `left join` a la propia tabla. Medido: un reimport con la celda vacía
+  devolvía el radio de geocerca de una tienda a su default, y los mercaderistas de
+  esa tienda dejaban de poder fichar.
 - **Si un rol no puede ver una fila, lo dice la POLÍTICA, no la consulta que la
   agrupa.** Excluir un tipo de fila en la vista o la RPC solo la esconde de esa
   pantalla: sigue siendo legible por PostgREST, y toda Edge Function que actúe

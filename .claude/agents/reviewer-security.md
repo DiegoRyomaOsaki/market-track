@@ -89,6 +89,7 @@ Read `CLAUDE.md` for full context. Key facts for this project:
 - [ ] No Edge Function uses `service_role` to read/write across tenants without an explicit, justified role check
 - [ ] Cross-tenant access attempts covered by tests (one tenant's data unreachable from another tenant's session)
 - [ ] A sensitive *category* of row inside the tenant (personal data, a photo of a person) is excluded by the policy, not only by the view/RPC that consumes it — any endpoint that signs or forwards by id has RLS as its ceiling, not the query
+- [ ] Scope an Edge Function replicates server-side is **also** in the policy — if it only lives in the function, the same write via PostgREST skips it
 
 ### Field Evidence Integrity
 - [ ] Check-in coordinates re-validated server-side against the store's PostGIS geofence at sync — client-side validation is UX, not a security boundary
