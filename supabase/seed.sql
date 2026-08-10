@@ -125,6 +125,23 @@ insert into public.sku (id, tenant_id, marca_id, categoria_id, codigo, nombre) v
   ('a0000003-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-000000000001', 'a0000004-0000-0000-0000-000000000001', 'MRC-001', 'Néctar Maracumango 1L'),
   ('b0000003-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0000-000000000002', 'dddddddd-0000-0000-0000-000000000001', null, 'RIV-001', 'Bebida Rival 1L');
 
+-- La configuración de Perfect Store. Maracumango lleva DOS filas —el default de
+-- marca y una que afina la categoría Bebidas— porque la resolución "gana la más
+-- específica" no se puede probar con una sola.
+insert into public.config_perfect_store
+  (id, tenant_id, marca_id, categoria_id, tipo_tienda,
+   peso_distribucion, peso_visibilidad, peso_precio, peso_pop, peso_orden,
+   sos_objetivo_pct, vigente_desde) values
+  ('a0000019-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001',
+   'cccccccc-0000-0000-0000-000000000001', null, null,
+   30, 25, 25, 10, 10, 35, '2026-01-01'),
+  ('a0000019-0000-0000-0000-000000000002', 'aaaaaaaa-0000-0000-0000-000000000001',
+   'cccccccc-0000-0000-0000-000000000001', 'a0000004-0000-0000-0000-000000000001', null,
+   40, 20, 20, 10, 10, 45, '2026-01-01'),
+  ('b0000019-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0000-000000000002',
+   'dddddddd-0000-0000-0000-000000000001', null, null,
+   20, 30, 30, 10, 10, 30, '2026-01-01');
+
 -- tienda_sku tiene PK compuesta (tienda_id, sku_id): no lleva `id`.
 insert into public.tienda_sku (tenant_id, tienda_id, sku_id) values
   ('aaaaaaaa-0000-0000-0000-000000000001', 'a0000002-0000-0000-0000-000000000001', 'a0000003-0000-0000-0000-000000000001'),
