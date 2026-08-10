@@ -1,6 +1,7 @@
 import {
   type ErrorImportacion,
   filaCadenaSchema,
+  filaCategoriaSchema,
   filaMarcaSchema,
   filaPrecioRegularSchema,
   filaPromocionSchema,
@@ -33,6 +34,7 @@ export type HojasCrudas = Partial<Record<Hoja, unknown[][]>>;
 /** Los `codigo_externo` que ya existen en la base, por entidad. */
 export type ClavesExistentes = {
   marca: ReadonlySet<string>;
+  categoria: ReadonlySet<string>;
   cadena: ReadonlySet<string>;
   sku: ReadonlySet<string>;
   tienda: ReadonlySet<string>;
@@ -47,6 +49,7 @@ export type Validacion = {
 
 const SCHEMA: Record<Hoja, ZodType> = {
   marca: filaMarcaSchema,
+  categoria: filaCategoriaSchema,
   cadena: filaCadenaSchema,
   sku: filaSkuSchema,
   tienda: filaTiendaSchema,
@@ -55,11 +58,24 @@ const SCHEMA: Record<Hoja, ZodType> = {
   promocion: filaPromocionSchema,
 };
 
-/** Las referencias que cada hoja hace a otra entidad, por columna. */
+/**
+ * Las referencias que cada hoja hace a otra entidad, por columna.
+ *
+ * `opcional` marca la que puede venir en blanco: la celda vacía no es una
+ * referencia rota, es la ausencia de referencia. Sin esa distinción, un SKU sin
+ * categoría —el caso normal mientras el maestro se carga— se reportaría como
+ * error y bloquearía el import entero.
+ */
 const REFERENCIAS: Partial<
-  Record<Hoja, { columna: string; a: keyof ClavesExistentes }[]>
+  Record<
+    Hoja,
+    { columna: string; a: keyof ClavesExistentes; opcional?: true }[]
+  >
 > = {
-  sku: [{ columna: "marca_codigo_externo", a: "marca" }],
+  sku: [
+    { columna: "marca_codigo_externo", a: "marca" },
+    { columna: "categoria_codigo_externo", a: "categoria", opcional: true },
+  ],
   tienda: [{ columna: "cadena_codigo_externo", a: "cadena" }],
   tienda_sku: [
     { columna: "tienda_codigo_externo", a: "tienda" },
@@ -75,6 +91,7 @@ const REFERENCIAS: Partial<
 /** La clave con la que se detecta un duplicado dentro del propio archivo. */
 const CLAVE_EN_ARCHIVO: Record<Hoja, readonly string[]> = {
   marca: ["codigo_externo"],
+  categoria: ["codigo_externo"],
   cadena: ["codigo_externo"],
   sku: ["codigo_externo"],
   tienda: ["codigo_externo"],
@@ -90,6 +107,7 @@ const CLAVE_EN_ARCHIVO: Record<Hoja, readonly string[]> = {
 
 const VACIO: LoteImportacion = {
   marca: [],
+  categoria: [],
   cadena: [],
   sku: [],
   tienda: [],
@@ -193,6 +211,7 @@ export function validarMaestro(
   // referenciar una marca que se crea en este mismo import.
   const enArchivo: Record<keyof ClavesExistentes, Set<string>> = {
     marca: new Set(),
+    categoria: new Set(),
     cadena: new Set(),
     sku: new Set(),
     tienda: new Set(),
@@ -277,6 +296,9 @@ export function validarMaestro(
       let referenciaRota = false;
       for (const ref of REFERENCIAS[hoja] ?? []) {
         const valor = comoTexto(fila[ref.columna]);
+        // Una celda vacía en una referencia opcional no es un error: es que esa
+        // fila no referencia nada.
+        if (ref.opcional === true && valor === "") continue;
         if (!existentes[ref.a].has(valor) && !enArchivo[ref.a].has(valor)) {
           // El fallo más caro si no se detecta: el join del upsert descartaría la
           // fila EN SILENCIO y el import diría "aplicado" con datos faltando.
@@ -323,6 +345,7 @@ export function codigosReferenciados(
 ): Record<keyof ClavesExistentes, string[]> {
   const encontrados: Record<keyof ClavesExistentes, Set<string>> = {
     marca: new Set(),
+    categoria: new Set(),
     cadena: new Set(),
     sku: new Set(),
     tienda: new Set(),
@@ -345,6 +368,7 @@ export function codigosReferenciados(
 
   return {
     marca: [...encontrados.marca],
+    categoria: [...encontrados.categoria],
     cadena: [...encontrados.cadena],
     sku: [...encontrados.sku],
     tienda: [...encontrados.tienda],

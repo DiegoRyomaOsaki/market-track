@@ -12,6 +12,7 @@ import {
 
 const NADA: ClavesExistentes = {
   marca: new Set(),
+  categoria: new Set<string>(),
   cadena: new Set(),
   sku: new Set(),
   tienda: new Set(),
@@ -20,6 +21,7 @@ const NADA: ClavesExistentes = {
 function conExistentes(p: Partial<Record<keyof ClavesExistentes, string[]>>) {
   return {
     marca: new Set(p.marca ?? []),
+    categoria: new Set(p.categoria ?? []),
     cadena: new Set(p.cadena ?? []),
     sku: new Set(p.sku ?? []),
     tienda: new Set(p.tienda ?? []),
@@ -144,6 +146,98 @@ describe("la clave natural", () => {
 
     expect(r.errores).toEqual([]);
     expect(r.lote.precio_regular).toHaveLength(2);
+  });
+});
+
+describe("la categoría del SKU", () => {
+  /** Una hoja de sku con la columna de categoría, para no repetir la cabecera. */
+  function conCategoria(valor: string): HojasCrudas {
+    return {
+      sku: [
+        [
+          "codigo_externo",
+          "marca_codigo_externo",
+          "codigo",
+          "nombre",
+          "categoria_codigo_externo",
+        ],
+        ["S1", "MRC", "MRC-001", "Néctar", valor],
+      ],
+    };
+  }
+
+  it("la hoja `categoria` entra al lote", () => {
+    const r = validarMaestro(
+      {
+        categoria: [
+          ["codigo_externo", "nombre"],
+          ["BEB", "Bebidas"],
+        ],
+      },
+      NADA,
+    );
+
+    expect(r.errores).toEqual([]);
+    expect(r.lote.categoria).toEqual([
+      { codigo_externo: "BEB", nombre: "Bebidas" },
+    ]);
+  });
+
+  it("una categoría sin nombre se señala en su columna", () => {
+    const r = validarMaestro(
+      {
+        categoria: [
+          ["codigo_externo", "nombre"],
+          ["BEB", ""],
+        ],
+      },
+      NADA,
+    );
+
+    expect(r.errores).toHaveLength(1);
+    expect(r.errores[0]?.columna).toBe("nombre");
+  });
+
+  it("un SKU SIN categoría es válido: la celda vacía no es una referencia rota", () => {
+    // Es lo que hace aditivo el despliegue. Sin la marca `opcional`, este caso
+    // —el normal mientras el maestro se carga— bloquearía el import entero.
+    const r = validarMaestro(
+      conCategoria(""),
+      conExistentes({ marca: ["MRC"] }),
+    );
+
+    expect(r.errores).toEqual([]);
+    expect(r.lote.sku[0]?.categoria_codigo_externo).toBeNull();
+  });
+
+  it("un SKU con una categoría INEXISTENTE sí se señala", () => {
+    // Opcional no quiere decir «cualquier cosa»: una errata en el código tiene
+    // que salir aquí. Si pasara, el SKU se guardaría sin categoría y quedaría
+    // fuera del puntaje sin que nadie lo note.
+    const r = validarMaestro(
+      conCategoria("NO-EXISTE"),
+      conExistentes({ marca: ["MRC"] }),
+    );
+
+    expect(r.errores).toHaveLength(1);
+    expect(r.errores[0]?.columna).toBe("categoria_codigo_externo");
+    expect(r.errores[0]?.mensaje).toMatch(/No existe ninguna categoria/);
+  });
+
+  it("puede apuntar a una categoría que se crea en ESTE mismo archivo", () => {
+    const r = validarMaestro(
+      {
+        categoria: [
+          ["codigo_externo", "nombre"],
+          ["BEB", "Bebidas"],
+        ],
+        ...conCategoria("BEB"),
+      },
+      conExistentes({ marca: ["MRC"] }),
+    );
+
+    expect(r.errores).toEqual([]);
+    expect(r.lote.sku[0]?.categoria_codigo_externo).toBe("BEB");
   });
 });
 

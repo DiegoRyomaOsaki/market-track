@@ -95,7 +95,9 @@ const SKU = {
   nombre: "Producto importado",
   presentacion: "1L",
   codigo_barras: null,
+  categoria_codigo_externo: "IMP-CAT",
 };
+const CATEGORIA = { codigo_externo: "IMP-CAT", nombre: "Categoría importada" };
 const TIENDA = {
   codigo_externo: "IMP-TDA",
   cadena_codigo_externo: "IMP-CAD",
@@ -109,6 +111,7 @@ const TIENDA = {
 
 const LOTE_COMPLETO = {
   marca: [MARCA],
+  categoria: [CATEGORIA],
   cadena: [CADENA],
   sku: [SKU],
   tienda: [TIENDA],
@@ -136,13 +139,14 @@ const LOTE_COMPLETO = {
 };
 
 describe("aplicar_importacion — el camino feliz", () => {
-  it("crea las siete entidades en el tenant de la fila `importacion`", async () => {
+  it("crea las ocho entidades en el tenant de la fila `importacion`", async () => {
     await comoUsuario(db, USUARIOS.admin, async (c) => {
       const id = await nuevaImportacion(c);
       const resumen = await aplicar(c, id, LOTE_COMPLETO);
 
       expect(resumen).toMatchObject({
         marca: 1,
+        categoria: 1,
         cadena: 1,
         sku: 1,
         tienda: 1,
@@ -237,6 +241,93 @@ describe("aplicar_importacion — reimportar no duplica", () => {
          where s.codigo_externo = 'IMP-SKU'`,
       );
       expect(Number(r.rows[0]?.n)).toBe(1);
+    });
+  });
+});
+
+describe("aplicar_importacion — la categoría del SKU", () => {
+  /** La categoría que quedó en el SKU importado, o null. */
+  async function categoriaDelSku(c: Client): Promise<string | null> {
+    const r = await c.query<{ codigo_externo: string | null }>(
+      `select cat.codigo_externo
+       from public.sku s
+       left join public.categoria cat on cat.id = s.categoria_id
+       where s.codigo_externo = 'IMP-SKU'`,
+    );
+    return r.rows[0]?.codigo_externo ?? null;
+  }
+
+  it("la resuelve cuando el archivo la trae", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await aplicar(c, await nuevaImportacion(c), LOTE_COMPLETO);
+
+      expect(await categoriaDelSku(c)).toBe("IMP-CAT");
+    });
+  });
+
+  it("un SKU SIN categoría entra igual: el despliegue es aditivo", async () => {
+    // Con un `join` en vez de un `left join`, este SKU desaparecería en silencio
+    // y el contador lo cazaría como "una marca sin resolver" — un error que
+    // apunta al sitio equivocado.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const resumen = await aplicar(c, await nuevaImportacion(c), {
+        ...LOTE_COMPLETO,
+        categoria: [],
+        sku: [{ ...SKU, categoria_codigo_externo: null }],
+      });
+
+      expect(resumen).toMatchObject({ sku: 1 });
+      expect(await categoriaDelSku(c)).toBeNull();
+    });
+  });
+
+  it("una celda VACÍA no borra la categoría que ya tenía", async () => {
+    // Por el importador se puede cambiar un campo opcional, no vaciarlo. Sin el
+    // `coalesce` contra la fila existente, reimportar el Excel sin esa columna
+    // desclasificaría el catálogo entero.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await aplicar(c, await nuevaImportacion(c), LOTE_COMPLETO);
+      await aplicar(c, await nuevaImportacion(c), {
+        ...LOTE_COMPLETO,
+        sku: [{ ...SKU, categoria_codigo_externo: null }],
+      });
+
+      expect(await categoriaDelSku(c)).toBe("IMP-CAT");
+    });
+  });
+
+  it("una categoría que NO existe aborta, no deja el SKU sin categoría", async () => {
+    // El LEFT join junta dos cosas distintas: la celda vacía (que sí debe dejar
+    // el SKU sin categoría) y el código con una errata (que no). Sin esta
+    // guarda, el segundo se guardaría en silencio y el import diría "aplicado".
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const id = await nuevaImportacion(c);
+      const error = await alIntentar(c, () =>
+        aplicar(c, id, {
+          ...LOTE_COMPLETO,
+          sku: [{ ...SKU, categoria_codigo_externo: "NO-EXISTE" }],
+        }),
+      );
+
+      expect(error).toMatch(/categoría que no existe/);
+      // Todo o nada: ni el SKU ni la marca se quedan escritos.
+      expect(await contar(c, "sku", "IMP-SKU")).toBe(0);
+    });
+  });
+
+  it("reimportar la misma categoría la actualiza, no la duplica", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await aplicar(c, await nuevaImportacion(c), LOTE_COMPLETO);
+      await aplicar(c, await nuevaImportacion(c), {
+        ...LOTE_COMPLETO,
+        categoria: [{ ...CATEGORIA, nombre: "Categoría renombrada" }],
+      });
+
+      expect(await contar(c, "categoria", "IMP-CAT")).toBe(1);
+      const r = await c.query<{ nombre: string }>(
+        `select nombre from public.categoria where codigo_externo = 'IMP-CAT'`,
+      );
+      expect(r.rows[0]?.nombre).toBe("Categoría renombrada");
     });
   });
 });

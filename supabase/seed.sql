@@ -113,9 +113,17 @@ insert into public.tienda (id, tenant_id, cadena_id, nombre, codigo_externo, ubi
   ('a0000002-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'a0000001-0000-0000-0000-000000000001', 'Plaza Vea La Molina', 'PV-LM', 'SRID=4326;POINT(-76.94 -12.08)'::extensions.geography),
   ('b0000002-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0000-000000000002', 'b0000001-0000-0000-0000-000000000002', 'Tottus Angamos', 'TOT-AN', 'SRID=4326;POINT(-77.02 -12.11)'::extensions.geography);
 
-insert into public.sku (id, tenant_id, marca_id, codigo, nombre) values
-  ('a0000003-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-000000000001', 'MRC-001', 'Néctar Maracumango 1L'),
-  ('b0000003-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0000-000000000002', 'dddddddd-0000-0000-0000-000000000001', 'RIV-001', 'Bebida Rival 1L');
+-- La categoría es del CLIENTE, no de la marca: agrupa SKUs de varias marcas suyas.
+insert into public.categoria (id, tenant_id, nombre, codigo_externo) values
+  ('a0000004-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'Bebidas', 'BEB'),
+  ('b0000004-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0000-000000000002', 'Bebidas rival', 'BEB-R');
+
+-- El SKU de Maracumango va categorizado y el del rival NO, a propósito: el
+-- segundo es el que mantiene vivo el caso "SKU sin categoría" que el despliegue
+-- aditivo tiene que soportar.
+insert into public.sku (id, tenant_id, marca_id, categoria_id, codigo, nombre) values
+  ('a0000003-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-000000000001', 'a0000004-0000-0000-0000-000000000001', 'MRC-001', 'Néctar Maracumango 1L'),
+  ('b0000003-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0000-000000000002', 'dddddddd-0000-0000-0000-000000000001', null, 'RIV-001', 'Bebida Rival 1L');
 
 -- tienda_sku tiene PK compuesta (tienda_id, sku_id): no lleva `id`.
 insert into public.tienda_sku (tenant_id, tienda_id, sku_id) values

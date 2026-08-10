@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { VistaCategorias } from "@/components/catalogo/vista-categorias";
 import { VistaCodificados } from "@/components/catalogo/vista-codificados";
 import { VistaSkus } from "@/components/catalogo/vista-skus";
 import { VistaTiendas } from "@/components/catalogo/vista-tiendas";
@@ -7,13 +8,14 @@ import { Pestanas } from "@/components/panel/pestanas";
 
 export const metadata: Metadata = { title: "Catálogo — Market Track" };
 
-// El maestro comercial en cuatro caras: tiendas y cadenas, SKUs, y la matriz de
-// codificados. El catálogo entra sobre todo por la importación del Excel del
+// El maestro comercial en cuatro caras: tiendas y cadenas, SKUs, categorías y la
+// matriz de codificados. El catálogo entra sobre todo por la importación del Excel del
 // cliente (MAR-29/45); estas pantallas son para correcciones y casos puntuales.
 
 const VISTAS = [
   { key: "tiendas", label: "Tiendas y cadenas" },
   { key: "skus", label: "SKUs" },
+  { key: "categorias", label: "Categorías" },
   { key: "codificados", label: "Codificados" },
 ] as const;
 
@@ -53,6 +55,7 @@ export default async function CatalogoPage({
 
       {vista === "tiendas" && <VistaTiendas busqueda={busqueda} />}
       {vista === "skus" && <VistaSkus busqueda={busqueda} />}
+      {vista === "categorias" && <VistaCategorias busqueda={busqueda} />}
       {vista === "codificados" && <VistaCodificados tiendaId={tienda} />}
     </div>
   );

@@ -14,6 +14,7 @@ import { type ClavesExistentes, validarMaestro } from "./validacion";
 
 const SIN_NADA: ClavesExistentes = {
   marca: new Set(),
+  categoria: new Set<string>(),
   cadena: new Set(),
   sku: new Set(),
   tienda: new Set(),

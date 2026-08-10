@@ -21,7 +21,7 @@ function trocear<T>(items: readonly T[], tamano: number): T[][] {
   return trozos;
 }
 
-type Tabla = "marca" | "cadena" | "sku" | "tienda";
+type Tabla = "marca" | "categoria" | "cadena" | "sku" | "tienda";
 
 async function codigosDe(
   supabase: SupabaseClient<Database>,
@@ -78,11 +78,12 @@ export async function clavesExistentes(
   tenantId: string,
   referenciados: Record<Tabla, readonly string[]>,
 ): Promise<ClavesExistentes> {
-  const [marca, cadena, sku, tienda] = await Promise.all([
+  const [marca, categoria, cadena, sku, tienda] = await Promise.all([
     codigosDe(supabase, "marca", tenantId, referenciados.marca),
+    codigosDe(supabase, "categoria", tenantId, referenciados.categoria),
     codigosDe(supabase, "cadena", tenantId, referenciados.cadena),
     codigosDe(supabase, "sku", tenantId, referenciados.sku),
     codigosDe(supabase, "tienda", tenantId, referenciados.tienda),
   ]);
-  return { marca, cadena, sku, tienda };
+  return { marca, categoria, cadena, sku, tienda };
 }
