@@ -1,8 +1,13 @@
 import { zipSync, strToU8 } from "fflate";
 
-// Un generador de .xlsx mínimos para los tests. Se escribe a mano en vez de
-// añadir una librería de ESCRITURA: solo hacen falta unas pocas celdas, y una
-// dependencia más para los tests es una dependencia más que auditar.
+// Un generador de .xlsx mínimos. Se escribe a mano en vez de añadir una librería
+// de ESCRITURA: solo hacen falta unas pocas celdas de texto y número, y una
+// dependencia más es una dependencia más que auditar.
+//
+// Lo usan la plantilla que descarga el cliente y los tests del importador. Nació
+// para los tests y vivía en `__fixtures__`; la plantilla es su segundo consumidor
+// y necesita exactamente lo mismo, así que subió a código de producción en vez de
+// duplicarse.
 //
 // Genera los DOS formatos que existen en la práctica, porque la diferencia entre
 // ellos es exactamente lo que rompe la versión 9.x de `read-excel-file`:
@@ -13,14 +18,14 @@ import { zipSync, strToU8 } from "fflate";
 //
 // El segundo es el caso que motivó fijar la librería en 5.8.8.
 
-export type HojaFixture = { nombre: string; filas: (string | number)[][] };
+export type HojaXlsx = { nombre: string; filas: (string | number)[][] };
 
 const RELS_RAIZ = `<?xml version="1.0" encoding="UTF-8"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
 </Relationships>`;
 
-function contentTypes(hojas: HojaFixture[], conSharedStrings: boolean): string {
+function contentTypes(hojas: HojaXlsx[], conSharedStrings: boolean): string {
   const sheets = hojas
     .map(
       (_, i) =>
@@ -38,7 +43,7 @@ function contentTypes(hojas: HojaFixture[], conSharedStrings: boolean): string {
 ${sheets}${shared}</Types>`;
 }
 
-function workbook(hojas: HojaFixture[]): string {
+function workbook(hojas: HojaXlsx[]): string {
   const sheets = hojas
     .map(
       (h, i) =>
@@ -50,7 +55,7 @@ function workbook(hojas: HojaFixture[]): string {
 <sheets>${sheets}</sheets></workbook>`;
 }
 
-function relsWorkbook(hojas: HojaFixture[], conSharedStrings: boolean): string {
+function relsWorkbook(hojas: HojaXlsx[], conSharedStrings: boolean): string {
   const rels = hojas
     .map(
       (_, i) =>
@@ -84,7 +89,7 @@ function ref(columna: number, fila: number): string {
 }
 
 function hojaXml(
-  hoja: HojaFixture,
+  hoja: HojaXlsx,
   indiceDe: ((texto: string) => number) | null,
 ): string {
   const filas = hoja.filas
@@ -117,7 +122,7 @@ function hojaXml(
  * mandan los ERP y el que hay que seguir soportando.
  */
 export function construirXlsx(
-  hojas: HojaFixture[],
+  hojas: HojaXlsx[],
   { conSharedStrings = true }: { conSharedStrings?: boolean } = {},
 ): Buffer {
   const textos: string[] = [];
