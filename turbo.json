@@ -6,9 +6,13 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"],
+      // Toda variable que el build incrusta va aquí: es lo que invalida la caché
+      // cuando cambia. Una que falte deja que turbo sirva un bundle construido
+      // con el valor viejo.
       "env": [
         "NEXT_PUBLIC_SUPABASE_URL",
         "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_TILES_URL",
         "EXPO_PUBLIC_SUPABASE_URL",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY",
         "SENTRY_DSN"

@@ -27,9 +27,24 @@ env:
 
 jobs:
   verificar:
-    name: Lint · tipos · tests · formato
+    name: Lint · tipos · tests · build · formato
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 15 y no 10: el build de Next añade minutos, y el primero de cada rama no
+    # tiene caché de turbo que reutilizar.
+    timeout-minutes: 15
+
+    env:
+      # RELLENO, no secretos. Son `NEXT_PUBLIC_*`: por definición viajan dentro
+      # del JavaScript que sirve el navegador, así que esconderlas aquí no
+      # protegería nada — lo que protege los datos es la RLS. Están porque
+      # `apps/web/src/lib/env.ts` valida el entorno al cargar y el build no
+      # arranca sin ellas; los valores reales viven en Vercel.
+      #
+      # El build no habla con Supabase: ninguna página se prerrenderiza pidiéndole
+      # datos. Si algún día una lo hiciera, este job se pondría rojo apuntando a
+      # un host que no existe — que es la señal correcta, no un fallo del CI.
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: relleno-de-ci-no-es-una-clave-real
 
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -53,6 +68,14 @@ jobs:
           restore-keys: turbo-${{ runner.os }}-
 
       - run: pnpm turbo run lint typecheck test --cache-dir=.turbo
+
+      - name: Build
+        # El type checker NO enlaza el bundle: un módulo que resuelve para `tsc`
+        # puede abortar el empaquetador igual. Pasó con una Server Action que
+        # arrastró `read-excel-file` —y su `require('@aws-sdk/client-s3')`
+        # perezoso— a la entrada de acción: lint, tipos y 65 archivos de test en
+        # verde, y `next build` muerto. Sin este paso eso solo se ve en el deploy.
+        run: pnpm turbo run build --cache-dir=.turbo
 
       - name: Formato
         # Separado y al final: que un espacio de más no tape un test roto.
