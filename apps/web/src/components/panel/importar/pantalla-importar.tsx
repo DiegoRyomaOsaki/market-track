@@ -1,8 +1,5 @@
-import { cookies } from "next/headers";
-
 import { Aviso } from "@/components/panel/tabla";
-import { COOKIE_TENANT, type Tenant } from "@/lib/panel/tenant";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { tenantActivo } from "@/lib/panel/tenant-activo";
 
 import { SubirMaestro } from "./subir-maestro";
 
@@ -12,26 +9,6 @@ import { SubirMaestro } from "./subir-maestro";
 // nada. Es el dato más importante de esta pantalla — una importación aplicada al
 // cliente equivocado le mete a Oster el catálogo de otra marca — así que se
 // enseña en grande, no se deduce del selector del header.
-
-async function tenantActivo(): Promise<Tenant | null> {
-  const supabase = await createServerSupabaseClient();
-  const { data, error } = await supabase
-    .from("tenant")
-    .select("id, nombre")
-    .eq("activo", true)
-    .order("nombre");
-
-  if (error) {
-    console.error("[importar] tenants", error.message.slice(0, 200));
-    return null;
-  }
-
-  const tenants: Tenant[] = data ?? [];
-  const elegido = (await cookies()).get(COOKIE_TENANT)?.value;
-  // La cookie la escribe el navegador: vale como preferencia, no como autoridad.
-  // Buscarla en la lista que la RLS devolvió es lo que la valida.
-  return tenants.find((t) => t.id === elegido) ?? tenants[0] ?? null;
-}
 
 export async function PantallaImportar() {
   const tenant = await tenantActivo();

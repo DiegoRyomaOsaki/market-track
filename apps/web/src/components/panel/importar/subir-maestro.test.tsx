@@ -143,7 +143,9 @@ describe("SubirMaestro", () => {
     previsualizar();
     fireEvent.click(await screen.findByRole("button", { name: /Aplicar/ }));
 
-    expect(await screen.findByText(/Maestro aplicado/)).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: /Maestro aplicado/ }),
+    ).toBeInTheDocument();
     expect(screen.getByText(/Filas escritas/)).toBeInTheDocument();
     // Una importación aplicada no se reaplica: la base lo impide y la pantalla
     // no debe invitar a intentarlo.
@@ -163,6 +165,85 @@ describe("SubirMaestro", () => {
     elegirArchivo("otro.xlsx");
 
     expect(screen.queryByRole("button", { name: /Aplicar/ })).toBeNull();
+  });
+
+  it("mientras revisa, el botón se bloquea y lo dice", async () => {
+    // Sin esto, dos clics seguidos crean dos importaciones del mismo archivo.
+    let responder = (_: unknown) => {};
+    validar.mockReturnValue(
+      new Promise((resolver) => {
+        responder = resolver;
+      }),
+    );
+    pintar();
+    elegirArchivo();
+    previsualizar();
+
+    expect(
+      await screen.findByRole("button", { name: /Revisando…/ }),
+    ).toBeDisabled();
+
+    // La transición se libera antes de terminar: una que se queda pendiente para
+    // siempre deja a React con `isPending` puesto y contamina los tests que
+    // vienen detrás.
+    responder({
+      ok: true,
+      importacionId: IMPORTACION,
+      errores: [],
+      erroresOmitidos: 0,
+      resumen: { marca: 1 },
+    });
+    await screen.findByRole("button", { name: /Aplicar/ });
+  });
+
+  it("un archivo sin ninguna hoja con datos lo dice, no enseña una lista vacía", async () => {
+    validar.mockResolvedValue({
+      ok: true,
+      importacionId: IMPORTACION,
+      errores: [],
+      erroresOmitidos: 0,
+      resumen: {},
+    });
+    pintar();
+    elegirArchivo();
+    previsualizar();
+
+    expect(
+      await screen.findByText(/ninguna hoja con datos/),
+    ).toBeInTheDocument();
+  });
+
+  it("el fallo al APLICAR se lee junto a su botón, no en el paso de subir", async () => {
+    aplicar.mockResolvedValue({
+      ok: false,
+      error: "El archivo no es el que se revisó",
+    });
+    pintar();
+    elegirArchivo();
+    previsualizar();
+    const boton = await screen.findByRole("button", { name: /Aplicar/ });
+    fireEvent.click(boton);
+
+    const aviso = await screen.findByText(/no es el que se revisó/);
+    // El paso 3 es el que contiene tanto el botón como su error.
+    expect(aviso.closest("section")).toContainElement(boton);
+  });
+
+  it("anuncia el resultado de la revisión a quien no ve la pantalla", async () => {
+    validar.mockResolvedValue({
+      ok: true,
+      importacionId: IMPORTACION,
+      errores: [ERROR_DE_FILA],
+      erroresOmitidos: 0,
+      resumen: { tienda: 0 },
+    });
+    pintar();
+    elegirArchivo();
+    previsualizar();
+
+    expect(
+      await screen.findByText(/Revisión lista: 1 fila con problemas/),
+    ).toBeInTheDocument();
   });
 
   it("un error de la acción se enseña y no deja revisión a medias", async () => {

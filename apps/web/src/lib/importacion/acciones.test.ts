@@ -245,6 +245,19 @@ describe("validarImportacion", () => {
     if (r.ok) return;
     expect(r.error).toMatch(/falta el archivo/i);
   });
+
+  it("un archivo de 0 bytes se trata como ausente, no como un Excel ilegible", async () => {
+    // Es lo que deja un fallo de subida a medias: el campo llega, el contenido
+    // no. Decir "no pudimos leer el archivo" mandaría a revisar un Excel que
+    // está bien.
+    const r = await validarImportacion(
+      fd({ tenantId: TENANT }, Buffer.alloc(0)),
+    );
+
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/falta el archivo/i);
+  });
 });
 
 describe("aplicarImportacion", () => {

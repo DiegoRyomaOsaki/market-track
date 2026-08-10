@@ -25,6 +25,9 @@ type Revision = {
   resumen: Record<string, number>;
 };
 
+/** Qué paso falló: cada uno enseña su error junto al botón que lo disparó. */
+type ErrorDePaso = { paso: "subir" | "aplicar"; texto: string };
+
 export function SubirMaestro({
   tenantId,
   tenantNombre,
@@ -36,8 +39,12 @@ export function SubirMaestro({
   const [archivo, setArchivo] = useState<File | null>(null);
   const [revision, setRevision] = useState<Revision | null>(null);
   const [aplicado, setAplicado] = useState<Record<string, number> | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ErrorDePaso | null>(null);
   const entradaRef = useRef<HTMLInputElement>(null);
+
+  /** El error de un paso, o cadena vacía: la región vive siempre y solo cambia. */
+  const errorDe = (paso: ErrorDePaso["paso"]) =>
+    error?.paso === paso ? error.texto : "";
 
   function elegir(e: React.ChangeEvent<HTMLInputElement>) {
     // Un archivo nuevo invalida la revisión anterior: enseñar los errores del
@@ -51,7 +58,7 @@ export function SubirMaestro({
 
   function previsualizar() {
     if (archivo === null) {
-      setError("Elige el Excel del maestro");
+      setError({ paso: "subir", texto: "Elige el Excel del maestro" });
       entradaRef.current?.focus();
       return;
     }
@@ -71,7 +78,7 @@ export function SubirMaestro({
           resumen: r.resumen,
         });
       } else {
-        setError(r.error);
+        setError({ paso: "subir", texto: r.error });
       }
     });
   }
@@ -94,7 +101,7 @@ export function SubirMaestro({
         setArchivo(null);
         if (entradaRef.current !== null) entradaRef.current.value = "";
       } else {
-        setError(r.error);
+        setError({ paso: "aplicar", texto: r.error });
       }
     });
   }
@@ -103,6 +110,13 @@ export function SubirMaestro({
 
   return (
     <div className="flex flex-col gap-6">
+      {/* El resultado de cada operación, para quien no ve la pantalla. Una sola
+          región, montada desde el primer render: una que aparece al terminar se
+          anuncia a la vez que se inserta y algunos lectores se la pierden. */}
+      <p role="status" className="sr-only">
+        {anuncioDe(revision, aplicado)}
+      </p>
+
       <section className="flex flex-col gap-3 rounded-xl border border-border bg-background p-4">
         <div>
           <h2 className="text-[13px] font-bold">2 · Sube el archivo lleno</h2>
@@ -138,7 +152,7 @@ export function SubirMaestro({
         {/* La región se monta siempre y solo cambia su texto: un `role="alert"`
             que aparece al fallar se lo pierden algunos lectores de pantalla. */}
         <p role="alert" className="text-[12px] text-alerta-texto empty:hidden">
-          {error ?? ""}
+          {errorDe("subir")}
         </p>
       </section>
 
@@ -182,6 +196,15 @@ export function SubirMaestro({
           >
             {pendiente ? "Aplicando…" : `Aplicar a ${tenantNombre}`}
           </button>
+
+          {/* El fallo de aplicar se lee junto al botón que lo disparó, no arriba
+              del todo: quien ha bajado hasta aquí no ve el paso 2. */}
+          <p
+            role="alert"
+            className="text-[12px] text-alerta-texto empty:hidden"
+          >
+            {errorDe("aplicar")}
+          </p>
         </section>
       )}
 
@@ -193,6 +216,23 @@ export function SubirMaestro({
       )}
     </div>
   );
+}
+
+/**
+ * Lo que se anuncia al terminar cada operación.
+ *
+ * Se DERIVA del estado en vez de guardarse: un texto duplicado en su propio
+ * `useState` se queda desincronizado la primera vez que alguien añada una rama.
+ */
+function anuncioDe(
+  revision: Revision | null,
+  aplicado: Record<string, number> | null,
+): string {
+  if (aplicado !== null) return "Maestro aplicado.";
+  if (revision === null) return "";
+  const n = revision.errores.length;
+  if (n === 0) return "Revisión lista, sin errores. Ya se puede aplicar.";
+  return `Revisión lista: ${n} fila${n === 1 ? "" : "s"} con problemas. No se puede aplicar.`;
 }
 
 /** El recuento por entidad, igual en la previsualización y en el resultado. */

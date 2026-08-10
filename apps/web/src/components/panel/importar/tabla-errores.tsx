@@ -20,11 +20,21 @@ export function TablaErrores({
       <Tarjeta>
         <thead>
           <tr className="border-b border-border">
-            <th className={TH}>Hoja</th>
-            <th className={TH}>Fila</th>
-            <th className={TH}>Columna</th>
-            <th className={TH}>Valor</th>
-            <th className={TH}>Qué pasa</th>
+            <th scope="col" className={TH}>
+              Hoja
+            </th>
+            <th scope="col" className={TH}>
+              Fila
+            </th>
+            <th scope="col" className={TH}>
+              Columna
+            </th>
+            <th scope="col" className={TH}>
+              Valor
+            </th>
+            <th scope="col" className={TH}>
+              Qué pasa
+            </th>
           </tr>
         </thead>
         <tbody>

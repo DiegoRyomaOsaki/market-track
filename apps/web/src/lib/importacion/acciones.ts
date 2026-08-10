@@ -79,9 +79,10 @@ function hashDe(bytes: Buffer): string {
 
 /** Lee, valida y guarda el informe. No escribe NADA en el maestro. */
 async function revisar(archivo: Buffer, tenantId: string) {
-  const parseo = await parsearMaestro(archivo);
-  if (!parseo.ok) return { ok: false as const, error: parseo.error };
-
+  // El rol PRIMERO, antes de descomprimir nada. Descomprimir y parsear un zip
+  // arbitrario es trabajo real: hacerlo antes de saber quién llama lo regala a
+  // cualquiera con sesión. Que el middleware cubra hoy `/admin` no lo autoriza
+  // — una server action es un endpoint por sí misma.
   const sesion = await sesionDeStaff();
   if (sesion === null || sesion.perfil.rol !== "admin") {
     return {
@@ -89,6 +90,9 @@ async function revisar(archivo: Buffer, tenantId: string) {
       error: "Solo un administrador importa el maestro",
     };
   }
+
+  const parseo = await parsearMaestro(archivo);
+  if (!parseo.ok) return { ok: false as const, error: parseo.error };
 
   const existentes = await clavesExistentes(
     sesion.supabase,
