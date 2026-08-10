@@ -29,9 +29,10 @@ jobs:
   verificar:
     name: Lint · tipos · tests · build · formato
     runs-on: ubuntu-latest
-    # 15 y no 10: el build de Next añade minutos, y el primero de cada rama no
-    # tiene caché de turbo que reutilizar.
-    timeout-minutes: 15
+    # Se queda en 10. Medido con el build ya dentro y sin caché de turbo que
+    # reutilizar: el job entero tarda 4 min, así que 10 da margen de sobra y un
+    # timeout ajustado sigue sirviendo para lo que existe — cortar un cuelgue.
+    timeout-minutes: 10
 
     env:
       # RELLENO, no secretos. Son `NEXT_PUBLIC_*`: por definición viajan dentro
