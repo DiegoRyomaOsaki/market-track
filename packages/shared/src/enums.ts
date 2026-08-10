@@ -50,6 +50,9 @@ export const estadoAlertaSchema = z.enum(Constants.public.Enums.estado_alerta);
 export const ESTADOS_ALERTA = Constants.public.Enums.estado_alerta;
 export const canalAlertaSchema = z.enum(Constants.public.Enums.canal_alerta);
 export const canalOtpSchema = z.enum(Constants.public.Enums.canal_otp);
+export const CANALES_OTP = Constants.public.Enums.canal_otp;
+export const estadoPaseSchema = z.enum(Constants.public.Enums.estado_pase);
+export const ESTADOS_PASE = Constants.public.Enums.estado_pase;
 export const tipoTiendaSchema = z.enum(Constants.public.Enums.tipo_tienda);
 export const estadoImportacionSchema = z.enum(
   Constants.public.Enums.estado_importacion,
@@ -72,6 +75,7 @@ export type SeveridadAlerta = z.infer<typeof severidadAlertaSchema>;
 export type EstadoAlerta = z.infer<typeof estadoAlertaSchema>;
 export type CanalAlerta = z.infer<typeof canalAlertaSchema>;
 export type CanalOtp = z.infer<typeof canalOtpSchema>;
+export type EstadoPase = z.infer<typeof estadoPaseSchema>;
 export type TipoTienda = z.infer<typeof tipoTiendaSchema>;
 export type EstadoImportacion = z.infer<typeof estadoImportacionSchema>;
 export type ModuloPortal = z.infer<typeof moduloPortalSchema>;

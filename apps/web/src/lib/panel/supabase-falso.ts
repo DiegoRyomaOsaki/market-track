@@ -24,6 +24,8 @@ const MULTIPLES_FILAS = {
 
 function consultaSobre(filas: Fila[]) {
   const filtros: [string, unknown][] = [];
+  const encajan = () =>
+    filas.filter((f) => filtros.every(([col, val]) => f[col] === val));
 
   const encadenable = {
     select: () => encadenable,
@@ -31,15 +33,19 @@ function consultaSobre(filas: Fila[]) {
       filtros.push([columna, valor]);
       return encadenable;
     },
+    order: () => encadenable,
     maybeSingle: () => {
-      const encajan = filas.filter((f) =>
-        filtros.every(([col, val]) => f[col] === val),
-      );
-      if (encajan.length > 1) {
+      const encontradas = encajan();
+      if (encontradas.length > 1) {
         return Promise.resolve({ data: null, error: MULTIPLES_FILAS });
       }
-      return Promise.resolve({ data: encajan[0] ?? null, error: null });
+      return Promise.resolve({ data: encontradas[0] ?? null, error: null });
     },
+    // Una lectura de LISTA se resuelve con `await` directo, sin `maybeSingle`.
+    // También aplica los filtros: un doble que devolviera siempre las mismas
+    // filas pasaría igual con la consulta acotada o sin acotar.
+    then: (resolver: (r: { data: Fila[]; error: null }) => unknown) =>
+      Promise.resolve({ data: encajan(), error: null }).then(resolver),
   };
   return encadenable;
 }

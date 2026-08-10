@@ -137,6 +137,11 @@ async function TablaPersonas({
           <th scope="col" className={TH}>
             ESTADO
           </th>
+          {esMerc && (
+            <th scope="col" className={TH}>
+              <span className="sr-only">Acceso</span>
+            </th>
+          )}
         </tr>
       </thead>
       <tbody>
@@ -164,6 +169,18 @@ async function TablaPersonas({
             <td className={TD}>
               <Estado activo={f.activo} />
             </td>
+            {/* La entrada al pase de acceso desde la persona, que es donde surge
+                la necesidad: el mercaderista llama porque no le llega el código. */}
+            {esMerc && (
+              <td className={TD}>
+                <Link
+                  href="/admin/acceso"
+                  className="text-[12px] font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
+                  Acceso
+                </Link>
+              </td>
+            )}
           </tr>
         ))}
       </tbody>
