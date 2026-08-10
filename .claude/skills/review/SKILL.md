@@ -43,6 +43,8 @@ Run a comprehensive review of the current changes by spawning specialized review
 
 4a. **Reviewers must not mutate shared state.** Every spawn prompt forbids schema changes to the local database (no loose DDL — the migrations are the only schema channel, and `test:db` runs against that same database) and forbids discarding uncommitted work (`git checkout`/`stash` over files the reviewer didn't write). To verify a finding, mutate *source* and restore it, or wrap the experiment in `BEGIN; … ROLLBACK;`. After the reviews, confirm the tree and the database are as you left them before trusting any report.
 
+   Mutating a migration takes `supabase db reset` **twice**: once to apply the mutation and once to restore it. Restoring only the file leaves the mutated function live in the database, and everything measured afterwards is fiction. And don't edit code through shell escapes (`python -c "…\b…"`): a `` becomes a literal backspace that leaves the test failing for no visible reason.
+
 5. After all agents complete, synthesize their findings into a unified report.
    Include only the sections for reviewers that actually ran:
 

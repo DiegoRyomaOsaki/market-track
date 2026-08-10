@@ -53,6 +53,7 @@ Read `CLAUDE.md` for full context. Key facts for this project:
 - [ ] Mocks of framework control-flow functions throw an error carrying the framework's real internal marker/digest, not an invented sentinel string — a fake string passes the test while production breaks
 - [ ] Header/cookie/attribute reads in assertions don't use `?? ""`/`?? null` fallbacks that mask a missing value — assert not-null explicitly before constructing dependent values
 - [ ] Fixture values pin each text-matching query to exactly one element — when two cells legitimately render identical text, choose values that force them apart
+- [ ] Assertions on error messages are anchored when the names nest (`tienda_sku` contains `sku`) — a substring match doesn't tell which check actually fired
 - [ ] Throttled/coalesced behavior (debounce, rAF, scroll-driven updates) is pinned by spying on the underlying timer/primitive, not only the final DOM state
 - [ ] Components that register global (window/document) listeners or observers in an effect have a cleanup-on-unmount test that spies on the removal/disconnect call
 
@@ -72,6 +73,7 @@ Read `CLAUDE.md` for full context. Key facts for this project:
 ### Authorization & isolation
 - [ ] Cross-tenant/cross-user isolation tested — one tenant's data is unreachable from another's context
 - [ ] Negative isolation tests use a REAL id belonging to the other tenant, not an invented one — a nonexistent id proves "not found", not "denied", and passes with RLS switched off
+- [ ] `test:db` tests exercise at least one INSERT/UPDATE **through the policy**, without `set local role postgres` — a harness that seeds around RLS leaves the `with check` uncovered, and the suite stays green when someone breaks it
 - [ ] Scope/tier enforcement tested — higher-tier or out-of-scope content is absent, not merely hidden
 - [ ] Permission revocation blocks access immediately — a revoked grant denies on the next request
 

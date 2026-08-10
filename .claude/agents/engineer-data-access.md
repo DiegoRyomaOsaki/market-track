@@ -38,6 +38,8 @@ Read `CLAUDE.md` for the full data architecture. Key facts for this project:
 - [ ] Module-level client singletons (no per-request client instantiation)
 
 ### Validation
+- [ ] A read that decides whether a write is valid is scoped exactly like the write — if validation queries without the filter the write's RLS applies, the preview approves what the apply will reject
+- [ ] In an `on conflict do update`, no optional column is written without `coalesce` against the existing row — a blank cell must not erase data that was already there
 - [ ] All external data validated with Zod at the boundary before use (Edge Function request bodies, webhook payloads, sync-uploaded rows)
 - [ ] Transform raw column names to domain names in the validation layer
 - [ ] Field-name transformation happens during parsing, not as a separate post-parse step ("parse, don't validate")
