@@ -101,8 +101,9 @@ End-to-end workflow: fetch a Linear ticket, implement it scoped to the card, ope
     - If tests fail, read the failure output, fix the issues, and re-run.
     - Iterate until all tests pass (max 3 fix-and-retry cycles; if still failing after 3, ask the user for guidance).
 
-15. **Run the full linters and type checks** using the project's lint/format/typecheck commands.
+15. **Run the full linters, type checks and the production build** using the project's lint/format/typecheck/build commands.
     - Stage and commit any auto-fixes.
+    - The build is not redundant with the type check: a type checker does not link the bundle, so a module that resolves for `tsc` can still abort the bundler. Skipping it defers that whole class of failure to the deploy.
 
 ## Phase 5 — Draft PR
 

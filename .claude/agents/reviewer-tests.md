@@ -47,6 +47,7 @@ Read `CLAUDE.md` for full context. Key facts for this project:
 - [ ] External services mocked at the network level where possible
 - [ ] Tests follow project patterns (descriptive names, minimal setup)
 - [ ] No flaky patterns: sleep, random data, time-dependent assertions
+- [ ] A test that holds a promise pending resolves it before finishing — a transition that never closes leaves the framework's global pending state on and taints the tests that follow
 - [ ] Assertions are meaningful (not just "it renders without crashing")
 - [ ] Any test suspected of passing without the code it claims to exercise is verified by mutation: break that line, confirm the test goes red, restore it
 - [ ] Stubs of callback-registering browser APIs capture the callback so tests can fire it directly

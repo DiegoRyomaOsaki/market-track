@@ -168,6 +168,11 @@ Protected reads and writes must enforce authorization server-side.
 **Scope data access.** Queries must respect the current user, tenant, account,
 or request context. Unscoped lookups are a common authorization bug.
 
+**Filtering a control's options does not clear what was already selected.**
+When a parent selector narrows a dependent field, reset the dependent value and
+selection: what stops being visible stays in state and is submitted anyway — and
+if the filter was by tenant, it is submitted across tenants.
+
 **Do not weaken security to fix a config suspicion.** Confirm the
 configuration state before changing auth or validation code.
 
@@ -312,6 +317,10 @@ focus management, and accessible naming.
 shown by a colored dot, arrow glyph, or badge needs a text or `sr-only`
 equivalent (WCAG 1.4.1) — an `aria-hidden` trend arrow leaves a screen reader
 the number but not whether it rose or fell.
+
+**A live region lives in the DOM from the first render.** Mounting it when the
+operation finishes announces it at the same moment it is inserted and some
+screen readers miss it — swap its text, never the element.
 
 ## Observability
 

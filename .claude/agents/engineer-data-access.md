@@ -52,6 +52,7 @@ Read `CLAUDE.md` for the full data architecture. Key facts for this project:
 - [ ] KPI calculations follow the documented formulas (cumplimiento de rutero, OSA, Share of Shelf)
 - [ ] Every query scoped by RLS — no `service_role` query that bypasses tenant isolation without an explicit, justified role check
 - [ ] `tenant_id` present on every inserted business row; geocerca validation re-checked server-side on sync (never trust client GPS alone)
+- [ ] Elements of an array column that references another table are validated against the row's `tenant_id` on write — an `uuid[]` carries no foreign key, and the composite FK on the scalar columns does not reach inside it
 - [ ] Active/revoked flag re-checked on every access; permission state is not cached in a way that delays a revocation taking effect
 
 ### Offline Sync (PowerSync)
