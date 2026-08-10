@@ -321,6 +321,18 @@ Aún no hay `.env`. Al scaffoldear, crear `.env.example` por app. Previstas:
   `packages/db` no necesita config: los defaults de Vitest ya bastan. El primer
   workspace que necesite una (apps/web, con jsdom) debe tocar las dos cosas en el
   mismo commit.
+- **Una Server Action importada desde un componente cliente arrastra su grafo
+  entero al empaquetado.** Next genera una entrada de acción con todas sus
+  dependencias transitivas, y un `require` perezoso que en Node no se evalúa
+  nunca —el `@aws-sdk/client-s3` de `unzipper`, vía `read-excel-file`— hace
+  fallar a webpack igualmente. Se marca la librería en `serverExternalPackages`,
+  no se instala el paquete fantasma. `tsc` y los tests pasan en verde: esto solo
+  lo ve `next build`, y **el CI no lo corre**.
+- **Una columna de tipo array NO tiene clave foránea.** Las FK compuestas
+  `(x_id, tenant_id)` protegen las columnas escalares; `exhibicion_negociada.
+  sku_ids` (`uuid[]`) y `promocion.clusters` (`text[]`) no las protege nadie.
+  Lo que se guarde en un array lo valida la acción contra el `tenant_id`, o no
+  lo valida nadie.
 - **Los tipos de BD se regeneran con `pnpm db:types`, nunca con una redirección.**
   Si Docker está apagado, `supabase gen types` **escribe su error en stdout**: un
   `> database.types.ts` machacaría la fuente de verdad con un blob JSON. El script

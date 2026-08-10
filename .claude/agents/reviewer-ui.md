@@ -36,6 +36,7 @@ constants) to understand the available token palette.
 - [ ] Composition pattern followed (children/slots over many props)
 - [ ] No inline styles overriding token classes
 - [ ] Components extend library patterns, not fight them
+- [ ] A control whose options depend on another is controlled (`value` + `onChange`), not `defaultValue` — when the chosen option disappears from the new list the browser silently substitutes the first one, and that is what gets submitted
 
 ### Accessibility
 - [ ] Images have alt attributes

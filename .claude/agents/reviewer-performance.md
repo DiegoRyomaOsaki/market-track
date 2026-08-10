@@ -24,6 +24,7 @@ Read `CLAUDE.md` for full context. Key facts for this project:
 
 ### Data Fetching Efficiency
 - [ ] Pagination handled at the access layer (auto-fetch all pages, consumer never loops)
+- [ ] Every list query carries an explicit bound (`limit`/`range`), and a listing that truncates says so on screen — a silent cut reads as "this is everything there is"
 - [ ] No redundant fetches for the same data (deduplication via caching)
 - [ ] Related data fetched in parallel where possible (not sequentially)
 - [ ] Only required fields fetched (no over-fetching)
