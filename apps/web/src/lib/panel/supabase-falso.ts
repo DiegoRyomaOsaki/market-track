@@ -26,16 +26,24 @@ const MULTIPLES_FILAS = {
 };
 
 function consultaSobre(filas: Fila[]) {
-  const filtros: [string, unknown][] = [];
-  const encajan = () =>
-    filas.filter((f) => filtros.every(([col, val]) => f[col] === val));
+  // Predicados y no pares columna/valor: `.in(...)` no es una igualdad, y
+  // guardarlo como par obligaría a quien filtra a adivinar qué operador era.
+  const filtros: ((f: Fila) => boolean)[] = [];
+  const encajan = () => filas.filter((f) => filtros.every((pasa) => pasa(f)));
 
   const encadenable = {
     select: () => encadenable,
     eq: (columna: string, valor: unknown) => {
-      filtros.push([columna, valor]);
+      filtros.push((f) => f[columna] === valor);
       return encadenable;
     },
+    // Se aplica de verdad: un doble que lo ignorase devolvería las filas del
+    // tenant ajeno igual, y la comprobación que lo usa pasaría siempre.
+    in: (columna: string, valores: unknown[]) => {
+      filtros.push((f) => valores.includes(f[columna]));
+      return encadenable;
+    },
+    not: () => encadenable,
     order: () => encadenable,
     maybeSingle: () => {
       const encontradas = encajan();
@@ -90,6 +98,11 @@ export type OpcionesFalso = {
   usuarioId?: string | null;
   /** Lo que hay en `profile`. Se consulta de verdad, con sus filtros. */
   perfiles?: Fila[];
+  /**
+   * Otras tablas que se LEEN, por nombre. Sin entrada aquí, una tabla se trata
+   * como destino de escritura — que es el caso de casi todas las acciones.
+   */
+  lecturas?: Record<string, Fila[]>;
   /** Lo que devuelve cualquier escritura sobre otra tabla. */
   escritura?: RespuestaLista;
   /** Lo que devuelve cada `rpc(...)`. */
@@ -103,6 +116,7 @@ export type OpcionesFalso = {
 export function supabaseFalso({
   usuarioId = "u1",
   perfiles = [],
+  lecturas = {},
   escritura = { data: [{ id: "x" }], error: null },
   rpc = { error: null },
 }: OpcionesFalso = {}) {
@@ -123,9 +137,10 @@ export function supabaseFalso({
     },
     from: (tabla: string) => {
       tablasPedidas.push(tabla);
-      return tabla === "profile"
-        ? consultaSobre(perfiles)
-        : escrituraSobre(escritura, filtrosDeEscritura, filasEscritas);
+      if (tabla === "profile") return consultaSobre(perfiles);
+      const leida = lecturas[tabla];
+      if (leida !== undefined) return consultaSobre(leida);
+      return escrituraSobre(escritura, filtrosDeEscritura, filasEscritas);
     },
     rpc: (nombre: string, argumentos: unknown) => {
       rpcsPedidas.push({ nombre, argumentos });

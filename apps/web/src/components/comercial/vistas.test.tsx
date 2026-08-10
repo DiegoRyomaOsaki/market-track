@@ -1,6 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { TOPE_LISTADO } from "@/lib/comercial/listado";
+
 import { VistaExhibiciones } from "./vista-exhibiciones";
 import { VistaPrecios } from "./vista-precios";
 import { VistaPromociones } from "./vista-promociones";
@@ -21,7 +23,9 @@ vi.mock("@/lib/supabase/server", () => ({
   createServerSupabaseClient: () =>
     Promise.resolve({
       from: () => ({
-        select: () => ({ order: () => Promise.resolve(consulta) }),
+        select: () => ({
+          order: () => ({ limit: () => Promise.resolve(consulta) }),
+        }),
       }),
     }),
 }));
@@ -69,6 +73,28 @@ describe("VistaPrecios", () => {
 
     expect(screen.getByText(/No se pudieron cargar/i)).toBeInTheDocument();
   });
+
+  it("cuando recorta el listado lo DICE", async () => {
+    // Un corte silencioso se lee como "esto es todo lo que hay", y la cuenta que
+    // alguien saque de la pantalla no cuadrará con la de la base.
+    consulta.data = Array.from({ length: TOPE_LISTADO + 1 }, (_, i) => ({
+      ...PRECIO,
+      id: `p${i}`,
+    }));
+    render(await VistaPrecios());
+
+    expect(
+      screen.getByText(/todavía no tiene paginación/i),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("row")).toHaveLength(TOPE_LISTADO + 1); // + cabecera
+  });
+
+  it("por debajo del tope no avisa de nada", async () => {
+    consulta.data = [PRECIO];
+    render(await VistaPrecios());
+
+    expect(screen.queryByText(/paginación/i)).toBeNull();
+  });
 });
 
 describe("VistaPromociones", () => {
@@ -102,6 +128,14 @@ describe("VistaPromociones", () => {
     render(await VistaPromociones());
 
     expect(screen.getByText("Sin comunicar")).toBeInTheDocument();
+  });
+
+  it("un fallo de la consulta se dice", async () => {
+    consulta.data = null;
+    consulta.error = { message: "permission denied" };
+    render(await VistaPromociones());
+
+    expect(screen.getByText(/No se pudieron cargar/i)).toBeInTheDocument();
   });
 });
 
@@ -138,5 +172,13 @@ describe("VistaExhibiciones", () => {
 
     expect(screen.getByText("Plaza Vea Angamos")).toBeInTheDocument();
     expect(screen.getByText("Maracumango")).toBeInTheDocument();
+  });
+
+  it("un fallo de la consulta se dice", async () => {
+    consulta.data = null;
+    consulta.error = { message: "permission denied" };
+    render(await VistaExhibiciones());
+
+    expect(screen.getByText(/No se pudieron cargar/i)).toBeInTheDocument();
   });
 });

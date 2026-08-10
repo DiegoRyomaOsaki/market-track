@@ -3,7 +3,10 @@ import Link from "next/link";
 import { botonPrimario, enlaceTabla } from "@/components/panel/estilos";
 import { Aviso, Pastilla, Tarjeta, TD, TH } from "@/components/panel/tabla";
 import { soles } from "@/lib/formato";
+import { acotar, TOPE_CONSULTA } from "@/lib/comercial/listado";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+
+import { AvisoTope } from "./aviso-tope";
 
 // Las promociones con su vigencia.
 //
@@ -17,7 +20,10 @@ export async function VistaPromociones() {
     .select(
       "id, precio_promo, fecha_inicio, fecha_fin, clusters, comunicada, sku:promocion_sku_fk(codigo, nombre)",
     )
-    .order("fecha_inicio", { ascending: false });
+    .order("fecha_inicio", { ascending: false })
+    .limit(TOPE_CONSULTA);
+
+  const { filas, hayMas } = acotar(data ?? []);
 
   return (
     <div className="flex flex-col gap-4">
@@ -30,84 +36,89 @@ export async function VistaPromociones() {
 
       {error ? (
         <Aviso>No se pudieron cargar las promociones.</Aviso>
-      ) : (data?.length ?? 0) === 0 ? (
+      ) : filas.length === 0 ? (
         <Aviso>
           Aún no hay promociones. El motor de alertas las compara contra lo que
           el mercaderista levanta en góndola.
         </Aviso>
       ) : (
-        <Tarjeta>
-          <thead>
-            <tr className="border-b border-border bg-muted/40">
-              <th scope="col" className={TH}>
-                SKU
-              </th>
-              <th scope="col" className={TH}>
-                PRECIO PROMO
-              </th>
-              <th scope="col" className={TH}>
-                VIGENCIA
-              </th>
-              <th scope="col" className={TH}>
-                CLUSTERS
-              </th>
-              <th scope="col" className={TH}>
-                EN TIENDA
-              </th>
-              <th scope="col" className={TH}>
-                <span className="sr-only">Acciones</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {(data ?? []).map((p) => (
-              <tr key={p.id} className="border-b border-border last:border-0">
-                <td className={TD}>
-                  <span className="font-semibold">{p.sku?.nombre ?? "—"}</span>
-                  <span className="ml-2 font-mono text-muted-foreground">
-                    {p.sku?.codigo ?? ""}
-                  </span>
-                </td>
-                <td className={`${TD} font-semibold tabular-nums`}>
-                  {soles(p.precio_promo)}
-                </td>
-                <td className={`${TD} tabular-nums text-muted-foreground`}>
-                  {p.fecha_inicio} → {p.fecha_fin}
-                </td>
-                <td className={`${TD} text-muted-foreground`}>
-                  {p.clusters.length === 0
-                    ? "Todas las tiendas"
-                    : p.clusters.join(", ")}
-                </td>
-                <td className={TD}>
-                  {/* La píldora lleva SIEMPRE texto: el color no es el único
-                      portador del significado. */}
-                  {p.comunicada ? (
-                    <Pastilla tono="bg-completado-suave text-completado-texto">
-                      Comunicada
-                    </Pastilla>
-                  ) : (
-                    <Pastilla tono="bg-muted text-muted-foreground">
-                      Sin comunicar
-                    </Pastilla>
-                  )}
-                </td>
-                <td className={`${TD} text-right`}>
-                  <Link
-                    href={`/admin/precios/promociones/${p.id}`}
-                    className={enlaceTabla}
-                  >
-                    Editar
-                    <span className="sr-only">
-                      {" "}
-                      la promoción de {p.sku?.nombre ?? "este SKU"}
-                    </span>
-                  </Link>
-                </td>
+        <>
+          <AvisoTope hayMas={hayMas} />
+          <Tarjeta>
+            <thead>
+              <tr className="border-b border-border bg-muted/40">
+                <th scope="col" className={TH}>
+                  SKU
+                </th>
+                <th scope="col" className={TH}>
+                  PRECIO PROMO
+                </th>
+                <th scope="col" className={TH}>
+                  VIGENCIA
+                </th>
+                <th scope="col" className={TH}>
+                  CLUSTERS
+                </th>
+                <th scope="col" className={TH}>
+                  EN TIENDA
+                </th>
+                <th scope="col" className={TH}>
+                  <span className="sr-only">Acciones</span>
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </Tarjeta>
+            </thead>
+            <tbody>
+              {filas.map((p) => (
+                <tr key={p.id} className="border-b border-border last:border-0">
+                  <td className={TD}>
+                    <span className="font-semibold">
+                      {p.sku?.nombre ?? "—"}
+                    </span>
+                    <span className="ml-2 font-mono text-muted-foreground">
+                      {p.sku?.codigo ?? ""}
+                    </span>
+                  </td>
+                  <td className={`${TD} font-semibold tabular-nums`}>
+                    {soles(p.precio_promo)}
+                  </td>
+                  <td className={`${TD} tabular-nums text-muted-foreground`}>
+                    {p.fecha_inicio} → {p.fecha_fin}
+                  </td>
+                  <td className={`${TD} text-muted-foreground`}>
+                    {p.clusters.length === 0
+                      ? "Todas las tiendas"
+                      : p.clusters.join(", ")}
+                  </td>
+                  <td className={TD}>
+                    {/* La píldora lleva SIEMPRE texto: el color no es el único
+                      portador del significado. */}
+                    {p.comunicada ? (
+                      <Pastilla tono="bg-completado-suave text-completado-texto">
+                        Comunicada
+                      </Pastilla>
+                    ) : (
+                      <Pastilla tono="bg-muted text-muted-foreground">
+                        Sin comunicar
+                      </Pastilla>
+                    )}
+                  </td>
+                  <td className={`${TD} text-right`}>
+                    <Link
+                      href={`/admin/precios/promociones/${p.id}`}
+                      className={enlaceTabla}
+                    >
+                      Editar
+                      <span className="sr-only">
+                        {" "}
+                        la promoción de {p.sku?.nombre ?? "este SKU"}
+                      </span>
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Tarjeta>
+        </>
       )}
     </div>
   );

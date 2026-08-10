@@ -221,6 +221,23 @@ describe("quién escribe los hechos comerciales", () => {
     });
   });
 
+  it("el SUPERVISOR tampoco: las políticas exigen admin, no staff", async () => {
+    // Es staff y lee el maestro entero, así que es el rol al que más fácil se le
+    // escaparía la escritura si alguien relajara la política a `es_staff()`.
+    await comoUsuario(client, USUARIOS.supervisor, async (c) => {
+      expect(
+        await codigoDeError(c, INSERTAR_EXHIBICION, [
+          TENANTS.maracumango,
+          IDS.tiendaMrc,
+          IDS.marcaMrc,
+          "ruma",
+          "2026-09-01",
+          "2026-09-30",
+        ]),
+      ).toBe("42501");
+    });
+  });
+
   it("el mercaderista tampoco", async () => {
     await comoUsuario(client, USUARIOS.mercaderistaMaracumango, async (c) => {
       expect(

@@ -50,6 +50,7 @@ export function FormExhibicion({
   const [tiendaId, setTiendaId] = useState(
     exhibicion?.tienda_id ?? tiendas[0]?.id ?? "",
   );
+  const [marcaId, setMarcaId] = useState(exhibicion?.marca_id ?? "");
   const [skusElegidos, setSkusElegidos] = useState<string[]>(
     exhibicion?.sku_ids ?? [],
   );
@@ -58,6 +59,16 @@ export function FormExhibicion({
   const tiendaElegida = tiendas.find((t) => t.id === tiendaId);
   const delCliente = <T extends { tenant_id: string }>(xs: T[]) =>
     xs.filter((x) => x.tenant_id === tiendaElegida?.tenant_id);
+
+  function elegirTienda(nuevaTiendaId: string) {
+    setTiendaId(nuevaTiendaId);
+    // La marca y los SKUs se limpian con la tienda. Los SKUs marcados de otro
+    // cliente dejan de VERSE al cambiar —el filtro los quita de la lista— pero
+    // seguirían en el estado y viajarían en el envío: `sku_ids` es un `uuid[]`
+    // sin FK, así que la base tampoco los rechazaría.
+    setMarcaId("");
+    setSkusElegidos([]);
+  }
 
   function alternarSku(id: string) {
     setSkusElegidos((previos) =>
@@ -116,7 +127,7 @@ export function FormExhibicion({
             name="tienda_id"
             required
             value={tiendaId}
-            onChange={(e) => setTiendaId(e.target.value)}
+            onChange={(e) => elegirTienda(e.target.value)}
             className={campo}
           >
             {tiendas.map((t) => (
@@ -132,7 +143,8 @@ export function FormExhibicion({
           <select
             name="marca_id"
             required
-            defaultValue={exhibicion?.marca_id ?? ""}
+            value={marcaId}
+            onChange={(e) => setMarcaId(e.target.value)}
             className={campo}
           >
             <option value="" disabled>

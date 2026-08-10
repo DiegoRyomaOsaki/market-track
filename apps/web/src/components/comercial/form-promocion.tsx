@@ -46,6 +46,18 @@ export function FormPromocion({
 
   const skuElegido = skus.find((s) => s.id === skuId);
 
+  function elegirSku(nuevoSkuId: string) {
+    const anterior = skus.find((s) => s.id === skuId)?.tenant_id;
+    setSkuId(nuevoSkuId);
+    // Solo si CAMBIA de cliente: dentro del mismo, los clusters marcados siguen
+    // siendo válidos y borrarlos sería perder el trabajo del operador. Al cambiar
+    // de cliente, en cambio, dejan de verse pero seguirían viajando en el envío
+    // —y acotarían la promo a un cluster que ese cliente no tiene, o sea a
+    // ninguna tienda—.
+    const nuevo = skus.find((s) => s.id === nuevoSkuId)?.tenant_id;
+    if (anterior !== nuevo) setElegidos([]);
+  }
+
   function alternarCluster(cluster: string) {
     setElegidos((previos) =>
       previos.includes(cluster)
@@ -106,7 +118,7 @@ export function FormPromocion({
             name="sku_id"
             required
             value={skuId}
-            onChange={(e) => setSkuId(e.target.value)}
+            onChange={(e) => elegirSku(e.target.value)}
             className={campo}
           >
             {skus.map((s) => (

@@ -39,6 +39,7 @@ export function FormPrecio({
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [skuId, setSkuId] = useState(precio?.sku_id ?? skus[0]?.id ?? "");
+  const [cadenaId, setCadenaId] = useState(precio?.cadena_id ?? "");
   const router = useRouter();
 
   const skuElegido = skus.find((s) => s.id === skuId);
@@ -47,6 +48,14 @@ export function FormPrecio({
   const cadenasDelCliente = cadenas.filter(
     (c) => c.tenant_id === skuElegido?.tenant_id,
   );
+
+  function elegirSku(nuevoSkuId: string) {
+    setSkuId(nuevoSkuId);
+    // La cadena se limpia con el SKU. Un `<select>` no controlado cuya opción
+    // desaparece de la lista lo sustituye EN SILENCIO por el primero de la
+    // nueva: el operador enviaría una cadena que nunca eligió.
+    setCadenaId("");
+  }
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -92,7 +101,7 @@ export function FormPrecio({
             name="sku_id"
             required
             value={skuId}
-            onChange={(e) => setSkuId(e.target.value)}
+            onChange={(e) => elegirSku(e.target.value)}
             className={campo}
           >
             {skus.map((s) => (
@@ -108,7 +117,8 @@ export function FormPrecio({
           <select
             name="cadena_id"
             required
-            defaultValue={precio?.cadena_id ?? ""}
+            value={cadenaId}
+            onChange={(e) => setCadenaId(e.target.value)}
             className={campo}
           >
             <option value="" disabled>
@@ -120,6 +130,12 @@ export function FormPrecio({
               </option>
             ))}
           </select>
+          {cadenasDelCliente.length === 0 && (
+            <span className="text-[12px] text-muted-foreground">
+              {skuElegido?.cliente ?? "Este cliente"} no tiene cadenas en el
+              catálogo todavía.
+            </span>
+          )}
         </label>
 
         <label className="flex flex-col gap-1.5">

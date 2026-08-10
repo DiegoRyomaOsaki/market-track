@@ -62,7 +62,10 @@ export const altaPromocionSchema = z
     precio_promo: importe("Escribe el precio promocional"),
     fecha_inicio: fecha,
     fecha_fin: fecha,
-    clusters: z.array(z.string().trim().min(1)).default([]),
+    // Acotado por elemento y por longitud: es un `text[]` sin más límite que el
+    // de la fila, y lo que entra aquí se sirve entero en cada lectura del
+    // listado. `tienda.cluster` no pasa de un nombre corto.
+    clusters: z.array(z.string().trim().min(1).max(64)).max(50).default([]),
     comunicada: z.boolean().default(false),
   })
   .refine((p) => p.fecha_fin >= p.fecha_inicio, {
@@ -88,11 +91,14 @@ export const altaExhibicionSchema = z
     tienda_id: z.guid("Elige una tienda"),
     marca_id: z.guid("Elige una marca"),
     tipo: z.enum(Constants.public.Enums.tipo_exhibicion, "Elige un tipo"),
-    sku_ids: z.array(z.guid()).default([]),
+    // La columna es un `uuid[]` SIN clave foránea: la base no comprueba de quién
+    // es cada elemento. De eso responde la acción; aquí solo se acota el tamaño.
+    sku_ids: z.array(z.guid()).max(500).default([]),
     cantidad_sugerida: z
       .number()
       .int("Unidades enteras")
       .min(0, "No puede ser negativa")
+      .max(100_000, "Demasiadas unidades")
       .nullable()
       .optional()
       .transform((v) => v ?? null),

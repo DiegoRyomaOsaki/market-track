@@ -6,7 +6,9 @@ import {
   crearExhibicion,
   crearPrecio,
   crearPromocion,
+  editarExhibicion,
   editarPrecio,
+  editarPromocion,
 } from "./acciones";
 
 // Lo que estas acciones tienen que hacer bien no es escribir —de eso responde la
@@ -56,11 +58,14 @@ const EXHIBICION = {
 };
 
 /** Monta el doble y devuelve sus espías. */
-function conRespuesta(escritura: {
-  data: Record<string, unknown>[] | null;
-  error: { message: string; code?: string } | null;
-}) {
-  const falso = supabaseFalso({ escritura });
+function conRespuesta(
+  escritura: {
+    data: Record<string, unknown>[] | null;
+    error: { message: string; code?: string } | null;
+  },
+  lecturas?: Record<string, Record<string, unknown>[]>,
+) {
+  const falso = supabaseFalso({ escritura, lecturas });
   cliente.actual = falso.cliente;
   return falso;
 }
@@ -200,5 +205,108 @@ describe("crearExhibicion", () => {
     await crearExhibicion(EXHIBICION);
 
     expect(falso.tablasPedidas).toEqual(["exhibicion_negociada"]);
+  });
+
+  it("una escritura bloqueada por la RLS no se da por buena", async () => {
+    conRespuesta({ data: [], error: null });
+
+    const r = await crearExhibicion(EXHIBICION);
+
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/sin permiso/i);
+  });
+
+  it("sin SKUs no consulta el catálogo: no hay nada que comprobar", async () => {
+    const falso = conRespuesta(OK);
+
+    await crearExhibicion(EXHIBICION);
+
+    expect(falso.tablasPedidas).not.toContain("sku");
+  });
+});
+
+describe("crearExhibicion con SKUs", () => {
+  // `sku_ids` es un `uuid[]` SIN clave foránea: la base no comprueba de quién es
+  // cada elemento. Si esto no lo comprueba el servidor, no lo comprueba nadie —
+  // el filtro del formulario es UX y una llamada directa se lo salta.
+  const SKU_AJENO = "b0000003-0000-0000-0000-000000000002";
+
+  /** El catálogo tal como lo ve la consulta: cada SKU con su dueño. */
+  const CATALOGO = {
+    sku: [
+      { id: SKU, tenant_id: TENANT },
+      { id: SKU_AJENO, tenant_id: "bbbbbbbb-0000-0000-0000-000000000002" },
+    ],
+  };
+
+  it("rechaza un SKU que no es del cliente de la exhibición", async () => {
+    conRespuesta(OK, CATALOGO);
+
+    const r = await crearExhibicion({ ...EXHIBICION, sku_ids: [SKU_AJENO] });
+
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/no es de este cliente/i);
+  });
+
+  it("no ESCRIBE nada cuando rechaza", async () => {
+    const falso = conRespuesta(OK, CATALOGO);
+
+    await crearExhibicion({ ...EXHIBICION, sku_ids: [SKU_AJENO] });
+
+    expect(falso.filasEscritas).toEqual([]);
+  });
+
+  it("acepta los SKUs que sí son del cliente", async () => {
+    conRespuesta(OK, CATALOGO);
+
+    const r = await crearExhibicion({ ...EXHIBICION, sku_ids: [SKU] });
+
+    expect(r.ok).toBe(true);
+  });
+
+  it("un id repetido no hace fallar la comprobación", async () => {
+    // La base devuelve UNA fila por id distinto: comparar contra la longitud
+    // cruda rechazaría una lista con un duplicado que sí es del cliente.
+    conRespuesta(OK, CATALOGO);
+
+    const r = await crearExhibicion({ ...EXHIBICION, sku_ids: [SKU, SKU] });
+
+    expect(r.ok).toBe(true);
+  });
+
+  it("mezclar uno propio con uno ajeno se rechaza entero", async () => {
+    conRespuesta(OK, CATALOGO);
+
+    const r = await crearExhibicion({
+      ...EXHIBICION,
+      sku_ids: [SKU, SKU_AJENO],
+    });
+
+    expect(r.ok).toBe(false);
+  });
+});
+
+describe("las ediciones apuntan a su fila", () => {
+  // Un `.eq('id', …)` que se olvide reescribe TODAS las filas que la RLS deje.
+  it("editarPromocion", async () => {
+    const falso = conRespuesta(OK);
+
+    await editarPromocion("a0000006-0000-0000-0000-000000000001", PROMO);
+
+    expect(falso.filtrosDeEscritura).toEqual([
+      ["id", "a0000006-0000-0000-0000-000000000001"],
+    ]);
+  });
+
+  it("editarExhibicion", async () => {
+    const falso = conRespuesta(OK);
+
+    await editarExhibicion("a0000007-0000-0000-0000-000000000001", EXHIBICION);
+
+    expect(falso.filtrosDeEscritura).toEqual([
+      ["id", "a0000007-0000-0000-0000-000000000001"],
+    ]);
   });
 });

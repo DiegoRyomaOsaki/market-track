@@ -67,6 +67,43 @@ type Respuesta = {
   error: { message: string; code?: string } | null;
 };
 
+const SKUS_AJENOS =
+  "Alguno de los SKUs elegidos no es de este cliente. Vuelve a seleccionarlos.";
+
+/**
+ * ¿Todos estos SKUs son del cliente que se dice?
+ *
+ * `exhibicion_negociada.sku_ids` es un `uuid[]` SIN clave foránea: la base no
+ * comprueba de quién es cada elemento, y las FK compuestas del resto de columnas
+ * no alcanzan al contenido de un array. Sin esto, una exhibición puede guardarse
+ * con los SKUs de otro cliente — y el filtro del formulario no lo impide, porque
+ * es UX: una llamada directa a la acción manda lo que quiera.
+ *
+ * Se consulta con el cliente de la sesión, así que la RLS acota lo visible: un
+ * id que quien llama no puede leer no aparece y la cuenta no cuadra.
+ */
+async function todosLosSkusSonDelCliente(
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
+  tenantId: string,
+  skuIds: string[],
+): Promise<boolean> {
+  if (skuIds.length === 0) return true;
+
+  const { data, error } = await supabase
+    .from("sku")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .in("id", skuIds);
+
+  if (error) {
+    console.error("[comercial] skus del cliente", error.message.slice(0, 200));
+    return false;
+  }
+  // Los ids repetidos cuentan una vez: comparar contra `skuIds.length` a secas
+  // rechazaría una lista con un duplicado que sí es del cliente.
+  return new Set(skuIds).size === (data?.length ?? 0);
+}
+
 /**
  * Interpreta la respuesta de una escritura, una sola vez para las seis.
  *
@@ -173,6 +210,11 @@ export async function crearExhibicion(
   if (!parsed.success) return invalidos(parsed.error.issues);
 
   const supabase = await createServerSupabaseClient();
+  const { tenant_id, sku_ids } = parsed.data;
+  if (!(await todosLosSkusSonDelCliente(supabase, tenant_id, sku_ids))) {
+    return { ok: false, error: SKUS_AJENOS };
+  }
+
   return resultado(
     "exhibicion_negociada",
     EXHIBICIONES,
@@ -192,6 +234,11 @@ export async function editarExhibicion(
   if (!parsed.success) return invalidos(parsed.error.issues);
 
   const supabase = await createServerSupabaseClient();
+  const { tenant_id, sku_ids } = parsed.data;
+  if (!(await todosLosSkusSonDelCliente(supabase, tenant_id, sku_ids))) {
+    return { ok: false, error: SKUS_AJENOS };
+  }
+
   return resultado(
     "exhibicion_negociada",
     EXHIBICIONES,
