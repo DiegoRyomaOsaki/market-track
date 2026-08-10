@@ -168,6 +168,101 @@ export type Database = {
           },
         ]
       }
+      config_perfect_store: {
+        Row: {
+          categoria_id: string | null
+          creado_at: string
+          creado_por: string | null
+          id: string
+          marca_id: string
+          orden_bien_pts: number
+          orden_mal_pts: number
+          orden_regular_pts: number
+          peso_distribucion: number
+          peso_orden: number
+          peso_pop: number
+          peso_precio: number
+          peso_visibilidad: number
+          politica_pop: Database["public"]["Enums"]["politica_pop"]
+          sos_objetivo_pct: number
+          sos_unidad: Database["public"]["Enums"]["unidad_sos"]
+          tenant_id: string
+          tipo_tienda: Database["public"]["Enums"]["tipo_tienda"] | null
+          vigente_desde: string
+        }
+        Insert: {
+          categoria_id?: string | null
+          creado_at?: string
+          creado_por?: string | null
+          id?: string
+          marca_id: string
+          orden_bien_pts?: number
+          orden_mal_pts?: number
+          orden_regular_pts?: number
+          peso_distribucion: number
+          peso_orden: number
+          peso_pop: number
+          peso_precio: number
+          peso_visibilidad: number
+          politica_pop?: Database["public"]["Enums"]["politica_pop"]
+          sos_objetivo_pct: number
+          sos_unidad?: Database["public"]["Enums"]["unidad_sos"]
+          tenant_id: string
+          tipo_tienda?: Database["public"]["Enums"]["tipo_tienda"] | null
+          vigente_desde?: string
+        }
+        Update: {
+          categoria_id?: string | null
+          creado_at?: string
+          creado_por?: string | null
+          id?: string
+          marca_id?: string
+          orden_bien_pts?: number
+          orden_mal_pts?: number
+          orden_regular_pts?: number
+          peso_distribucion?: number
+          peso_orden?: number
+          peso_pop?: number
+          peso_precio?: number
+          peso_visibilidad?: number
+          politica_pop?: Database["public"]["Enums"]["politica_pop"]
+          sos_objetivo_pct?: number
+          sos_unidad?: Database["public"]["Enums"]["unidad_sos"]
+          tenant_id?: string
+          tipo_tienda?: Database["public"]["Enums"]["tipo_tienda"] | null
+          vigente_desde?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "config_perfect_store_creado_por_fkey"
+            columns: ["creado_por"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "config_perfect_store_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "config_ps_categoria_fk"
+            columns: ["categoria_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "categoria"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "config_ps_marca_fk"
+            columns: ["marca_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "marca"
+            referencedColumns: ["id", "tenant_id"]
+          },
+        ]
+      }
       configuracion_plataforma: {
         Row: {
           actualizado_at: string
@@ -1974,6 +2069,7 @@ export type Database = {
         | "foto_despues"
         | "checkout"
         | "campos_extra"
+      politica_pop: "dentro_del_tope" | "bonus_sobre_100"
       rol_usuario: "admin" | "supervisor" | "mercaderista" | "cliente"
       severidad_alerta: "info" | "alta" | "critica"
       tipo_alerta:
@@ -1994,6 +2090,7 @@ export type Database = {
         | "contingencia"
       tipo_solicitud_ruta: "cambio_tienda" | "cambio_dia" | "no_visita" | "otro"
       tipo_tienda: "hiper" | "super" | "express"
+      unidad_sos: "frentes" | "centimetros"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2153,6 +2250,7 @@ export const Constants = {
         "checkout",
         "campos_extra",
       ],
+      politica_pop: ["dentro_del_tope", "bonus_sobre_100"],
       rol_usuario: ["admin", "supervisor", "mercaderista", "cliente"],
       severidad_alerta: ["info", "alta", "critica"],
       tipo_alerta: [
@@ -2175,6 +2273,7 @@ export const Constants = {
       ],
       tipo_solicitud_ruta: ["cambio_tienda", "cambio_dia", "no_visita", "otro"],
       tipo_tienda: ["hiper", "super", "express"],
+      unidad_sos: ["frentes", "centimetros"],
     },
   },
 } as const
