@@ -13,20 +13,26 @@ export default async function EditarSkuPage({
 }) {
   const { id } = await params;
   const supabase = await createServerSupabaseClient();
-  const [{ data: sku }, { data: marcasData }] = await Promise.all([
-    supabase
-      .from("sku")
-      .select(
-        "id, nombre, codigo, marca_id, presentacion, codigo_barras, codigo_externo, activo",
-      )
-      .eq("id", id)
-      .maybeSingle(),
-    supabase
-      .from("marca")
-      .select("id, nombre, tenant_id, tenant:tenant_id(nombre)")
-      .eq("activo", true)
-      .order("nombre"),
-  ]);
+  const [{ data: sku }, { data: marcasData }, { data: categorias }] =
+    await Promise.all([
+      supabase
+        .from("sku")
+        .select(
+          "id, nombre, codigo, marca_id, categoria_id, presentacion, codigo_barras, codigo_externo, activo",
+        )
+        .eq("id", id)
+        .maybeSingle(),
+      supabase
+        .from("marca")
+        .select("id, nombre, tenant_id, tenant:tenant_id(nombre)")
+        .eq("activo", true)
+        .order("nombre"),
+      supabase
+        .from("categoria")
+        .select("id, nombre, tenant_id")
+        .eq("activo", true)
+        .order("nombre"),
+    ]);
 
   if (!sku) notFound();
   const marcas = (marcasData ?? []).map((m) => ({
@@ -36,5 +42,5 @@ export default async function EditarSkuPage({
     cliente: m.tenant?.nombre ?? "—",
   }));
 
-  return <FormSku sku={sku} marcas={marcas} />;
+  return <FormSku sku={sku} marcas={marcas} categorias={categorias ?? []} />;
 }

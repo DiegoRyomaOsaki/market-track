@@ -12,6 +12,7 @@ type Sku = {
   nombre: string;
   codigo: string;
   marca_id: string;
+  categoria_id: string | null;
   presentacion: string | null;
   codigo_barras: string | null;
   codigo_externo: string | null;
@@ -19,9 +20,19 @@ type Sku = {
 };
 
 type Marca = { id: string; nombre: string; tenant_id: string; cliente: string };
+type Categoria = { id: string; nombre: string; tenant_id: string };
 
-export function FormSku({ sku, marcas }: { sku?: Sku; marcas: Marca[] }) {
+export function FormSku({
+  sku,
+  marcas,
+  categorias,
+}: {
+  sku?: Sku;
+  marcas: Marca[];
+  categorias: Categoria[];
+}) {
   const [marcaId, setMarcaId] = useState(sku?.marca_id ?? marcas[0]?.id ?? "");
+  const [categoriaId, setCategoriaId] = useState(sku?.categoria_id ?? "");
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const router = useRouter();
@@ -29,6 +40,22 @@ export function FormSku({ sku, marcas }: { sku?: Sku; marcas: Marca[] }) {
   // El cliente no se elige: lo hereda la marca. Así no puede quedar un SKU
   // colgando de la marca de otro cliente (la FK compuesta también lo impide).
   const tenantDeLaMarca = marcas.find((m) => m.id === marcaId)?.tenant_id ?? "";
+
+  // Solo las categorías de ESE cliente. La FK compuesta lo impediría igual, pero
+  // ofrecerlas sería enseñar una opción que el servidor va a rechazar.
+  const categoriasDelCliente = categorias.filter(
+    (c) => c.tenant_id === tenantDeLaMarca,
+  );
+
+  function elegirMarca(nuevaMarcaId: string) {
+    const anterior = marcas.find((m) => m.id === marcaId)?.tenant_id;
+    setMarcaId(nuevaMarcaId);
+    // Solo si CAMBIA de cliente: dentro del mismo, la categoría elegida sigue
+    // siendo válida. Al cambiar, deja de verse en la lista pero seguiría en el
+    // estado y viajaría en el envío.
+    const nuevo = marcas.find((m) => m.id === nuevaMarcaId)?.tenant_id;
+    if (anterior !== nuevo) setCategoriaId("");
+  }
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -40,6 +67,7 @@ export function FormSku({ sku, marcas }: { sku?: Sku; marcas: Marca[] }) {
       nombre: leerCampo(fd, "nombre"),
       tenant_id: tenantDeLaMarca,
       marca_id: marcaId,
+      categoria_id: categoriaId === "" ? null : categoriaId,
       codigo: leerCampo(fd, "codigo"),
       presentacion: leerCampo(fd, "presentacion"),
       codigo_barras: leerCampo(fd, "codigo_barras"),
@@ -88,7 +116,7 @@ export function FormSku({ sku, marcas }: { sku?: Sku; marcas: Marca[] }) {
             name="marca_id"
             required
             value={marcaId}
-            onChange={(e) => setMarcaId(e.target.value)}
+            onChange={(e) => elegirMarca(e.target.value)}
             className={campo}
           >
             {marcas.map((m) => (
@@ -97,6 +125,31 @@ export function FormSku({ sku, marcas }: { sku?: Sku; marcas: Marca[] }) {
               </option>
             ))}
           </select>
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className={etiqueta}>Categoría (opcional)</span>
+          {/* Opcional a propósito: el maestro se carga poco a poco y un SKU sin
+              categoría tiene que poder existir. Perfect Store pondera por
+              categoría, así que sin ella ese SKU no entra en el puntaje. */}
+          <select
+            name="categoria_id"
+            value={categoriaId}
+            onChange={(e) => setCategoriaId(e.target.value)}
+            className={campo}
+          >
+            <option value="">Sin categoría</option>
+            {categoriasDelCliente.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.nombre}
+              </option>
+            ))}
+          </select>
+          {categoriasDelCliente.length === 0 && (
+            <span className="text-[12px] text-muted-foreground">
+              Este cliente no tiene categorías todavía.
+            </span>
+          )}
         </label>
 
         <label className="flex flex-col gap-1.5">

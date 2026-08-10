@@ -133,6 +133,41 @@ export type Database = {
           },
         ]
       }
+      categoria: {
+        Row: {
+          activo: boolean
+          codigo_externo: string | null
+          creado_at: string
+          id: string
+          nombre: string
+          tenant_id: string
+        }
+        Insert: {
+          activo?: boolean
+          codigo_externo?: string | null
+          creado_at?: string
+          id?: string
+          nombre: string
+          tenant_id: string
+        }
+        Update: {
+          activo?: boolean
+          codigo_externo?: string | null
+          creado_at?: string
+          id?: string
+          nombre?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "categoria_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       configuracion_plataforma: {
         Row: {
           actualizado_at: string
@@ -1290,6 +1325,7 @@ export type Database = {
       sku: {
         Row: {
           activo: boolean
+          categoria_id: string | null
           codigo: string
           codigo_barras: string | null
           codigo_externo: string | null
@@ -1302,6 +1338,7 @@ export type Database = {
         }
         Insert: {
           activo?: boolean
+          categoria_id?: string | null
           codigo: string
           codigo_barras?: string | null
           codigo_externo?: string | null
@@ -1314,6 +1351,7 @@ export type Database = {
         }
         Update: {
           activo?: boolean
+          categoria_id?: string | null
           codigo?: string
           codigo_barras?: string | null
           codigo_externo?: string | null
@@ -1325,6 +1363,13 @@ export type Database = {
           tenant_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "sku_categoria_fk"
+            columns: ["categoria_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "categoria"
+            referencedColumns: ["id", "tenant_id"]
+          },
           {
             foreignKeyName: "sku_marca_fk"
             columns: ["marca_id", "tenant_id"]

@@ -32,6 +32,20 @@ export const altaCadenaSchema = z.object({
 
 export type AltaCadena = z.infer<typeof altaCadenaSchema>;
 
+/**
+ * La categoría de producto: el eje por el que se pondera Perfect Store.
+ *
+ * Es del CLIENTE, no de la marca — "Bebidas" agrupa SKUs de varias marcas suyas.
+ */
+export const altaCategoriaSchema = z.object({
+  nombre,
+  tenant_id: z.guid("Elige un cliente"),
+  codigo_externo: textoOpcional,
+  activo: z.boolean().default(true),
+});
+
+export type AltaCategoria = z.infer<typeof altaCategoriaSchema>;
+
 export const altaTiendaSchema = z.object({
   nombre,
   tenant_id: z.guid("Elige un cliente"),
@@ -72,6 +86,16 @@ export const altaSkuSchema = z.object({
   nombre,
   tenant_id: z.guid("Elige un cliente"),
   marca_id: z.guid("Elige una marca"),
+  /**
+   * OPCIONAL: el maestro se carga poco a poco y un SKU sin categoría tiene que
+   * poder existir. La FK compuesta `(categoria_id, tenant_id)` es la que impide
+   * apuntar a la categoría de otro cliente.
+   */
+  categoria_id: z
+    .guid()
+    .nullable()
+    .optional()
+    .transform((v) => v ?? null),
   codigo: z.string().trim().min(1, "Requerido"),
   presentacion: textoOpcional,
   codigo_barras: textoOpcional,

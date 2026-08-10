@@ -7,6 +7,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import {
   aFilaTienda,
   altaCadenaSchema,
+  altaCategoriaSchema,
   altaSkuSchema,
   altaTiendaSchema,
   codificadoSchema,
@@ -38,13 +39,16 @@ function mensajeDe(codigo: string | undefined, entidad: string): string {
 
 /**
  * El único UNIQUE del SKU es (tenant_id, codigo_externo) — el `codigo` NO es
- * único en la base. La FK a marca es compuesta (marca_id, tenant_id): impide
- * colgar un SKU de la marca de otro cliente.
+ * único en la base. Sus DOS FK son compuestas con `tenant_id` —a marca y a
+ * categoría—, así que impiden colgarlo de la marca o la categoría de otro
+ * cliente; el 23503 puede venir de cualquiera de las dos y el mensaje nombra las
+ * dos en vez de adivinar.
  */
 function mensajeDeSku(codigo: string | undefined): string {
   if (codigo === "23505")
     return "Ese código externo ya existe para este cliente";
-  if (codigo === "23503") return "Esa marca no es de este cliente";
+  if (codigo === "23503")
+    return "Esa marca o esa categoría no es de este cliente";
   return "No se pudo guardar el SKU";
 }
 
@@ -259,6 +263,62 @@ export async function fijarCodificado(
       "codificado",
       error.message,
       "No se pudo guardar el codificado",
+    );
+  if (!data?.length) return { ok: false, error: SIN_PERMISO };
+  revalidatePath(SECCION);
+  return { ok: true };
+}
+
+export async function crearCategoria(datos: unknown): Promise<ResultadoAccion> {
+  const parsed = altaCategoriaSchema.safeParse(datos);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: "Datos inválidos",
+      detalles: parsed.error.issues,
+    };
+  }
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase
+    .from("categoria")
+    .insert(parsed.data)
+    .select("id");
+
+  if (error)
+    return fallo(
+      "alta de categoría",
+      error.message,
+      mensajeDe(error.code, "la categoría"),
+    );
+  if (!data?.length) return { ok: false, error: SIN_PERMISO };
+  revalidatePath(SECCION);
+  return { ok: true };
+}
+
+export async function editarCategoria(
+  id: string,
+  datos: unknown,
+): Promise<ResultadoAccion> {
+  const parsed = altaCategoriaSchema.safeParse(datos);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: "Datos inválidos",
+      detalles: parsed.error.issues,
+    };
+  }
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase
+    .from("categoria")
+    .update(parsed.data)
+    .eq("id", id)
+    .select("id");
+
+  if (error)
+    return fallo(
+      "edición de categoría",
+      error.message,
+      mensajeDe(error.code, "la categoría"),
     );
   if (!data?.length) return { ok: false, error: SIN_PERMISO };
   revalidatePath(SECCION);

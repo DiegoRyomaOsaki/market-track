@@ -7,11 +7,18 @@ export const metadata: Metadata = { title: "Nuevo SKU — Market Track" };
 
 export default async function NuevoSkuPage() {
   const supabase = await createServerSupabaseClient();
-  const { data } = await supabase
-    .from("marca")
-    .select("id, nombre, tenant_id, tenant:tenant_id(nombre)")
-    .eq("activo", true)
-    .order("nombre");
+  const [{ data }, { data: categorias }] = await Promise.all([
+    supabase
+      .from("marca")
+      .select("id, nombre, tenant_id, tenant:tenant_id(nombre)")
+      .eq("activo", true)
+      .order("nombre"),
+    supabase
+      .from("categoria")
+      .select("id, nombre, tenant_id")
+      .eq("activo", true)
+      .order("nombre"),
+  ]);
 
   const marcas = (data ?? []).map((m) => ({
     id: m.id,
@@ -20,5 +27,5 @@ export default async function NuevoSkuPage() {
     cliente: m.tenant?.nombre ?? "—",
   }));
 
-  return <FormSku marcas={marcas} />;
+  return <FormSku marcas={marcas} categorias={categorias ?? []} />;
 }

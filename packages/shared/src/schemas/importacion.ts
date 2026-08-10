@@ -38,6 +38,16 @@ export const filaMarcaSchema = z.object({
   tolerancia_precio_pct: z.number().min(0).max(100).nullable(),
 });
 
+/**
+ * La categoría de producto: el eje por el que se pondera Perfect Store.
+ *
+ * Es del CLIENTE, no de la marca — "Bebidas" agrupa SKUs de varias marcas suyas.
+ */
+export const filaCategoriaSchema = z.object({
+  codigo_externo: codigoExterno,
+  nombre: texto(200),
+});
+
 export const filaCadenaSchema = z.object({
   codigo_externo: codigoExterno,
   nombre: texto(200),
@@ -51,6 +61,12 @@ export const filaSkuSchema = z.object({
   nombre: texto(200),
   presentacion: textoOpcional(120),
   codigo_barras: textoOpcional(64),
+  /**
+   * OPCIONAL, y es lo que hace aditivo el despliegue: el maestro se carga poco a
+   * poco y un SKU sin categoría tiene que seguir entrando. Al aplicar, una celda
+   * vacía CONSERVA la categoría que el SKU ya tuviera — no la borra.
+   */
+  categoria_codigo_externo: textoOpcional(64),
 });
 
 export const filaTiendaSchema = z
@@ -102,6 +118,7 @@ export const filaPromocionSchema = z
 /** El lote entero, ya validado. Es lo que recibe la función que lo aplica. */
 export const loteImportacionSchema = z.object({
   marca: z.array(filaMarcaSchema),
+  categoria: z.array(filaCategoriaSchema),
   cadena: z.array(filaCadenaSchema),
   sku: z.array(filaSkuSchema),
   tienda: z.array(filaTiendaSchema),

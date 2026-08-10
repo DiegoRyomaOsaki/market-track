@@ -10,6 +10,9 @@
 /** Las entidades del maestro, en el orden en que hay que escribirlas. */
 export const HOJAS = [
   "marca",
+  // Antes que `sku`: el SKU la referencia, así que tiene que existir ya cuando
+  // se resuelve el join del upsert.
+  "categoria",
   "cadena",
   "sku",
   "tienda",
@@ -32,6 +35,7 @@ export type Hoja = (typeof HOJAS)[number];
  */
 export const COLUMNAS: Record<Hoja, readonly string[]> = {
   marca: ["codigo_externo", "nombre", "tolerancia_precio_pct"],
+  categoria: ["codigo_externo", "nombre"],
   cadena: ["codigo_externo", "nombre", "tipo_tienda"],
   sku: [
     "codigo_externo",
@@ -40,6 +44,9 @@ export const COLUMNAS: Record<Hoja, readonly string[]> = {
     "nombre",
     "presentacion",
     "codigo_barras",
+    // Opcional: un SKU sin categoría entra igual. Una celda vacía conserva la
+    // categoría que ya tuviera, no la borra.
+    "categoria_codigo_externo",
   ],
   tienda: [
     "codigo_externo",
@@ -73,6 +80,7 @@ export const COLUMNAS: Record<Hoja, readonly string[]> = {
 /** Las columnas obligatorias por hoja: sin ellas la fila no se puede resolver. */
 export const OBLIGATORIAS: Record<Hoja, readonly string[]> = {
   marca: ["codigo_externo", "nombre"],
+  categoria: ["codigo_externo", "nombre"],
   cadena: ["codigo_externo", "nombre"],
   sku: ["codigo_externo", "marca_codigo_externo", "codigo", "nombre"],
   tienda: ["codigo_externo", "cadena_codigo_externo", "nombre"],

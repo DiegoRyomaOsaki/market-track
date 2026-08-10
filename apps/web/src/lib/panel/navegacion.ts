@@ -33,9 +33,9 @@ export const NAV_ADMIN: readonly ItemNav[] = [
     icono: "📦",
     area: "admin",
     titulo: "Catálogo",
-    subtitulo: "Cadenas, tiendas, SKUs y matriz de codificados",
+    subtitulo: "Cadenas, tiendas, SKUs, categorías y matriz de codificados",
     ayuda:
-      "El maestro comercial: cadenas, tiendas (con su geocerca), SKUs y la matriz de qué SKU va codificado en cada tienda. Entra por la importación del Excel del cliente, no se teclea a mano.",
+      "El maestro comercial: cadenas, tiendas (con su geocerca), SKUs, sus categorías y la matriz de qué SKU va codificado en cada tienda. Entra por la importación del Excel del cliente, no se teclea a mano. La categoría es el eje por el que Perfect Store pondera el puntaje —no se mide por SKU sino por categoría y tipo de tienda—; es opcional, y un SKU sin categoría no entra en el puntaje.",
   },
   {
     href: "/admin/precios",

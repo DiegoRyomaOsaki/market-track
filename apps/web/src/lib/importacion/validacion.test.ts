@@ -12,6 +12,7 @@ import {
 
 const NADA: ClavesExistentes = {
   marca: new Set(),
+  categoria: new Set<string>(),
   cadena: new Set(),
   sku: new Set(),
   tienda: new Set(),
@@ -20,6 +21,7 @@ const NADA: ClavesExistentes = {
 function conExistentes(p: Partial<Record<keyof ClavesExistentes, string[]>>) {
   return {
     marca: new Set(p.marca ?? []),
+    categoria: new Set<string>(),
     cadena: new Set(p.cadena ?? []),
     sku: new Set(p.sku ?? []),
     tienda: new Set(p.tienda ?? []),

@@ -46,7 +46,13 @@ function clienteFalso(filas: Fila[], opciones: { error?: string } = {}) {
   return { cliente, consultas };
 }
 
-const SIN_REFERENCIAS = { marca: [], cadena: [], sku: [], tienda: [] };
+const SIN_REFERENCIAS = {
+  marca: [],
+  categoria: [],
+  cadena: [],
+  sku: [],
+  tienda: [],
+};
 
 describe("clavesExistentes", () => {
   it("NO da por existente un código que es de OTRO cliente", async () => {
@@ -79,17 +85,27 @@ describe("clavesExistentes", () => {
     expect(r.marca.has("MRC")).toBe(true);
   });
 
-  it("filtra por el tenant en las CUATRO tablas, no solo en una", async () => {
+  it("filtra por el tenant en TODAS las tablas, no solo en una", async () => {
     const { cliente, consultas } = clienteFalso([]);
 
     await clavesExistentes(cliente as never, TENANT, {
       marca: ["A"],
+      categoria: ["E"],
       cadena: ["B"],
       sku: ["C"],
       tienda: ["D"],
     });
 
-    expect(consultas).toHaveLength(4);
+    // Una por tabla referenciable. El número sale de las claves que se piden, no
+    // de un literal: así una tabla nueva entra sola y no deja este test viejo.
+    expect(consultas).toHaveLength(5);
+    expect(consultas.map((c) => c.tabla).sort()).toEqual([
+      "cadena",
+      "categoria",
+      "marca",
+      "sku",
+      "tienda",
+    ]);
     expect(consultas.every((c) => c.tenant === TENANT)).toBe(true);
   });
 
