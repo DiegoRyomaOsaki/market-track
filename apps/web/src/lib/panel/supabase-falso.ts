@@ -14,7 +14,10 @@ type Fila = Record<string, unknown>;
 
 export type RespuestaLista = {
   data: Fila[] | null;
-  error: { message: string } | null;
+  // `code` es opcional porque no todo test lo necesita, pero tiene que existir:
+  // las acciones traducen el SQLSTATE (23505 duplicado, 23503 FK) al mensaje que
+  // ve el operador, y sin el código esa traducción no se puede probar.
+  error: { message: string; code?: string } | null;
 };
 
 /** El mismo error de PostgREST cuando se pide una fila y llegan varias. */
@@ -53,9 +56,20 @@ function consultaSobre(filas: Fila[]) {
 function escrituraSobre(
   resultado: RespuestaLista,
   filtros: [string, unknown][],
+  insertadas: Fila[],
 ) {
   const encadenable = {
-    update: () => encadenable,
+    // La fila se GUARDA, no solo se cuenta: lo que se manda a la base es parte
+    // del contrato de una server action, y un doble que la descarte deja pasar
+    // un campo de más o un `tenant_id` que no debía viajar.
+    insert: (fila: Fila) => {
+      insertadas.push(fila);
+      return encadenable;
+    },
+    update: (fila: Fila) => {
+      insertadas.push(fila);
+      return encadenable;
+    },
     delete: () => encadenable,
     // Los filtros se APUNTAN, igual que en la lectura. Un doble que ignora el
     // `.eq(...)` deja pasar una escritura que apunta a la fila equivocada: el
@@ -96,6 +110,8 @@ export function supabaseFalso({
   const rpcsPedidas: { nombre: string; argumentos: unknown }[] = [];
   /** Los `.eq(...)` de la última escritura, para afirmar A QUÉ FILA apuntó. */
   const filtrosDeEscritura: [string, unknown][] = [];
+  /** Las filas que se mandaron a escribir, en orden. */
+  const filasEscritas: Fila[] = [];
 
   const cliente = {
     auth: {
@@ -109,7 +125,7 @@ export function supabaseFalso({
       tablasPedidas.push(tabla);
       return tabla === "profile"
         ? consultaSobre(perfiles)
-        : escrituraSobre(escritura, filtrosDeEscritura);
+        : escrituraSobre(escritura, filtrosDeEscritura, filasEscritas);
     },
     rpc: (nombre: string, argumentos: unknown) => {
       rpcsPedidas.push({ nombre, argumentos });
@@ -117,7 +133,13 @@ export function supabaseFalso({
     },
   };
 
-  return { cliente, tablasPedidas, rpcsPedidas, filtrosDeEscritura };
+  return {
+    cliente,
+    tablasPedidas,
+    rpcsPedidas,
+    filtrosDeEscritura,
+    filasEscritas,
+  };
 }
 
 /** Los perfiles del seed: varios, que es justo lo que rompía el gate sin filtro. */

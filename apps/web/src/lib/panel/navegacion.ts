@@ -45,7 +45,7 @@ export const NAV_ADMIN: readonly ItemNav[] = [
     titulo: "Precios y promociones",
     subtitulo: "Precios regulares y promociones vigentes",
     ayuda:
-      "Precios regulares y promociones vigentes por SKU. El motor de alertas compara lo que el mercaderista levanta en campo contra estos valores para detectar desviaciones de precio.",
+      "Precios regulares y promociones vigentes por SKU. El motor de alertas compara lo que el mercaderista levanta en campo contra estos valores para detectar desviaciones de precio. La fecha de vigencia forma parte de la identidad del precio: para subirlo a partir de un día se da de alta uno nuevo con esa fecha, no se edita el anterior —así queda el histórico—. Una promoción sin clusters aplica a todas las tiendas.",
   },
   {
     href: "/admin/exhibiciones",
@@ -55,7 +55,7 @@ export const NAV_ADMIN: readonly ItemNav[] = [
     titulo: "Exhibiciones negociadas",
     subtitulo: "Espacios negociados por tienda",
     ayuda:
-      "Los espacios de exhibición negociados por tienda. El mercaderista verifica en campo que se cumplan; si faltan, se dispara una alerta de exhibición incompleta.",
+      "Los espacios de exhibición negociados por tienda. Los negocia una MARCA, no el cliente entero: la misma tienda puede tener a la vez una cabecera de una marca y una isla de otra. El mercaderista verifica en campo que se cumplan; si faltan, se dispara una alerta de exhibición incompleta. Renegociar el mismo espacio para otro periodo es un alta nueva con su fecha de inicio, no una edición.",
   },
   {
     href: "/admin/formularios",
