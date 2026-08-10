@@ -296,6 +296,25 @@ describe("aplicar_importacion — la categoría del SKU", () => {
     });
   });
 
+  it("una categoría que NO existe aborta, no deja el SKU sin categoría", async () => {
+    // El LEFT join junta dos cosas distintas: la celda vacía (que sí debe dejar
+    // el SKU sin categoría) y el código con una errata (que no). Sin esta
+    // guarda, el segundo se guardaría en silencio y el import diría "aplicado".
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const id = await nuevaImportacion(c);
+      const error = await alIntentar(c, () =>
+        aplicar(c, id, {
+          ...LOTE_COMPLETO,
+          sku: [{ ...SKU, categoria_codigo_externo: "NO-EXISTE" }],
+        }),
+      );
+
+      expect(error).toMatch(/categoría que no existe/);
+      // Todo o nada: ni el SKU ni la marca se quedan escritos.
+      expect(await contar(c, "sku", "IMP-SKU")).toBe(0);
+    });
+  });
+
   it("reimportar la misma categoría la actualiza, no la duplica", async () => {
     await comoUsuario(db, USUARIOS.admin, async (c) => {
       await aplicar(c, await nuevaImportacion(c), LOTE_COMPLETO);

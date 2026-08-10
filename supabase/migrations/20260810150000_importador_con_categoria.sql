@@ -89,6 +89,23 @@ begin
   get diagnostics v_n = row_count;
   v_resumen := v_resumen || jsonb_build_object('cadena', v_n);
 
+  -- La categoría entra por LEFT join, así que una que no resuelve no descarta la
+  -- fila: la deja con `categoria_id` nulo. Eso es lo que se quiere de una celda
+  -- VACÍA, pero no de un código con una errata — ahí el SKU se guardaría sin
+  -- categoría y el import diría "aplicado". `marca` no tiene ese agujero porque
+  -- entra por join normal y el contador de filas lo caza. Esta guarda le da a la
+  -- categoría la misma red, distinguiendo las dos cosas que el LEFT join junta.
+  select count(*) into v_n
+  from jsonb_to_recordset(coalesce(p_lote->'sku', '[]'::jsonb))
+    as f(categoria_codigo_externo text)
+  left join public.categoria c
+    on c.tenant_id = v_tenant and c.codigo_externo = f.categoria_codigo_externo
+  where f.categoria_codigo_externo is not null and c.id is null;
+  if v_n > 0 then
+    raise exception 'sku: % filas traen una categoría que no existe',
+      v_n using errcode = 'data_exception';
+  end if;
+
   insert into public.sku (tenant_id, codigo_externo, marca_id, categoria_id,
                           codigo, nombre, presentacion, codigo_barras)
   -- La categoría se resuelve con LEFT join: sin categoría el SKU entra igual, que
@@ -234,3 +251,13 @@ $$;
 
 comment on function public.aplicar_importacion(uuid, jsonb) is
   'Aplica un lote YA VALIDADO del maestro comercial en una sola transacción: todo o nada. El tenant sale de la fila `importacion`, nunca de un parámetro. NO toca `activo` ni desactiva por ausencia. La categoría del SKU es opcional y una celda vacía la CONSERVA.';
+
+-- Los permisos se repiten aunque `create or replace` conserve las ACL de la
+-- función que ya existía. Sin ellos, esta migración depende de que su predecesora
+-- siga en el historial y de que nadie la convierta en un `drop` + `create` — que
+-- sí perdería los grants, y en silencio: la función quedaría ejecutable por
+-- `public`. Repetirlos es barato y la hace autocontenida.
+revoke execute on function public.aplicar_importacion(uuid, jsonb) from public;
+revoke execute on function public.aplicar_importacion(uuid, jsonb) from anon;
+grant execute on function public.aplicar_importacion(uuid, jsonb)
+  to authenticated, service_role;
