@@ -11,6 +11,7 @@ import {
   FotoEvidencia,
 } from "@/components/evidencia/foto-evidencia";
 import { Aviso, Pastilla, TD, TH } from "@/components/panel/tabla";
+import { soles } from "@/lib/formato";
 import { urlsFirmadas } from "@/lib/fotos-firmadas";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
@@ -320,7 +321,7 @@ export default async function DetalleReportePage({
                         <td className={TD}>
                           {s.precio_registrado === null
                             ? "—"
-                            : `S/ ${s.precio_registrado.toFixed(2)}`}
+                            : soles(s.precio_registrado)}
                         </td>
                         <td className={TD}>
                           {s.hay_promo === null
