@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { construirXlsx } from "./__fixtures__/xlsx";
 import { aplicarImportacion, validarImportacion } from "./acciones";
+import { construirXlsx } from "./xlsx";
 
 // Las dos operaciones del importador. Lo que más importa aquí es lo que NO puede
 // pasar: aplicar un archivo distinto del que se revisó, o dar por bueno un
@@ -56,6 +56,25 @@ function archivoConError() {
       ],
     },
   ]);
+}
+
+/**
+ * El formulario tal como llega del navegador: los campos de texto y el archivo.
+ *
+ * Las acciones reciben `FormData` porque es lo único que cruza la frontera
+ * cliente→servidor; los tests la construyen igual que la construiría el
+ * navegador, para no probar una entrada que en producción no existe.
+ */
+function fd(campos: Record<string, string>, archivo: Buffer): FormData {
+  const formulario = new FormData();
+  for (const [campo, valor] of Object.entries(campos)) {
+    formulario.set(campo, valor);
+  }
+  formulario.set(
+    "archivo",
+    new File([new Uint8Array(archivo)], "maestro.xlsx"),
+  );
+  return formulario;
 }
 
 function clienteFalso() {
@@ -111,7 +130,9 @@ beforeEach(() => {
 describe("validarImportacion", () => {
   it("no escribe en el maestro: solo deja constancia de lo revisado", async () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
-    const r = await validarImportacion({ tenantId: TENANT }, archivoValido());
+    const r = await validarImportacion(
+      fd({ tenantId: TENANT }, archivoValido()),
+    );
 
     expect(r.ok).toBe(true);
     // Ni una llamada a la función que aplica.
@@ -123,7 +144,7 @@ describe("validarImportacion", () => {
     // no valdría nada: bastaría con mandar el hash del que se revisó.
     vi.spyOn(console, "info").mockImplementation(() => {});
     const archivo = archivoValido();
-    await validarImportacion({ tenantId: TENANT }, archivo);
+    await validarImportacion(fd({ tenantId: TENANT }, archivo));
 
     expect(consultas.insertados[0]?.archivo_hash).toBe(
       createHash("sha256").update(archivo).digest("hex"),
@@ -133,7 +154,9 @@ describe("validarImportacion", () => {
   it("un archivo con errores queda en `con_errores`, no en `previsualizada`", async () => {
     // El estado es lo que impide aplicarlo: la guarda vive en la base.
     vi.spyOn(console, "info").mockImplementation(() => {});
-    const r = await validarImportacion({ tenantId: TENANT }, archivoConError());
+    const r = await validarImportacion(
+      fd({ tenantId: TENANT }, archivoConError()),
+    );
 
     expect(r.ok).toBe(true);
     if (!r.ok) return;
@@ -143,7 +166,9 @@ describe("validarImportacion", () => {
 
   it("un archivo limpio queda `previsualizada` y con su resumen", async () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
-    const r = await validarImportacion({ tenantId: TENANT }, archivoValido());
+    const r = await validarImportacion(
+      fd({ tenantId: TENANT }, archivoValido()),
+    );
 
     expect(consultas.insertados[0]?.estado).toBe("previsualizada");
     if (!r.ok) return;
@@ -152,7 +177,7 @@ describe("validarImportacion", () => {
 
   it("guarda los errores en la forma que la pantalla espera", async () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
-    await validarImportacion({ tenantId: TENANT }, archivoConError());
+    await validarImportacion(fd({ tenantId: TENANT }, archivoConError()));
 
     const errores = consultas.insertados[0]?.errores;
     const primero: unknown = Array.isArray(errores) ? errores[0] : null;
@@ -166,7 +191,9 @@ describe("validarImportacion", () => {
 
   it("un supervisor no importa el maestro", async () => {
     conRol("supervisor");
-    const r = await validarImportacion({ tenantId: TENANT }, archivoValido());
+    const r = await validarImportacion(
+      fd({ tenantId: TENANT }, archivoValido()),
+    );
 
     expect(r.ok).toBe(false);
     if (r.ok) return;
@@ -176,21 +203,23 @@ describe("validarImportacion", () => {
   it("sin sesión tampoco", async () => {
     sesion.actual = null;
     expect(
-      (await validarImportacion({ tenantId: TENANT }, archivoValido())).ok,
+      (await validarImportacion(fd({ tenantId: TENANT }, archivoValido()))).ok,
     ).toBe(false);
   });
 
   it("un tenant que no es un uuid se rechaza antes de leer el archivo", async () => {
     expect(
-      (await validarImportacion({ tenantId: "../../otro" }, archivoValido()))
-        .ok,
+      (
+        await validarImportacion(
+          fd({ tenantId: "../../otro" }, archivoValido()),
+        )
+      ).ok,
     ).toBe(false);
   });
 
   it("un archivo enorme se rechaza sin descomprimirlo", async () => {
     const r = await validarImportacion(
-      { tenantId: TENANT },
-      Buffer.alloc(3 * 1024 * 1024),
+      fd({ tenantId: TENANT }, Buffer.alloc(3 * 1024 * 1024)),
     );
     expect(r.ok).toBe(false);
   });
@@ -198,13 +227,36 @@ describe("validarImportacion", () => {
   it("un archivo que no es un Excel da un error legible", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const r = await validarImportacion(
-      { tenantId: TENANT },
-      Buffer.from("no soy un xlsx"),
+      fd({ tenantId: TENANT }, Buffer.from("no soy un xlsx")),
     );
 
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.error).toMatch(/no pudimos leer el archivo/i);
+  });
+
+  it("un formulario SIN archivo se rechaza: no llega vacío a la validación", async () => {
+    const formulario = new FormData();
+    formulario.set("tenantId", TENANT);
+
+    const r = await validarImportacion(formulario);
+
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/falta el archivo/i);
+  });
+
+  it("un archivo de 0 bytes se trata como ausente, no como un Excel ilegible", async () => {
+    // Es lo que deja un fallo de subida a medias: el campo llega, el contenido
+    // no. Decir "no pudimos leer el archivo" mandaría a revisar un Excel que
+    // está bien.
+    const r = await validarImportacion(
+      fd({ tenantId: TENANT }, Buffer.alloc(0)),
+    );
+
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/falta el archivo/i);
   });
 });
 
@@ -223,7 +275,9 @@ describe("aplicarImportacion", () => {
     const archivo = archivoValido();
     conHashDe(archivo);
 
-    const r = await aplicarImportacion({ importacionId: IMPORTACION }, archivo);
+    const r = await aplicarImportacion(
+      fd({ importacionId: IMPORTACION }, archivo),
+    );
 
     expect(r).toEqual({ ok: true, resumen: { marca: 1 } });
     expect(consultas.llamadas[0]?.nombre).toBe("aplicar_importacion");
@@ -243,7 +297,9 @@ describe("aplicarImportacion", () => {
         ],
       },
     ]);
-    const r = await aplicarImportacion({ importacionId: IMPORTACION }, otro);
+    const r = await aplicarImportacion(
+      fd({ importacionId: IMPORTACION }, otro),
+    );
 
     expect(r.ok).toBe(false);
     if (r.ok) return;
@@ -255,7 +311,9 @@ describe("aplicarImportacion", () => {
     const archivo = archivoConError();
     conHashDe(archivo);
 
-    const r = await aplicarImportacion({ importacionId: IMPORTACION }, archivo);
+    const r = await aplicarImportacion(
+      fd({ importacionId: IMPORTACION }, archivo),
+    );
 
     expect(r.ok).toBe(false);
     if (r.ok) return;
@@ -266,8 +324,7 @@ describe("aplicarImportacion", () => {
   it("una importación que no existe o es ajena da el MISMO mensaje", async () => {
     consultas.importacion = { data: null, error: null };
     const r = await aplicarImportacion(
-      { importacionId: IMPORTACION },
-      archivoValido(),
+      fd({ importacionId: IMPORTACION }, archivoValido()),
     );
 
     expect(r.ok).toBe(false);
@@ -283,7 +340,9 @@ describe("aplicarImportacion", () => {
     conHashDe(archivo);
     rpc.error = { message: "sku: llegaron 3 filas y se escribieron 1" };
 
-    const r = await aplicarImportacion({ importacionId: IMPORTACION }, archivo);
+    const r = await aplicarImportacion(
+      fd({ importacionId: IMPORTACION }, archivo),
+    );
 
     expect(r.ok).toBe(false);
     if (r.ok) return;
@@ -293,8 +352,7 @@ describe("aplicarImportacion", () => {
 
   it("un id que no es uuid se rechaza antes de tocar nada", async () => {
     const r = await aplicarImportacion(
-      { importacionId: "../../otra" },
-      archivoValido(),
+      fd({ importacionId: "../../otra" }, archivoValido()),
     );
     expect(r.ok).toBe(false);
     expect(consultas.llamadas).toEqual([]);
@@ -303,8 +361,7 @@ describe("aplicarImportacion", () => {
   it("un supervisor no aplica el maestro", async () => {
     conRol("supervisor");
     const r = await aplicarImportacion(
-      { importacionId: IMPORTACION },
-      archivoValido(),
+      fd({ importacionId: IMPORTACION }, archivoValido()),
     );
     expect(r.ok).toBe(false);
   });

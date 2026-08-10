@@ -22,8 +22,41 @@ import { codigosReferenciados, validarMaestro } from "./validacion";
 // maestro del cliente. La validación es idéntica en las dos: al aplicar NO se
 // confía en lo que dijo la previsualización — el archivo se vuelve a leer y a
 // validar, y el hash comprueba que sea el mismo que se revisó.
+//
+// Las dos reciben `FormData` porque son el punto de entrada desde el navegador y
+// un `Buffer` no cruza esa frontera. La conversión ocurre aquí, en el servidor:
+// el resto del importador sigue hablando de bytes.
 
 const SECCION = "/admin/importar";
+
+const CAMPO_ARCHIVO = "archivo";
+
+/**
+ * Los bytes del archivo subido, o `null` si el campo no vino o no es un archivo.
+ *
+ * Una server action es un endpoint POST: lo que llega es lo que el cliente quiso
+ * mandar, no lo que el formulario enseñaba. El tope de bytes se comprueba antes
+ * de materializar el buffer — un .xlsx es un zip y descomprimirlo es justo lo que
+ * no queremos hacer con un archivo de tamaño arbitrario.
+ */
+async function bytesDeFormData(
+  formData: FormData,
+): Promise<{ ok: true; archivo: Buffer } | { ok: false; error: string }> {
+  const subido = formData.get(CAMPO_ARCHIVO);
+  if (!(subido instanceof File) || subido.size === 0) {
+    return { ok: false, error: "Falta el archivo" };
+  }
+  if (subido.size > TOPE_BYTES) {
+    return { ok: false, error: "El archivo es demasiado grande" };
+  }
+  return { ok: true, archivo: Buffer.from(await subido.arrayBuffer()) };
+}
+
+/** El valor de un campo de texto del formulario; `null` si vino un archivo. */
+function textoDe(formData: FormData, campo: string): string | null {
+  const valor = formData.get(campo);
+  return typeof valor === "string" ? valor : null;
+}
 
 export type ResultadoValidacion =
   | {
@@ -46,9 +79,10 @@ function hashDe(bytes: Buffer): string {
 
 /** Lee, valida y guarda el informe. No escribe NADA en el maestro. */
 async function revisar(archivo: Buffer, tenantId: string) {
-  const parseo = await parsearMaestro(archivo);
-  if (!parseo.ok) return { ok: false as const, error: parseo.error };
-
+  // El rol PRIMERO, antes de descomprimir nada. Descomprimir y parsear un zip
+  // arbitrario es trabajo real: hacerlo antes de saber quién llama lo regala a
+  // cualquiera con sesión. Que el middleware cubra hoy `/admin` no lo autoriza
+  // — una server action es un endpoint por sí misma.
   const sesion = await sesionDeStaff();
   if (sesion === null || sesion.perfil.rol !== "admin") {
     return {
@@ -56,6 +90,9 @@ async function revisar(archivo: Buffer, tenantId: string) {
       error: "Solo un administrador importa el maestro",
     };
   }
+
+  const parseo = await parsearMaestro(archivo);
+  if (!parseo.ok) return { ok: false as const, error: parseo.error };
 
   const existentes = await clavesExistentes(
     sesion.supabase,
@@ -89,14 +126,16 @@ const validarSchema = z.object({ tenantId: z.guid() });
  * sin tocar ninguna tabla del catálogo.
  */
 export async function validarImportacion(
-  datos: unknown,
-  archivo: Buffer,
+  formData: FormData,
 ): Promise<ResultadoValidacion> {
-  const parsed = validarSchema.safeParse(datos);
+  const parsed = validarSchema.safeParse({
+    tenantId: textoDe(formData, "tenantId"),
+  });
   if (!parsed.success) return { ok: false, error: "Datos inválidos" };
-  if (archivo.byteLength > TOPE_BYTES) {
-    return { ok: false, error: "El archivo es demasiado grande" };
-  }
+
+  const bytes = await bytesDeFormData(formData);
+  if (!bytes.ok) return bytes;
+  const archivo = bytes.archivo;
 
   const revision = await revisar(archivo, parsed.data.tenantId);
   if (!revision.ok) return revision;
@@ -147,11 +186,16 @@ const aplicarSchema = z.object({ importacionId: z.guid() });
  * que revierte las siete tablas si cualquiera falla.
  */
 export async function aplicarImportacion(
-  datos: unknown,
-  archivo: Buffer,
+  formData: FormData,
 ): Promise<ResultadoAplicacion> {
-  const parsed = aplicarSchema.safeParse(datos);
+  const parsed = aplicarSchema.safeParse({
+    importacionId: textoDe(formData, "importacionId"),
+  });
   if (!parsed.success) return { ok: false, error: "Datos inválidos" };
+
+  const bytes = await bytesDeFormData(formData);
+  if (!bytes.ok) return bytes;
+  const archivo = bytes.archivo;
 
   const sesion = await sesionDeStaff();
   if (sesion === null || sesion.perfil.rol !== "admin") {

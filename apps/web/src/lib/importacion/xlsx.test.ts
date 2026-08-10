@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { construirXlsx } from "./xlsx";
 
-// El generador de fixtures se prueba a sí mismo: si `conSharedStrings: false`
+// El generador se prueba a sí mismo: si `conSharedStrings: false`
 // produjera igualmente un `sharedStrings.xml`, el test de regresión del parseo
 // sería un falso verde — estaría comprobando el formato fácil dos veces.
 

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { construirXlsx } from "./__fixtures__/xlsx";
+import { construirXlsx } from "./xlsx";
 import { hojasPresentes, parsearMaestro } from "./parseo";
 
 // El parseo del .xlsx. El test que más importa aquí es el de inline strings: es

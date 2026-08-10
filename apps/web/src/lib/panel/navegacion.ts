@@ -105,7 +105,7 @@ export const NAV_ADMIN: readonly ItemNav[] = [
     titulo: "Importar Excel",
     subtitulo: "Carga del maestro comercial del cliente",
     ayuda:
-      "Carga del Excel del cliente: se mapean sus columnas a las del sistema, se previsualiza fila por fila y se aplica de forma transaccional —todo o nada—. Un reimport actualiza, nunca borra por ausencia.",
+      "Carga del maestro comercial sobre el cliente-marca activo. Se descarga la plantilla —una hoja por entidad, con sus cabeceras—, el cliente la rellena, y al subirla se previsualiza fila por fila: los errores se listan con su número de fila del Excel y hasta que no queda ninguno no se puede aplicar. Aplicar es todo o nada. Un reimport actualiza lo que ya existe y crea lo nuevo; nada se borra ni se desactiva por no venir en el archivo.",
   },
 ];
 
