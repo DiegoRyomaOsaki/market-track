@@ -60,6 +60,34 @@ describe("los pesos", () => {
     ).toBe(true);
   });
 
+  it("acepta unos pesos con decimales que suman 100", () => {
+    // La trampa de la coma flotante: en JavaScript estos cinco suman
+    // 100.00000000000001, así que un `=== 100` los rechazaría — y la base, con
+    // `numeric(5,2)` exacto, los acepta. La frontera no puede ser más estricta
+    // que lo que se guarda.
+    expect(
+      pesosPerfectStoreSchema.safeParse({
+        peso_distribucion: 28.94,
+        peso_visibilidad: 35.1,
+        peso_precio: 9.04,
+        peso_pop: 7.55,
+        peso_orden: 19.37,
+      }).success,
+    ).toBe(true);
+  });
+
+  it("sigue rechazando unos decimales que de verdad no suman 100", () => {
+    expect(
+      pesosPerfectStoreSchema.safeParse({
+        peso_distribucion: 28.94,
+        peso_visibilidad: 35.1,
+        peso_precio: 9.04,
+        peso_pop: 7.55,
+        peso_orden: 19.38,
+      }).success,
+    ).toBe(false);
+  });
+
   it("rechaza un peso negativo", () => {
     expect(
       pesosPerfectStoreSchema.safeParse({

@@ -28,6 +28,11 @@ const porcentaje = (etiqueta: string) =>
 /** La suma exacta que la base también hace cumplir. */
 export const SUMA_DE_PESOS = 100;
 
+/** Un porcentaje como entero de centésimas: la misma precisión que `numeric(5,2)`. */
+function centesimas(valor: number): number {
+  return Math.round(valor * 100);
+}
+
 /**
  * Los cinco pesos de Perfect Store.
  *
@@ -46,12 +51,17 @@ export const pesosPerfectStoreSchema = z
   })
   .refine(
     (p) =>
-      p.peso_distribucion +
-        p.peso_visibilidad +
-        p.peso_precio +
-        p.peso_pop +
-        p.peso_orden ===
-      SUMA_DE_PESOS,
+      // En CENTÉSIMAS ENTERAS, no sumando los decimales. La columna es
+      // `numeric(5,2)` —aritmética exacta— pero en JavaScript
+      // 28.94 + 35.1 + 9.04 + 7.55 + 19.37 da 100.00000000000001, así que un
+      // `=== 100` rechazaría unos pesos que la base acepta sin pestañear. La
+      // frontera no puede ser más estricta que lo que guarda.
+      centesimas(p.peso_distribucion) +
+        centesimas(p.peso_visibilidad) +
+        centesimas(p.peso_precio) +
+        centesimas(p.peso_pop) +
+        centesimas(p.peso_orden) ===
+      SUMA_DE_PESOS * 100,
     {
       path: ["peso_distribucion"],
       message: `Los cinco pesos tienen que sumar ${SUMA_DE_PESOS}`,

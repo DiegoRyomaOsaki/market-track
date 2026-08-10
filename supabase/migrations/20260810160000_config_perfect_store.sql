@@ -129,8 +129,10 @@ create trigger config_ps_inmutable
 -- que recalcular un puntaje viejo use la configuración de entonces y no la de
 -- hoy: sin ella, el histórico se movería con cada reajuste.
 --
--- `stable` y no `volatile`: no escribe nada y para una misma transacción devuelve
--- lo mismo, así que el planificador puede sacarla de un bucle por fila.
+-- `stable` y no `volatile`: no escribe nada y no cambia dentro de una misma
+-- sentencia, así que el planificador puede sacarla de un bucle por fila. (No
+-- promete nada a lo largo de toda la transacción — eso sería el nivel de
+-- aislamiento, no la volatilidad.)
 -- ---------------------------------------------------------------------------
 create function app.config_perfect_store_aplicable(
   p_tenant_id    uuid,
@@ -155,12 +157,20 @@ as $$
     and (c.categoria_id is null or c.categoria_id = p_categoria_id)
     and (c.tipo_tienda  is null or c.tipo_tienda  = p_tipo_tienda)
   order by
-    -- Especificidad: los dos ejes puestos > uno > ninguno (el default de marca).
-    (c.categoria_id is not null)::int + (c.tipo_tienda is not null)::int desc,
+    -- Especificidad, y la CATEGORÍA pesa más que el tipo de tienda.
+    --
+    -- Sumar los dos ejes por igual los empataría: una fila acotada solo por
+    -- categoría y otra solo por tipo de tienda valdrían 1 las dos, y ganaría la
+    -- que el desempate escogiera — un resultado correcto pero inexplicable ante
+    -- el cliente. La categoría manda porque es del producto, y así lo dijo él:
+    -- "no es por SKU, es por categoría, por tipo tienda", en ese orden.
+    --
+    --   categoría + tipo = 3   categoría = 2   tipo = 1   ninguno = 0
+    (c.categoria_id is not null)::int * 2 + (c.tipo_tienda is not null)::int desc,
     -- A igual especificidad, la vigente más reciente.
     c.vigente_desde desc,
-    -- Desempate estable: dos filas con la misma clave natural no existen, pero
-    -- sin un orden total el resultado dependería del plan.
+    -- Desempate estable: con la clave natural no puede haber dos filas iguales
+    -- hasta aquí, pero sin un orden total el resultado dependería del plan.
     c.id
   limit 1;
 $$;

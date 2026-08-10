@@ -191,6 +191,36 @@ describe("la resolución de la configuración aplicable", () => {
     });
   });
 
+  it("entre categoría sola y tipo de tienda solo, gana la CATEGORÍA", async () => {
+    // Las dos tienen un eje puesto: sumarlos por igual las empataría y ganaría
+    // la que el desempate escogiera — correcto pero inexplicable ante el
+    // cliente. La categoría manda porque es del producto, y así lo dijo él: "no
+    // es por SKU, es por categoría, por tipo tienda", en ese orden.
+    await comoUsuario(client, USUARIOS.admin, async (c) => {
+      const r = await c.query<{ id: string }>(`${INSERTAR} returning id`, [
+        TENANTS.maracumango,
+        IDS.marcaMrc,
+        null,
+        "hiper",
+        10,
+        20,
+        30,
+        20,
+        20,
+        55,
+        "2026-01-01",
+      ]);
+      const soloPorTipo = r.rows[0]?.id;
+
+      // Con los dos ejes en juego gana la de categoría, no la de tipo.
+      expect(
+        (await resolver(c, { categoria: IDS.categoriaMrc, tipo: "hiper" }))?.id,
+      ).toBe(IDS.afinadaPorCategoria);
+      // Y la de tipo sigue ganando cuando la categoría no aplica.
+      expect((await resolver(c, { tipo: "hiper" }))?.id).toBe(soloPorTipo);
+    });
+  });
+
   it("una marca sin configuración no resuelve nada", async () => {
     // No inventa un default: el motor tiene que poder distinguir "sin configurar"
     // de "configurada con ceros".
