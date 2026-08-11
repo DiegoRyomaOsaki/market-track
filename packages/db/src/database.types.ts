@@ -1271,6 +1271,76 @@ export type Database = {
           },
         ]
       }
+      puntaje_perfect_store: {
+        Row: {
+          calculado_at: string
+          config_id: string
+          distribucion_pct: number | null
+          levantamiento_id: string
+          precio_pct: number | null
+          skus_codificados: number
+          skus_evaluados: number
+          skus_precio_correctos: number
+          skus_precio_evaluados: number
+          skus_presentes: number
+          sos_real_pct: number | null
+          tenant_id: string
+          visibilidad_pct: number | null
+        }
+        Insert: {
+          calculado_at?: string
+          config_id: string
+          distribucion_pct?: number | null
+          levantamiento_id: string
+          precio_pct?: number | null
+          skus_codificados?: number
+          skus_evaluados?: number
+          skus_precio_correctos?: number
+          skus_precio_evaluados?: number
+          skus_presentes?: number
+          sos_real_pct?: number | null
+          tenant_id: string
+          visibilidad_pct?: number | null
+        }
+        Update: {
+          calculado_at?: string
+          config_id?: string
+          distribucion_pct?: number | null
+          levantamiento_id?: string
+          precio_pct?: number | null
+          skus_codificados?: number
+          skus_evaluados?: number
+          skus_precio_correctos?: number
+          skus_precio_evaluados?: number
+          skus_presentes?: number
+          sos_real_pct?: number | null
+          tenant_id?: string
+          visibilidad_pct?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "puntaje_perfect_store_config_id_fkey"
+            columns: ["config_id"]
+            isOneToOne: false
+            referencedRelation: "config_perfect_store"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "puntaje_perfect_store_levantamiento_id_fkey"
+            columns: ["levantamiento_id"]
+            isOneToOne: true
+            referencedRelation: "levantamiento"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "puntaje_perfect_store_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       revision_visita: {
         Row: {
           creado_at: string
@@ -2058,6 +2128,12 @@ export type Database = {
       estado_rutero: "borrador" | "publicado" | "en_curso" | "completado"
       estado_solicitud_ruta: "nueva" | "vista" | "resuelta" | "rechazada"
       estado_visita: "en_curso" | "completada" | "bloqueada"
+      evaluacion_precio:
+        | "sin_precio_vigente"
+        | "correcto"
+        | "sobreprecio"
+        | "promo_no_comunicada"
+        | "subvaluado_sin_promo"
       modulo_portal: "dashboard" | "mapa" | "galeria" | "alertas" | "reportes"
       paso_levantamiento:
         | "checkin"
@@ -2238,6 +2314,13 @@ export const Constants = {
       estado_rutero: ["borrador", "publicado", "en_curso", "completado"],
       estado_solicitud_ruta: ["nueva", "vista", "resuelta", "rechazada"],
       estado_visita: ["en_curso", "completada", "bloqueada"],
+      evaluacion_precio: [
+        "sin_precio_vigente",
+        "correcto",
+        "sobreprecio",
+        "promo_no_comunicada",
+        "subvaluado_sin_promo",
+      ],
       modulo_portal: ["dashboard", "mapa", "galeria", "alertas", "reportes"],
       paso_levantamiento: [
         "checkin",
