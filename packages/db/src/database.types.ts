@@ -1285,6 +1285,7 @@ export type Database = {
           skus_presentes: number
           sos_real_pct: number | null
           tenant_id: string
+          total_pct: number | null
           visibilidad_pct: number | null
         }
         Insert: {
@@ -1300,6 +1301,7 @@ export type Database = {
           skus_presentes?: number
           sos_real_pct?: number | null
           tenant_id: string
+          total_pct?: number | null
           visibilidad_pct?: number | null
         }
         Update: {
@@ -1315,6 +1317,7 @@ export type Database = {
           skus_presentes?: number
           sos_real_pct?: number | null
           tenant_id?: string
+          total_pct?: number | null
           visibilidad_pct?: number | null
         }
         Relationships: [
@@ -1334,6 +1337,83 @@ export type Database = {
           },
           {
             foreignKeyName: "puntaje_perfect_store_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      puntaje_perfect_store_categoria: {
+        Row: {
+          calculado_at: string
+          categoria_id: string
+          config_id: string
+          distribucion_pct: number | null
+          levantamiento_id: string
+          precio_pct: number | null
+          skus_codificados: number
+          skus_evaluados: number
+          skus_precio_correctos: number
+          skus_precio_evaluados: number
+          skus_presentes: number
+          tenant_id: string
+          total_pct: number | null
+        }
+        Insert: {
+          calculado_at?: string
+          categoria_id: string
+          config_id: string
+          distribucion_pct?: number | null
+          levantamiento_id: string
+          precio_pct?: number | null
+          skus_codificados?: number
+          skus_evaluados?: number
+          skus_precio_correctos?: number
+          skus_precio_evaluados?: number
+          skus_presentes?: number
+          tenant_id: string
+          total_pct?: number | null
+        }
+        Update: {
+          calculado_at?: string
+          categoria_id?: string
+          config_id?: string
+          distribucion_pct?: number | null
+          levantamiento_id?: string
+          precio_pct?: number | null
+          skus_codificados?: number
+          skus_evaluados?: number
+          skus_precio_correctos?: number
+          skus_precio_evaluados?: number
+          skus_presentes?: number
+          tenant_id?: string
+          total_pct?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "puntaje_perfect_store_categoria_categoria_id_fkey"
+            columns: ["categoria_id"]
+            isOneToOne: false
+            referencedRelation: "categoria"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "puntaje_perfect_store_categoria_config_id_fkey"
+            columns: ["config_id"]
+            isOneToOne: false
+            referencedRelation: "config_perfect_store"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "puntaje_perfect_store_categoria_levantamiento_id_fkey"
+            columns: ["levantamiento_id"]
+            isOneToOne: false
+            referencedRelation: "levantamiento"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "puntaje_perfect_store_categoria_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenant"
@@ -2044,6 +2124,24 @@ export type Database = {
           p_tope_visitas?: number
         }
         Returns: Json
+      }
+      perfect_store_agregado: {
+        Args: {
+          p_categoria?: string
+          p_desde: string
+          p_hasta: string
+          p_marca?: string
+          p_mercaderista?: string
+          p_tienda?: string
+          p_tipo_tienda?: Database["public"]["Enums"]["tipo_tienda"]
+        }
+        Returns: {
+          distribucion_pct: number
+          levantamientos: number
+          precio_pct: number
+          total_pct: number
+          visibilidad_pct: number
+        }[]
       }
       planeacion_ruteros: {
         Args: { p_desde: string; p_hasta: string; p_mercaderista: string }
