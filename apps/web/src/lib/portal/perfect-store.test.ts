@@ -180,6 +180,20 @@ describe("armarVariables", () => {
     });
   });
 
+  it("cada variable explica cómo se calcula", () => {
+    // De estos números salen bonos: el cliente tiene derecho a ver la cuenta.
+    const kpis = armarVariables(AGREGADO, null);
+    for (const kpi of kpis) {
+      expect(kpi.ayuda, kpi.clave).toBeDefined();
+      expect(kpi.ayuda!.length, kpi.clave).toBeGreaterThan(30);
+    }
+  });
+
+  it("la ayuda de una variable no evaluada dice que su peso se reparte", () => {
+    const kpis = armarVariables(AGREGADO, null);
+    expect(kpis.find((k) => k.clave === "pop")?.ayuda).toMatch(/reparte/);
+  });
+
   it("sin periodo anterior no se inventa una comparación", () => {
     const kpis = armarVariables(AGREGADO, null);
     expect(kpis[0]?.tendencia).toEqual({ disponible: false });

@@ -118,6 +118,10 @@ export type Kpi = {
   // Para colorear la flecha: en cumplimiento/SOS/exhibiciones "subir" es bueno;
   // en quiebres/diferencias/desviaciones, subir es malo.
   subirEsBueno: boolean;
+  /** Cómo se calcula el número. Opcional: los KPI del dashboard todavía no la
+   *  traen, los de Perfect Store sí — de ahí sale un bono, y el cliente tiene
+   *  derecho a ver la cuenta. */
+  ayuda?: string;
 };
 
 function pct(v: number | null): string {

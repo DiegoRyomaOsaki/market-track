@@ -221,11 +221,14 @@ export function armarVariables(
     valor: "No evaluada",
     tendencia: { disponible: false },
     subirEsBueno: true,
+    ayuda:
+      "Todavía no se mide en campo. Su peso se reparte entre las variables que sí se evaluaron, así que no cuenta como cero ni baja el puntaje.",
   });
 
   const evaluada = (
     clave: string,
     etiqueta: string,
+    ayuda: string,
     lee: (f: FilaAgregado) => number | null,
   ): Kpi => ({
     clave,
@@ -236,13 +239,34 @@ export function armarVariables(
       previo ? lee(previo) : null,
     ),
     subirEsBueno: true,
+    ayuda,
   });
 
   return [
-    evaluada("total", "Puntaje Perfect Store", (f) => f.total_pct),
-    evaluada("distribucion", "Distribución", (f) => f.distribucion_pct),
-    evaluada("visibilidad", "Visibilidad", (f) => f.visibilidad_pct),
-    evaluada("precio", "Precio", (f) => f.precio_pct),
+    evaluada(
+      "total",
+      "Puntaje Perfect Store",
+      "El promedio ponderado de las variables evaluadas, con los pesos de la configuración vigente para tu marca. Una variable que no se evaluó no puntúa cero: su peso se reparte entre las demás.",
+      (f) => f.total_pct,
+    ),
+    evaluada(
+      "distribucion",
+      "Distribución",
+      "De los SKU codificados para la tienda, qué porcentaje se encontró en góndola (sin quiebre).",
+      (f) => f.distribucion_pct,
+    ),
+    evaluada(
+      "visibilidad",
+      "Visibilidad",
+      "Tu Share of Shelf medido —frentes propios sobre el total de frentes— comparado con el objetivo de tu configuración. Al llegar al objetivo la variable marca 100.",
+      (f) => f.visibilidad_pct,
+    ),
+    evaluada(
+      "precio",
+      "Precio",
+      "De los SKU con precio registrado y precio vigente que comparar, qué porcentaje estaba correcto.",
+      (f) => f.precio_pct,
+    ),
     noEvaluada("pop", "Material POP"),
     noEvaluada("orden", "Orden y limpieza"),
   ];

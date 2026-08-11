@@ -33,6 +33,15 @@ export function KpiCard({ kpi }: { kpi: Kpi }) {
           {t.disponible ? "Sin cambios" : "Sin comparación"}
         </div>
       )}
+      {/* `details` nativo: se abre con teclado y sin una línea de JavaScript. */}
+      {kpi.ayuda ? (
+        <details className="text-[11.5px] text-muted-foreground">
+          <summary className="cursor-pointer rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            Cómo se calcula
+          </summary>
+          <p className="mt-1">{kpi.ayuda}</p>
+        </details>
+      ) : null}
     </div>
   );
 }

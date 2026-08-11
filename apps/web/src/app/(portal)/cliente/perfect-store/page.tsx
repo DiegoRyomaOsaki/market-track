@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { Aviso } from "@/components/panel/tabla";
 import { KpisFila } from "@/components/portal/dashboard/kpis";
@@ -6,7 +7,7 @@ import { GraficaEvolucion } from "@/components/portal/perfect-store/grafica-evol
 import { MigasDrilldown } from "@/components/portal/perfect-store/migas-drilldown";
 import { TablaDesglose } from "@/components/portal/perfect-store/tabla-desglose";
 import { periodoAnterior, periodoDeFiltros } from "@/lib/portal/dashboard";
-import { requerirModulo } from "@/lib/portal/estado-modulos";
+import { modulosDelCliente, requerirModulo } from "@/lib/portal/estado-modulos";
 import { leerFiltros, type ParamsBusqueda } from "@/lib/portal/filtros";
 import {
   armarVariables,
@@ -50,7 +51,7 @@ export default async function PerfectStorePage({
   };
 
   const supabase = await createServerSupabaseClient();
-  const [actualRes, previoRes, serieRes, desgloseRes, nombres] =
+  const [actualRes, previoRes, serieRes, desgloseRes, nombres, estado] =
     await Promise.all([
       supabase.rpc("perfect_store_agregado", {
         p_desde: periodo.desde,
@@ -78,6 +79,7 @@ export default async function PerfectStorePage({
           })
         : Promise.resolve(null),
       nombresDeLaSeleccion(supabase, seleccion),
+      modulosDelCliente(),
     ]);
 
   if (actualRes.error || serieRes.error || desgloseRes?.error) {
@@ -163,6 +165,20 @@ export default async function PerfectStorePage({
         <Aviso>
           Estás viendo una tienda concreta: no hay un nivel más detallado que
           desglosar. Sube por el rastro de arriba para comparar con otras.
+          {/* El puntaje dice QUÉ variable cae; la evidencia dice por qué. Solo
+              si la galería está habilitada: una sección apagada no es únicamente
+              invisible, es inaccesible, y el enlace llevaría a un 404. */}
+          {globales.tienda && estado.galeria ? (
+            <>
+              {" "}
+              <Link
+                href={`/cliente/tienda/${encodeURIComponent(globales.tienda)}`}
+                className="inline-flex min-h-11 items-center underline underline-offset-2 hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                Ver la evidencia fotográfica de esta tienda
+              </Link>
+            </>
+          ) : null}
         </Aviso>
       )}
 
