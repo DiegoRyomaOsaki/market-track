@@ -9,6 +9,7 @@ import {
   moverParada,
   periodoVecino,
   rangoDeVista,
+  horaCorta,
   sePuedePublicar,
   type DiaPlaneado,
   type FilaPlaneacion,
@@ -22,6 +23,7 @@ function fila(over: Partial<FilaPlaneacion> = {}): FilaPlaneacion {
     estado: "borrador",
     parada_id: "p1",
     orden: 1,
+    hora_planificada: null,
     tienda_id: "t1",
     tienda_nombre: "Plaza Vea Surco",
     parada_estado: "pendiente",
@@ -155,11 +157,39 @@ describe("agruparPorDia", () => {
   });
 });
 
+describe("horaCorta", () => {
+  it("recorta los segundos que devuelve Postgres", () => {
+    // `input[type=time]` sin `step` rechaza `HH:MM:SS` y se queda VACÍO en
+    // silencio: el supervisor vería la hora en blanco creyendo que no se guardó.
+    expect(horaCorta("08:30:00")).toBe("08:30");
+  });
+
+  it("sin hora fijada devuelve null, no una cadena vacía", () => {
+    expect(horaCorta(null)).toBe(null);
+  });
+});
+
+describe("agruparPorDia con horas", () => {
+  it("lleva la hora de cada parada, ya recortada", () => {
+    const [dia] = agruparPorDia(
+      [fila({ hora_planificada: "07:45:00" })],
+      "2026-08-03",
+      "2026-08-03",
+    );
+    expect(dia?.paradas[0]?.hora).toBe("07:45");
+  });
+
+  it("una parada sin hora la deja nula: no se fijó ninguna", () => {
+    const [dia] = agruparPorDia([fila()], "2026-08-03", "2026-08-03");
+    expect(dia?.paradas[0]?.hora).toBe(null);
+  });
+});
+
 describe("moverParada", () => {
   const paradas: Parada[] = [
-    { id: "a", orden: 1, tiendaId: "t1", tiendaNombre: "A" },
-    { id: "b", orden: 2, tiendaId: "t2", tiendaNombre: "B" },
-    { id: "c", orden: 3, tiendaId: "t3", tiendaNombre: "C" },
+    { id: "a", orden: 1, tiendaId: "t1", tiendaNombre: "A", hora: null },
+    { id: "b", orden: 2, tiendaId: "t2", tiendaNombre: "B", hora: null },
+    { id: "c", orden: 3, tiendaId: "t3", tiendaNombre: "C", hora: null },
   ];
 
   it("sube una posición", () => {
@@ -185,7 +215,9 @@ describe("sePuedePublicar", () => {
     fecha: "2026-08-03",
     ruteroId: "r1",
     estado: "borrador",
-    paradas: [{ id: "a", orden: 1, tiendaId: "t1", tiendaNombre: "A" }],
+    paradas: [
+      { id: "a", orden: 1, tiendaId: "t1", tiendaNombre: "A", hora: null },
+    ],
   };
 
   it("un borrador con paradas sí", () => {

@@ -5,12 +5,14 @@ import { useRef, useState, useTransition } from "react";
 import { Pastilla } from "@/components/panel/tabla";
 import {
   agregarParada,
+  fijarHoraParada,
   publicarRutero,
   quitarParada,
   reordenarParadas,
 } from "@/lib/panel/acciones-ruteros";
 import {
   moverParada,
+  type Parada,
   sePuedePublicar,
   type DiaPlaneado,
 } from "@/lib/panel/ruteros";
@@ -136,6 +138,24 @@ export function DiaRutero({
                   <span className="min-w-0 flex-1 basis-[8rem] truncate text-[12px]">
                     {p.tiendaNombre}
                   </span>
+                  {editable ? (
+                    <HoraParada
+                      parada={p}
+                      inactivo={pendiente}
+                      onGuardar={(hora) =>
+                        ejecutar(
+                          () => fijarHoraParada({ paradaId: p.id, hora }),
+                          hora === ""
+                            ? `${p.tiendaNombre} se queda sin hora esperada`
+                            : `${p.tiendaNombre} se espera a las ${hora}`,
+                        )
+                      }
+                    />
+                  ) : p.hora ? (
+                    <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                      {p.hora}
+                    </span>
+                  ) : null}
                   {editable ? (
                     <span className="flex shrink-0 gap-1">
                       <BotonOrden
@@ -266,6 +286,47 @@ export function DiaRutero({
         </>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * La hora esperada de una parada. Es la base de la puntualidad del mercaderista.
+ *
+ * Escribe al SALIR del campo, no en cada cambio: un `input[type=time]` emite
+ * `change` en cada tecla y en cada flecha del reloj, así que colgar el guardado
+ * del `onChange` mandaría una escritura por pulsación —y guardaría las horas a
+ * medio teclear por el camino. Es la misma razón por la que el selector de tienda
+ * de abajo separa elegir de confirmar.
+ *
+ * El valor se lleva en estado local para que el campo no se quede pegado al valor
+ * viejo mientras la revalidación viaja.
+ */
+function HoraParada({
+  parada,
+  inactivo,
+  onGuardar,
+}: {
+  parada: Parada;
+  inactivo: boolean;
+  onGuardar: (hora: string) => void;
+}) {
+  const [valor, setValor] = useState(parada.hora ?? "");
+
+  return (
+    <label className="shrink-0">
+      <span className="sr-only">Hora esperada en {parada.tiendaNombre}</span>
+      <input
+        type="time"
+        value={valor}
+        disabled={inactivo}
+        onChange={(e) => setValor(e.target.value)}
+        onBlur={() => {
+          if (valor === (parada.hora ?? "")) return;
+          onGuardar(valor);
+        }}
+        className="min-h-11 rounded-lg border border-border bg-background px-1.5 text-[11px] tabular-nums focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      />
+    </label>
   );
 }
 

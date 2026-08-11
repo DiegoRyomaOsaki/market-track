@@ -7,6 +7,7 @@ import { DiaRutero } from "./dia-rutero";
 
 const acciones = vi.hoisted(() => ({
   agregarParada: vi.fn(),
+  fijarHoraParada: vi.fn(),
   duplicarPeriodo: vi.fn(),
   publicarRutero: vi.fn(),
   quitarParada: vi.fn(),
@@ -26,8 +27,20 @@ function dia(over: Partial<DiaPlaneado> = {}): DiaPlaneado {
     ruteroId: "r1",
     estado: "borrador",
     paradas: [
-      { id: "a", orden: 1, tiendaId: "t1", tiendaNombre: "Plaza Vea Surco" },
-      { id: "b", orden: 2, tiendaId: "t2", tiendaNombre: "Tottus Angamos" },
+      {
+        id: "a",
+        orden: 1,
+        tiendaId: "t1",
+        tiendaNombre: "Plaza Vea Surco",
+        hora: null,
+      },
+      {
+        id: "b",
+        orden: 2,
+        tiendaId: "t2",
+        tiendaNombre: "Tottus Angamos",
+        hora: null,
+      },
     ],
     ...over,
   };
@@ -243,5 +256,114 @@ describe("DiaRutero", () => {
     expect(screen.getByRole("button", { expanded: false })).toHaveTextContent(
       "(2)",
     );
+  });
+});
+
+describe("hora esperada de una parada", () => {
+  it("se guarda al SALIR del campo, no en cada tecla", async () => {
+    // Un `input[type=time]` emite `change` en cada pulsación: colgar el guardado
+    // del `onChange` mandaría una escritura por tecla y guardaría horas a medio
+    // teclear por el camino.
+    acciones.fijarHoraParada.mockResolvedValue({ ok: true });
+    render(<DiaRutero dia={dia()} mercaderistaId="m1" tiendas={TIENDAS} />);
+
+    const campo = screen.getByLabelText("Hora esperada en Plaza Vea Surco");
+    fireEvent.change(campo, { target: { value: "08:30" } });
+    expect(acciones.fijarHoraParada).not.toHaveBeenCalled();
+
+    fireEvent.blur(campo);
+    await waitFor(() =>
+      expect(acciones.fijarHoraParada).toHaveBeenCalledWith({
+        paradaId: "a",
+        hora: "08:30",
+      }),
+    );
+  });
+
+  it("salir sin haberla cambiado no escribe nada", () => {
+    acciones.fijarHoraParada.mockResolvedValue({ ok: true });
+    render(
+      <DiaRutero
+        dia={dia({
+          paradas: [
+            {
+              id: "a",
+              orden: 1,
+              tiendaId: "t1",
+              tiendaNombre: "Plaza Vea Surco",
+              hora: "08:30",
+            },
+          ],
+        })}
+        mercaderistaId="m1"
+        tiendas={TIENDAS}
+      />,
+    );
+
+    fireEvent.blur(screen.getByLabelText("Hora esperada en Plaza Vea Surco"));
+    expect(acciones.fijarHoraParada).not.toHaveBeenCalled();
+  });
+
+  it("vaciar el campo la quita, y se anuncia", async () => {
+    acciones.fijarHoraParada.mockResolvedValue({ ok: true });
+    render(
+      <DiaRutero
+        dia={dia({
+          paradas: [
+            {
+              id: "a",
+              orden: 1,
+              tiendaId: "t1",
+              tiendaNombre: "Plaza Vea Surco",
+              hora: "08:30",
+            },
+          ],
+        })}
+        mercaderistaId="m1"
+        tiendas={TIENDAS}
+      />,
+    );
+
+    const campo = screen.getByLabelText("Hora esperada en Plaza Vea Surco");
+    fireEvent.change(campo, { target: { value: "" } });
+    fireEvent.blur(campo);
+
+    await waitFor(() =>
+      expect(acciones.fijarHoraParada).toHaveBeenCalledWith({
+        paradaId: "a",
+        hora: "",
+      }),
+    );
+    expect(
+      await screen.findByText(/se queda sin hora esperada/),
+    ).toBeInTheDocument();
+  });
+
+  it("un rutero ya publicado la MUESTRA pero no la deja editar", () => {
+    // La hora es la vara con la que se mide la puntualidad: moverla después de
+    // publicar sería cambiar el listón con el mercaderista ya en la calle.
+    render(
+      <DiaRutero
+        dia={dia({
+          estado: "publicado",
+          paradas: [
+            {
+              id: "a",
+              orden: 1,
+              tiendaId: "t1",
+              tiendaNombre: "Plaza Vea Surco",
+              hora: "08:30",
+            },
+          ],
+        })}
+        mercaderistaId="m1"
+        tiendas={TIENDAS}
+      />,
+    );
+
+    expect(screen.getByText("08:30")).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Hora esperada en Plaza Vea Surco"),
+    ).not.toBeInTheDocument();
   });
 });

@@ -22,6 +22,8 @@ export type ParadaDeHoy = {
   check_in_at: string | null;
   /** Nula mientras el supervisor no haya revisado el reporte de esa visita. */
   revision_decision: string | null;
+  /** `HH:MM:SS` de Lima, o null si el supervisor no fijó ninguna. */
+  hora_planificada: string | null;
 };
 
 /**
@@ -38,6 +40,17 @@ export function estadoVisual(visitaEstado: string | null): EstadoVisual {
   return "pendiente";
 }
 
+/**
+ * La hora esperada, en `HH:MM`, o null si no se fijó.
+ *
+ * Es INFORMATIVA: llegar tarde no impide fichar. La geocerca bloquea; la hora
+ * no — dejar a un mercaderista fuera de su propia visita por llegar tarde sería
+ * castigar dos veces y, sobre todo, perder el dato de que estuvo allí.
+ */
+export function horaEsperada(hora: string | null): string | null {
+  return hora ? hora.slice(0, 5) : null;
+}
+
 function fechaHoyLocal(): string {
   const d = new Date();
   const y = d.getFullYear();
@@ -48,6 +61,7 @@ function fechaHoyLocal(): string {
 
 const SQL = `
   SELECT rp.id AS parada_id, rp.tenant_id AS tenant_id, rp.orden, rp.tienda_id,
+         rp.hora_planificada AS hora_planificada,
          t.nombre AS tienda_nombre, t.direccion AS tienda_direccion,
          t.lat AS lat, t.lon AS lon, t.radio_geocerca_m AS radio_geocerca_m,
          v.id AS visita_id, v.estado AS visita_estado, v.check_in_at AS check_in_at,
@@ -73,6 +87,7 @@ export function useRuteroDeHoy() {
 /** Una sola parada por id, para la pantalla de check-in. */
 const SQL_PARADA = `
   SELECT rp.id AS parada_id, rp.tenant_id AS tenant_id, rp.orden, rp.tienda_id,
+         rp.hora_planificada AS hora_planificada,
          t.nombre AS tienda_nombre, t.direccion AS tienda_direccion,
          t.lat AS lat, t.lon AS lon, t.radio_geocerca_m AS radio_geocerca_m,
          v.id AS visita_id, v.estado AS visita_estado, v.check_in_at AS check_in_at,
