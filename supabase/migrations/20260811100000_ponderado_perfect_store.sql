@@ -301,6 +301,14 @@ $$;
 -- del negocio es el de Lima, y un rango calculado en UTC se come las últimas
 -- cinco horas de la jornada, que es justo el turno de cierre de tienda.
 -- ---------------------------------------------------------------------------
+
+-- El índice que la ventana necesita. `visita` ya tenía uno por
+-- `(tenant_id, check_in_at)`, pero esa es la hora que DECLARA el teléfono y se
+-- puede cambiar a mano; el puntaje se fecha con `check_in_recibido_at`, que sella
+-- el servidor, y filtrar por una columna sin índice deja la consulta sargable
+-- sobre el papel y en un recorrido secuencial en la práctica.
+create index visita_tenant_recibido_idx
+  on public.visita (tenant_id, check_in_recibido_at desc);
 create function public.perfect_store_agregado(
   p_desde        date,
   p_hasta        date,
