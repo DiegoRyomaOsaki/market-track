@@ -83,6 +83,17 @@ describe("EstadoDeAlerta", () => {
       expect(screen.getByRole("alert")).toHaveTextContent(/sin permiso/),
     );
 
+    // Se espera a que el botón vuelva a estar HABILITADO antes de volver a
+    // pulsarlo. `error` se pinta dentro de la transición, así que cuando el
+    // `waitFor` de arriba resuelve el botón todavía puede decir "Guardando…" y
+    // estar deshabilitado: el segundo clic se perdería y el test fallaría solo
+    // bajo carga, que es exactamente como venía fallando.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Marcar vista" }),
+      ).toBeEnabled(),
+    );
+
     marcar.mockResolvedValue({ ok: true, estado: "vista" });
     fireEvent.click(screen.getByRole("button", { name: "Marcar vista" }));
 

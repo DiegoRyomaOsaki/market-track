@@ -147,9 +147,13 @@ insert into public.tienda_sku (tenant_id, tienda_id, sku_id) values
   ('aaaaaaaa-0000-0000-0000-000000000001', 'a0000002-0000-0000-0000-000000000001', 'a0000003-0000-0000-0000-000000000001'),
   ('bbbbbbbb-0000-0000-0000-000000000002', 'b0000002-0000-0000-0000-000000000002', 'b0000003-0000-0000-0000-000000000002');
 
-insert into public.precio_regular (id, tenant_id, sku_id, cadena_id, precio) values
-  ('a0000005-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'a0000003-0000-0000-0000-000000000001', 'a0000001-0000-0000-0000-000000000001', 6.90),
-  ('b0000005-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0000-000000000002', 'b0000003-0000-0000-0000-000000000002', 'b0000001-0000-0000-0000-000000000002', 5.50);
+-- `vigente_desde` EXPLÍCITO y en el pasado, no el default. Sembrarlo con la fecha
+-- de hoy hace que el precio no esté vigente para una visita del mismo día si la
+-- base se sembró después de las 19:00 de Lima —cuando el día UTC ya rodó—, y toda
+-- la regla de precio deja de encontrar contra qué comparar.
+insert into public.precio_regular (id, tenant_id, sku_id, cadena_id, precio, vigente_desde) values
+  ('a0000005-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'a0000003-0000-0000-0000-000000000001', 'a0000001-0000-0000-0000-000000000001', 6.90, '2026-01-01'),
+  ('b0000005-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0000-000000000002', 'b0000003-0000-0000-0000-000000000002', 'b0000001-0000-0000-0000-000000000002', 5.50, '2026-01-01');
 
 insert into public.promocion (id, tenant_id, sku_id, precio_promo, fecha_inicio, fecha_fin) values
   ('a0000006-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'a0000003-0000-0000-0000-000000000001', 5.90, '2026-07-01', '2026-07-31'),
