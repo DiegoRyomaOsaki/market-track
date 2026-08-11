@@ -14,6 +14,7 @@ export const ETIQUETA_MODULO: Record<ModuloPortal, string> = {
   galeria: "Galería de evidencia",
   alertas: "Alertas",
   reportes: "Reportes",
+  perfect_store: "Perfect Store",
 };
 
 export type EstadoModulos = Record<ModuloPortal, boolean>;

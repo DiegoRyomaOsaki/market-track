@@ -9,6 +9,7 @@ const MODULOS = {
   galeria: false,
   alertas: true,
   reportes: true,
+  perfect_store: true,
 };
 
 describe("guardarModulosSchema", () => {
