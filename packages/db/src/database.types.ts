@@ -2125,44 +2125,25 @@ export type Database = {
         }
         Returns: Json
       }
-      perfect_store_agregado:
-        | {
-            Args: {
-              p_categoria?: string
-              p_desde: string
-              p_hasta: string
-              p_marca?: string
-              p_mercaderista?: string
-              p_tienda?: string
-              p_tipo_tienda?: Database["public"]["Enums"]["tipo_tienda"]
-            }
-            Returns: {
-              distribucion_pct: number
-              levantamientos: number
-              precio_pct: number
-              total_pct: number
-              visibilidad_pct: number
-            }[]
-          }
-        | {
-            Args: {
-              p_cadena?: string
-              p_categoria?: string
-              p_desde: string
-              p_hasta: string
-              p_marca?: string
-              p_mercaderista?: string
-              p_tienda?: string
-              p_tipo_tienda?: Database["public"]["Enums"]["tipo_tienda"]
-            }
-            Returns: {
-              distribucion_pct: number
-              levantamientos: number
-              precio_pct: number
-              total_pct: number
-              visibilidad_pct: number
-            }[]
-          }
+      perfect_store_agregado: {
+        Args: {
+          p_cadena?: string
+          p_categoria?: string
+          p_desde: string
+          p_hasta: string
+          p_marca?: string
+          p_mercaderista?: string
+          p_tienda?: string
+          p_tipo_tienda?: Database["public"]["Enums"]["tipo_tienda"]
+        }
+        Returns: {
+          distribucion_pct: number
+          levantamientos: number
+          precio_pct: number
+          total_pct: number
+          visibilidad_pct: number
+        }[]
+      }
       perfect_store_desglose: {
         Args: {
           p_cadena?: string
