@@ -160,11 +160,9 @@ begin
          count(*) filter (where v.veredicto = 'correcto') as correctos
     into pre
   from public.levantamiento_sku ls
-  cross join lateral (
-    select app.evaluar_precio_sku(
-      ls.tenant_id, ls.sku_id, ctx.marca_id, ctx.cadena_id, ls.precio_registrado,
-      ls.hay_promo, ls.promo_comunicada, ctx.fecha) as veredicto
-  ) v
+  cross join lateral app.evaluar_precio_sku(
+    ls.tenant_id, ls.sku_id, ctx.marca_id, ctx.cadena_id, ls.precio_registrado,
+    ls.hay_promo, ls.promo_comunicada, ctx.fecha) v
   where ls.levantamiento_id = p_levantamiento_id
     and ls.precio_registrado is not null;
 
@@ -231,6 +229,56 @@ create trigger levantamiento_puntua_al_completar
   for each row
   when (new.estado is distinct from old.estado)
   execute function app.puntuar_al_completar();
+
+-- Y también al INSERTAR uno que ya nace completado.
+--
+-- El camino normal no lo hace: el móvil crea el levantamiento `en_curso`, escribe
+-- sus SKUs y luego lo pasa a `completado`, y el conector de PowerSync reaplica
+-- esas operaciones EN ORDEN, así que el `update` de arriba llega con todo escrito.
+-- Pero nada obliga a que sea el único camino —un script, una carga, un flujo que
+-- todavía no existe— y sin esto ese levantamiento no puntuaría nunca. Un puntaje
+-- que falta se nota; uno que no se calculó porque llegó por otra puerta, no.
+create trigger levantamiento_puntua_al_insertar
+  after insert on public.levantamiento
+  for each row
+  when (new.estado = 'completado')
+  execute function app.puntuar_al_completar();
+
+-- Y si un SKU llega DESPUÉS de que el levantamiento ya se cerró, se recalcula.
+--
+-- El orden normal lo garantiza el conector de PowerSync, que reaplica la cola tal
+-- como se grabó. Pero una operación rechazada y reintentada más tarde, o subida
+-- en otra transacción, dejaría el puntaje calculado sobre un subconjunto de los
+-- SKUs — y sin esto no se corregiría nunca, aunque los datos completos ya
+-- estuvieran en la tabla. Un puntaje que se queda corto en silencio es peor que
+-- uno que falta.
+--
+-- Cuesta una búsqueda indexada por fila escrita; el disparador de alertas de esta
+-- misma tabla ya hace varias. El recálculo es idempotente por el `on conflict`.
+create function app.repuntuar_si_ya_estaba_cerrado()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_estado public.estado_levantamiento;
+begin
+  select l.estado into v_estado
+  from public.levantamiento l where l.id = new.levantamiento_id;
+
+  if v_estado = 'completado' then
+    perform app.calcular_puntaje_perfect_store(new.levantamiento_id);
+  end if;
+  return null;
+end;
+$$;
+
+revoke execute on function app.repuntuar_si_ya_estaba_cerrado() from public;
+
+create trigger levantamiento_sku_repuntua
+  after insert or update on public.levantamiento_sku
+  for each row execute function app.repuntuar_si_ya_estaba_cerrado();
 
 -- ---------------------------------------------------------------------------
 -- GRANTs y RLS

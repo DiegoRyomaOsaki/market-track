@@ -461,6 +461,81 @@ describe("cuándo NO se deja puntaje", () => {
   });
 });
 
+describe("un levantamiento que NACE completado también puntúa", () => {
+  it("puntúa al insertarlo, no solo al actualizarlo", async () => {
+    // El camino normal es crear `en_curso` y luego completar —y el conector de
+    // PowerSync reaplica las operaciones en ese orden—, pero nada obliga a que
+    // sea el único. Un puntaje que falta porque el levantamiento llegó por otra
+    // puerta no se nota.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const visita = "f0000010-0000-0000-0000-000000000030";
+      const lev = "f0000011-0000-0000-0000-000000000030";
+
+      await comoOtro(c, USUARIOS.mercaderistaMaracumango, async () => {
+        await c.query(
+          `insert into public.visita (id, tenant_id, rutero_parada_id, mercaderista_id, tienda_id, estado, check_in_at)
+           values ($1, $2, $3, $4, $5, 'en_curso', now())`,
+          [
+            visita,
+            TENANTS.maracumango,
+            IDS.parada,
+            USUARIOS.mercaderistaMaracumango,
+            IDS.tienda,
+          ],
+        );
+        await c.query(
+          `insert into public.levantamiento (id, tenant_id, visita_id, marca_id, estado)
+           values ($1, $2, $3, $4, 'completado')`,
+          [lev, TENANTS.maracumango, visita, IDS.marca],
+        );
+      });
+
+      const r = await c.query(
+        `select 1 from public.puntaje_perfect_store where levantamiento_id = $1`,
+        [lev],
+      );
+      expect(r.rowCount).toBe(1);
+    });
+  });
+});
+
+describe("un SKU que llega tarde corrige el puntaje", () => {
+  it("recalcula si el levantamiento ya estaba cerrado", async () => {
+    // El orden normal lo garantiza el conector de PowerSync. Pero una operación
+    // rechazada y reintentada más tarde dejaría el puntaje sobre un subconjunto,
+    // y sin recálculo no se corregiría nunca — un número corto en silencio es
+    // peor que uno que falta.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const p = await levantarYPuntuar(c, "31", {
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+      expect(Number(p?.distribucion_pct)).toBe(100);
+      expect(p?.skus_evaluados).toBe(1);
+
+      // Un segundo SKU codificado, en quiebre, que llega DESPUÉS del cierre.
+      const [tarde] = await codificar(c, 1);
+      await comoOtro(c, USUARIOS.mercaderistaMaracumango, () =>
+        c.query(
+          `insert into public.levantamiento_sku
+             (tenant_id, levantamiento_id, sku_id, stock_sistema, stock_piso)
+           values ($1, 'f0000011-0000-0000-0000-000000000031', $2, 5, 0)`,
+          [TENANTS.maracumango, tarde],
+        ),
+      );
+
+      const r = await c.query<{
+        distribucion_pct: string;
+        skus_evaluados: number;
+      }>(
+        `select distribucion_pct, skus_evaluados from public.puntaje_perfect_store
+         where levantamiento_id = 'f0000011-0000-0000-0000-000000000031'`,
+      );
+      expect(r.rows[0]?.skus_evaluados).toBe(2);
+      expect(Number(r.rows[0]?.distribucion_pct)).toBe(50);
+    });
+  });
+});
+
 describe("el puntaje guarda con qué se calculó", () => {
   it("referencia la configuración vigente", async () => {
     await comoUsuario(db, USUARIOS.admin, async (c) => {

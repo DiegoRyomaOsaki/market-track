@@ -39,42 +39,48 @@ create function app.evaluar_precio_sku(
   p_precio           numeric,
   p_hay_promo        boolean,
   p_promo_comunicada boolean,
-  p_fecha            date
+  p_fecha            date,
+  -- El precio contra el que se comparó, como salida: el motor de alertas lo pone
+  -- en el payload y releerlo sería una segunda consulta idéntica en el camino
+  -- caliente de la sincronización.
+  out veredicto      public.evaluacion_precio,
+  out precio_regular numeric
 )
-returns public.evaluacion_precio
 language plpgsql
 stable
 security invoker
 set search_path = ''
 as $$
 declare
-  v_regular numeric;
   v_tol     numeric;
   v_promo_comunicada boolean;
 begin
-  if p_precio is null then return 'sin_precio_vigente'; end if;
+  veredicto := 'sin_precio_vigente';
+  if p_precio is null then return; end if;
 
   -- El general de la cadena (tipo_tienda nulo) primero, el más reciente. La
   -- tienda no lleva tipo_tienda, así que no se resuelve por tipo.
-  select pr.precio into v_regular
+  select pr.precio into precio_regular
   from public.precio_regular pr
   where pr.tenant_id = p_tenant and pr.sku_id = p_sku and pr.cadena_id = p_cadena
     and pr.vigente_desde <= p_fecha
   order by pr.tipo_tienda nulls first, pr.vigente_desde desc
   limit 1;
 
-  if v_regular is null then return 'sin_precio_vigente'; end if;
+  if precio_regular is null then return; end if;
 
   select coalesce(m.tolerancia_precio_pct, 0) into v_tol
   from public.marca m where m.id = p_marca;
   v_tol := coalesce(v_tol, 0);
 
-  if p_precio > v_regular * (1 + v_tol / 100) then
-    return 'sobreprecio';
+  if p_precio > precio_regular * (1 + v_tol / 100) then
+    veredicto := 'sobreprecio';
+    return;
   end if;
 
-  if p_precio >= v_regular * (1 - v_tol / 100) then
-    return 'correcto';
+  if p_precio >= precio_regular * (1 - v_tol / 100) then
+    veredicto := 'correcto';
+    return;
   end if;
 
   -- Por debajo del regular: solo una promo vigente y comunicada lo justifica.
@@ -85,11 +91,13 @@ begin
   order by p.fecha_inicio desc
   limit 1;
 
-  if v_promo_comunicada is true then return 'correcto'; end if;
-  if coalesce(p_hay_promo, false) and not coalesce(p_promo_comunicada, false) then
-    return 'promo_no_comunicada';
+  if v_promo_comunicada is true then
+    veredicto := 'correcto';
+  elsif coalesce(p_hay_promo, false) and not coalesce(p_promo_comunicada, false) then
+    veredicto := 'promo_no_comunicada';
+  else
+    veredicto := 'subvaluado_sin_promo';
   end if;
-  return 'subvaluado_sin_promo';
 end;
 $$;
 
@@ -107,7 +115,12 @@ comment on function app.evaluar_precio_sku(uuid, uuid, uuid, uuid, numeric, bool
 --
 -- Se recrea entero porque una función es su cuerpo. Lo único que cambia es el
 -- bloque de precios: ahora traduce el veredicto a su alerta en vez de decidirlo.
--- El comportamiento observable es el mismo, y los tests de alertas lo fijan.
+-- Los tests de alertas fijan que el árbol decide lo mismo.
+--
+-- Con UNA diferencia deliberada: antes la promo se buscaba con `current_date` y
+-- ahora con el día de Lima del check-in. Para una visita que sincroniza días
+-- después, eso cambia qué promo estaba vigente — y la que vale es la del día en
+-- que el mercaderista miró la góndola, no la de hoy.
 -- ---------------------------------------------------------------------------
 create or replace function app.alertas_levantamiento_sku()
 returns trigger
@@ -146,20 +159,10 @@ begin
     from public.visita v join public.tienda t on t.id = v.tienda_id
     where v.id = lev.visita_id;
 
-    v_veredicto := app.evaluar_precio_sku(
+    select * into v_veredicto, v_regular
+    from app.evaluar_precio_sku(
       new.tenant_id, new.sku_id, lev.marca_id, v_cadena, new.precio_registrado,
       new.hay_promo, new.promo_comunicada, v_fecha);
-
-    if v_veredicto <> 'correcto' and v_veredicto <> 'sin_precio_vigente' then
-      -- El precio regular solo se relee para el payload: la decisión ya está
-      -- tomada arriba, y esta consulta no puede cambiarla.
-      select pr.precio into v_regular
-      from public.precio_regular pr
-      where pr.tenant_id = new.tenant_id and pr.sku_id = new.sku_id
-        and pr.cadena_id = v_cadena and pr.vigente_desde <= v_fecha
-      order by pr.tipo_tienda nulls first, pr.vigente_desde desc
-      limit 1;
-    end if;
 
     if v_veredicto = 'sobreprecio' then
       perform app.crear_alerta(new.tenant_id, 'desviacion_precio', lev.marca_id, lev.visita_id, 'alta',
