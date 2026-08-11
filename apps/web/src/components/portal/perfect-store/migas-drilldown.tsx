@@ -25,7 +25,7 @@ export function MigasDrilldown({ migas }: { migas: Miga[] }) {
             ) : (
               <Link
                 href={miga.href}
-                className="text-muted-foreground underline underline-offset-2 hover:no-underline"
+                className="inline-flex min-h-11 items-center text-muted-foreground underline underline-offset-2 hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
                 {miga.etiqueta}
               </Link>

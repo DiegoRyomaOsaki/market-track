@@ -130,6 +130,9 @@ comment on function public.perfect_store_desglose(
   date, date, public.nivel_perfect_store, uuid, uuid, public.tipo_tienda, uuid, uuid) is
   'Perfect Store agrupado por un nivel del drill-down (categoría, tipo de tienda, cadena o tienda) dentro de la selección. Ordenado por puntaje ascendente: el tablero se abre por donde se está fallando.';
 
+-- El revoke va PRIMERO: una función nueva nace con `execute` para PUBLIC.
+revoke execute on function public.perfect_store_desglose(
+  date, date, public.nivel_perfect_store, uuid, uuid, public.tipo_tienda, uuid, uuid) from public;
 grant execute on function public.perfect_store_desglose(
   date, date, public.nivel_perfect_store, uuid, uuid, public.tipo_tienda, uuid, uuid)
   to authenticated, service_role;

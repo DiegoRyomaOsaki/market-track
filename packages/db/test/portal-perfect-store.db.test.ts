@@ -66,7 +66,7 @@ async function puntuarEn(
   c: Client,
   sufijo: string,
   diasAtras: number,
-  opciones: { tienda?: string; quiebre?: boolean } = {},
+  opciones: { tienda?: string; quiebre?: boolean; instante?: string } = {},
 ): Promise<void> {
   const visita = `e2000010-0000-0000-0000-0000000000${sufijo}`;
   const lev = `e2000011-0000-0000-0000-0000000000${sufijo}`;
@@ -87,10 +87,14 @@ async function puntuarEn(
     );
   });
 
+  // `instante` fija la marca exacta; sin él vale el desplazamiento en días. Hace
+  // falta para probar la frontera horaria, que con "hace N días" nunca se cruza.
   await c.query(
-    `update public.visita set check_in_recibido_at = now() - ($2 || ' days')::interval
-     where id = $1`,
-    [visita, diasAtras],
+    opciones.instante
+      ? `update public.visita set check_in_recibido_at = $2::timestamptz where id = $1`
+      : `update public.visita set check_in_recibido_at = now() - ($2 || ' days')::interval
+         where id = $1`,
+    [visita, opciones.instante ?? diasAtras],
   );
 
   await comoOtro(c, USUARIOS.mercaderistaMaracumango, async () => {
@@ -119,6 +123,37 @@ type Punto = {
   levantamientos: string;
   total_pct: string | null;
 };
+
+describe("las RPC no las alcanza nadie sin sesión", () => {
+  it("anon no puede EJECUTAR ninguna de las tres", async () => {
+    // Una función nueva nace con `execute` para PUBLIC: el `revoke` no es una
+    // formalidad. Hoy además fallaría cerrado porque `anon` no lee las tablas del
+    // join, pero ese candado es prestado — se cae el día que se publique un
+    // catálogo. Este test fija el candado propio.
+    const r = await db.query<{ proname: string; anon: boolean; pub: boolean }>(`
+      select p.proname,
+             has_function_privilege('anon', p.oid, 'execute') as anon,
+             has_function_privilege('public', p.oid, 'execute') as pub
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname like 'perfect_store%'
+      order by p.proname
+    `);
+
+    expect(r.rows.length).toBe(3);
+    expect(r.rows.filter((f) => f.anon || f.pub).map((f) => f.proname)).toEqual(
+      [],
+    );
+  });
+
+  it("authenticated sí puede ejecutarlas: el revoke no se pasó de frenada", async () => {
+    const r = await db.query<{ proname: string; auth: boolean }>(`
+      select p.proname, has_function_privilege('authenticated', p.oid, 'execute') as auth
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname like 'perfect_store%'
+    `);
+    expect(r.rows.filter((f) => !f.auth).map((f) => f.proname)).toEqual([]);
+  });
+});
 
 describe("la serie devuelve todos los buckets del rango", () => {
   it("un bucket SIN visitas sale igual, con cero y puntaje nulo", async () => {
@@ -202,6 +237,79 @@ describe("la serie devuelve todos los buckets del rango", () => {
       expect(conDatos(semanal.rows)).toBeGreaterThanOrEqual(
         conDatos(mensual.rows),
       );
+    });
+  });
+
+  it("una visita de las 20:00 de LIMA cae en el día de Lima, no en el de UTC", async () => {
+    // La garantía central de la serie. A las 20:00 de Lima el día UTC ya rodó al
+    // siguiente: truncar en UTC movería toda la jornada de cierre de tienda —el
+    // turno de la tarde— al periodo de mañana. Con "hace N días" esta frontera
+    // no se cruza nunca, por eso el instante va fijado a mano.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      // 01:00 UTC del 11 = 20:00 de Lima del 10.
+      await puntuarEn(c, "30", 0, { instante: "2026-08-11T01:00:00Z" });
+
+      const r = await c.query<Punto>(
+        `select periodo, levantamientos from public.perfect_store_serie(
+           '2026-08-09'::date, '2026-08-12'::date, 'dia')`,
+      );
+
+      const conDatos = r.rows.filter((p) => Number(p.levantamientos) > 0);
+      expect(conDatos).toHaveLength(1);
+      expect(new Date(conDatos[0]!.periodo).toISOString().slice(0, 10)).toBe(
+        "2026-08-10",
+      );
+    });
+  });
+
+  it("la granularidad diaria da un bucket por día del rango", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const r = await c.query<Punto>(
+        `select periodo from public.perfect_store_serie(
+           '2026-08-09'::date, '2026-08-12'::date, 'dia')`,
+      );
+      expect(r.rows).toHaveLength(4);
+    });
+  });
+
+  it("un rango de un solo día da exactamente un bucket", async () => {
+    // Donde viven los off-by-one de `generate_series` y de la ventana [inicio, fin).
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      for (const g of ["dia", "semana", "mes"]) {
+        const r = await c.query<Punto>(
+          `select periodo from public.perfect_store_serie(
+             app.hoy_lima(), app.hoy_lima(), $1::public.granularidad_serie)`,
+          [g],
+        );
+        expect(r.rows, `granularidad ${g}`).toHaveLength(1);
+      }
+    });
+  });
+
+  it("un rango invertido no revienta: devuelve vacío", async () => {
+    // Llega desde la URL, que la escribe cualquiera. El comportamiento se fija
+    // aquí para que nadie lo "arregle" dando la vuelta al rango en silencio.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await puntuarEn(c, "31", 0);
+
+      const serie = await c.query(
+        `select * from public.perfect_store_serie(
+           app.hoy_lima(), app.hoy_lima() - 7, 'semana')`,
+      );
+      const desglose = await c.query(
+        `select * from public.perfect_store_desglose(
+           app.hoy_lima(), app.hoy_lima() - 7, 'categoria')`,
+      );
+      const agregado = await c.query<{ levantamientos: string }>(
+        `select levantamientos from public.perfect_store_agregado(
+           app.hoy_lima(), app.hoy_lima() - 7)`,
+      );
+
+      expect(serie.rows).toHaveLength(0);
+      expect(desglose.rows).toHaveLength(0);
+      // El agregado sí devuelve su fila: es "el puntaje de la selección", y la
+      // selección está vacía.
+      expect(Number(agregado.rows[0]?.levantamientos)).toBe(0);
     });
   });
 

@@ -95,6 +95,18 @@ export default async function PerfectStorePage({
     return <Aviso>No pudimos cargar Perfect Store. Vuelve a intentarlo.</Aviso>;
   }
 
+  // El periodo anterior NO tumba la pantalla: sin él se pierde la comparación,
+  // no el puntaje. Pero se registra — un fallo repetido aquí es un fallo de la
+  // capa de datos, y tragárselo lo dejaría invisible para siempre.
+  if (previoRes.error) {
+    console.error(
+      JSON.stringify({
+        evento: "perfect_store_periodo_previo_error",
+        detalle: previoRes.error.message.slice(0, 200),
+      }),
+    );
+  }
+
   const actual = actualRes.data?.[0] ?? null;
   // Un periodo sin levantamientos no es un puntaje de cero: no hay puntaje.
   const hayDatos = Number(actual?.levantamientos ?? 0) > 0;

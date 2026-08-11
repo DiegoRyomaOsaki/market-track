@@ -64,7 +64,7 @@ export function TablaDesglose({
               {fila.clave ? (
                 <Link
                   href={hrefDeFila(fila.clave)}
-                  className="underline underline-offset-2 hover:no-underline"
+                  className="inline-flex min-h-11 items-center underline underline-offset-2 hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
                   {fila.etiqueta}
                 </Link>

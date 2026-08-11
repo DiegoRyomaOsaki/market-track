@@ -217,6 +217,13 @@ $$;
 comment on function public.perfect_store_serie(date, date, public.granularidad_serie, uuid, uuid, public.tipo_tienda, uuid, uuid) is
   'La evolución de Perfect Store por bucket. Devuelve TODOS los buckets del rango: uno sin visitas sale con 0 levantamientos y puntaje nulo, no se omite — un hueco tiene que verse como un hueco.';
 
+-- El revoke va PRIMERO: una función nueva nace con `execute` para PUBLIC, así que
+-- sin él `anon` la alcanza. Hoy falla cerrado porque ninguna tabla del join le da
+-- SELECT a `anon`, pero eso es un candado prestado: la primera migración que
+-- publique un catálogo (`categoria`, `cadena`) convertiría esto en una fuga entre
+-- clientes sin volver a tocar esta función.
+revoke execute on function public.perfect_store_serie(
+  date, date, public.granularidad_serie, uuid, uuid, public.tipo_tienda, uuid, uuid) from public;
 grant execute on function public.perfect_store_serie(
   date, date, public.granularidad_serie, uuid, uuid, public.tipo_tienda, uuid, uuid)
   to authenticated, service_role;

@@ -38,7 +38,8 @@ export function GraficaEvolucion({
               scroll={false}
               aria-current={g === granularidad ? "page" : undefined}
               className={cn(
-                "rounded-md px-2.5 py-1 text-[11.5px] font-semibold",
+                "inline-flex min-h-11 items-center rounded-lg px-3 text-[12px] font-semibold",
+                "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                 g === granularidad
                   ? "bg-accent text-accent-foreground"
                   : "text-muted-foreground hover:bg-muted",
