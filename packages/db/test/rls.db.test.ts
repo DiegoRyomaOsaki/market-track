@@ -268,8 +268,9 @@ describe("portal_modulo_habilitado — config de secciones del portal (MAR-74)",
       const r = await c.query<{ modulo: string; habilitado: boolean }>(
         "select modulo, habilitado from public.portal_modulos()",
       );
-      // Los 5 módulos, con reportes=false (override) y el resto true (coalesce):
-      // esto es el "default todos habilitados" de un módulo sin fila.
+      // Todos los módulos del enum, con reportes=false (override) y el resto
+      // true (coalesce): esto es el "default todos habilitados" de un módulo
+      // sin fila.
       const estado = Object.fromEntries(
         r.rows.map((x) => [x.modulo, x.habilitado]),
       );
@@ -279,6 +280,7 @@ describe("portal_modulo_habilitado — config de secciones del portal (MAR-74)",
         galeria: true,
         alertas: true,
         reportes: false,
+        perfect_store: true,
       });
     });
   });

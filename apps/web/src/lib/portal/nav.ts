@@ -29,6 +29,16 @@ export const NAV_PORTAL: readonly ItemPortal[] = [
       "Los indicadores de tu marca en el periodo y las tiendas filtradas: cumplimiento, quiebres, Share of Shelf y desviaciones de precio, con el mapa de tiendas y el feed de alertas.",
   },
   {
+    href: "/cliente/perfect-store",
+    label: "Perfect Store",
+    icono: "🎯",
+    modulo: "perfect_store",
+    titulo: "Perfect Store",
+    subtitulo: "Puntaje de ejecución y su desglose",
+    ayuda:
+      "El puntaje de ejecución de tu marca: distribución, visibilidad y precio ponderados en un solo número, con su evolución en el tiempo y el desglose por categoría, tipo de tienda, cadena y tienda. Las variables que todavía no se miden en campo no puntúan cero: su peso se reparte entre las evaluadas.",
+  },
+  {
     href: "/cliente/galeria",
     label: "Galería",
     icono: "🖼️",

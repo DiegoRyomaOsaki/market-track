@@ -2127,6 +2127,7 @@ export type Database = {
       }
       perfect_store_agregado: {
         Args: {
+          p_cadena?: string
           p_categoria?: string
           p_desde: string
           p_hasta: string
@@ -2141,6 +2142,44 @@ export type Database = {
           precio_pct: number
           total_pct: number
           visibilidad_pct: number
+        }[]
+      }
+      perfect_store_desglose: {
+        Args: {
+          p_cadena?: string
+          p_categoria?: string
+          p_desde: string
+          p_hasta: string
+          p_marca?: string
+          p_nivel: Database["public"]["Enums"]["nivel_perfect_store"]
+          p_tienda?: string
+          p_tipo_tienda?: Database["public"]["Enums"]["tipo_tienda"]
+        }
+        Returns: {
+          clave: string
+          distribucion_pct: number
+          etiqueta: string
+          levantamientos: number
+          precio_pct: number
+          total_pct: number
+          visibilidad_pct: number
+        }[]
+      }
+      perfect_store_serie: {
+        Args: {
+          p_cadena?: string
+          p_categoria?: string
+          p_desde: string
+          p_granularidad?: Database["public"]["Enums"]["granularidad_serie"]
+          p_hasta: string
+          p_marca?: string
+          p_tienda?: string
+          p_tipo_tienda?: Database["public"]["Enums"]["tipo_tienda"]
+        }
+        Returns: {
+          levantamientos: number
+          periodo: string
+          total_pct: number
         }[]
       }
       planeacion_ruteros: {
@@ -2232,7 +2271,15 @@ export type Database = {
         | "sobreprecio"
         | "promo_no_comunicada"
         | "subvaluado_sin_promo"
-      modulo_portal: "dashboard" | "mapa" | "galeria" | "alertas" | "reportes"
+      granularidad_serie: "dia" | "semana" | "mes"
+      modulo_portal:
+        | "dashboard"
+        | "mapa"
+        | "galeria"
+        | "alertas"
+        | "reportes"
+        | "perfect_store"
+      nivel_perfect_store: "categoria" | "tipo_tienda" | "cadena" | "tienda"
       paso_levantamiento:
         | "checkin"
         | "foto_antes"
@@ -2419,7 +2466,16 @@ export const Constants = {
         "promo_no_comunicada",
         "subvaluado_sin_promo",
       ],
-      modulo_portal: ["dashboard", "mapa", "galeria", "alertas", "reportes"],
+      granularidad_serie: ["dia", "semana", "mes"],
+      modulo_portal: [
+        "dashboard",
+        "mapa",
+        "galeria",
+        "alertas",
+        "reportes",
+        "perfect_store",
+      ],
+      nivel_perfect_store: ["categoria", "tipo_tienda", "cadena", "tienda"],
       paso_levantamiento: [
         "checkin",
         "foto_antes",
