@@ -46,6 +46,7 @@ async function conParada(
   // literales del propio test, no entrada de nadie.
   fecha: string,
   hora: string | null,
+  estado: "borrador" | "publicado" | "en_curso" | "completado" = "publicado",
 ): Promise<string> {
   const rutero = `e3000001-0000-0000-0000-0000000000${sufijo}`;
   const parada = `e3000002-0000-0000-0000-0000000000${sufijo}`;
@@ -64,8 +65,9 @@ async function conParada(
      values ($1, $2, $3, $4, 1, $5)`,
     [parada, TENANTS.maracumango, rutero, TIENDA, hora],
   );
-  await c.query(`update public.rutero set estado = 'publicado' where id = $1`, [
+  await c.query(`update public.rutero set estado = $2 where id = $1`, [
     rutero,
+    estado,
   ]);
   await c.query("set local role authenticated");
   return parada;
@@ -207,7 +209,97 @@ describe("desvío en minutos contra la hora esperada", () => {
   });
 });
 
+describe("una parada no se cuenta dos veces", () => {
+  it("dos visitas sobre la misma parada devuelven UNA fila, no dos", async () => {
+    // Nada en el esquema lo impide: `visita.rutero_parada_id` no es único y una
+    // reintentada desde el móvil crea la segunda. Con un `left join` a secas, la
+    // parada saldría duplicada y contaría dos veces en el puntaje.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const p = await conParada(c, "40", "'2026-07-20'", "09:00");
+      await llegaA(c, p, "40", "'2026-07-20T14:25:00Z'");
+      await llegaA(c, p, "41", "'2026-07-20T15:00:00Z'");
+
+      const r = await c.query(
+        `select parada_id from public.puntualidad_paradas(
+           $1, '2026-07-20'::date, '2026-07-20'::date)
+         where parada_id = $2`,
+        [MERCADERISTA, p],
+      );
+      expect(r.rows).toHaveLength(1);
+    });
+  });
+
+  it("gana la PRIMERA llegada: se mide cuándo apareció, no el último intento", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const p = await conParada(c, "42", "'2026-07-20'", "09:00");
+      // A propósito en orden inverso: la más tardía se inserta primero.
+      await llegaA(c, p, "43", "'2026-07-20T15:00:00Z'");
+      await llegaA(c, p, "44", "'2026-07-20T14:25:00Z'");
+
+      expect((await puntualidad(c, p)).minutos_desvio).toBe(25);
+    });
+  });
+});
+
+describe("qué ruteros cuentan", () => {
+  it("uno en curso y uno completado SÍ cuentan", async () => {
+    // El filtro excluye solo el borrador. Un `= 'publicado'` dejaría fuera los
+    // días que ya arrancaron, que son justo los que tienen datos.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const enCurso = await conParada(
+        c,
+        "45",
+        "'2026-07-20'",
+        "09:00",
+        "en_curso",
+      );
+      const hecho = await conParada(
+        c,
+        "46",
+        "'2026-07-21'",
+        "09:00",
+        "completado",
+      );
+
+      const r = await c.query<{ parada_id: string }>(
+        `select parada_id from public.puntualidad_paradas(
+           $1, '2026-07-20'::date, '2026-07-21'::date)`,
+        [MERCADERISTA],
+      );
+      const ids = r.rows.map((f) => f.parada_id);
+      expect(ids).toContain(enCurso);
+      expect(ids).toContain(hecho);
+    });
+  });
+
+  it("uno en BORRADOR no cuenta: nunca se le pidió al mercaderista", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const p = await conParada(c, "47", "'2026-07-20'", "09:00", "borrador");
+
+      const r = await c.query(
+        `select parada_id from public.puntualidad_paradas(
+           $1, '2026-07-20'::date, '2026-07-20'::date)
+         where parada_id = $2`,
+        [MERCADERISTA, p],
+      );
+      expect(r.rows).toHaveLength(0);
+    });
+  });
+});
+
 describe("la tolerancia es del cliente y es política, no hecho", () => {
+  it("llegar EN el minuto exacto del límite todavía es puntual", async () => {
+    // El límite es inclusivo (`<=`). Sin fijarlo, cambiarlo a `<` no rompería
+    // ningún test y un mercaderista pasaría a impuntual sin que nadie lo tocara.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const p = await conParada(c, "48", "'2026-07-20'", "09:00");
+      await llegaA(c, p, "48", "'2026-07-20T14:15:00Z'"); // exactamente 15 min
+      const f = await puntualidad(c, p);
+      expect(f.minutos_desvio).toBe(15);
+      expect(f.dentro_tolerancia).toBe(true);
+    });
+  });
+
   it("dentro de la tolerancia por defecto no cuenta como tarde, y el desvío se ve igual", async () => {
     await comoUsuario(db, USUARIOS.admin, async (c) => {
       const p = await conParada(c, "10", "'2026-07-20'", "09:00");
@@ -317,9 +409,23 @@ describe("quién puede leer y escribir", () => {
     });
   });
 
+  it("la hora NO se cambia una vez publicado el rutero", async () => {
+    // El trigger que protege la planeación exime todo UPDATE que no toque
+    // rutero_id, tienda_id ni orden, así que esta columna se le escapa. Sin este
+    // guard, un supervisor podría fijar la hora DESPUÉS de ver a qué hora fichó
+    // el mercaderista y fabricar el resultado del bono.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const p = await conParada(c, "49", "'2026-07-20'", "09:00", "publicado");
+
+      await expect(
+        c.query(`select public.fijar_hora_parada($1, '07:00')`, [p]),
+      ).rejects.toThrow(/ya salió del borrador/);
+    });
+  });
+
   it("el staff la fija y la puede quitar", async () => {
     await comoUsuario(db, USUARIOS.admin, async (c) => {
-      const p = await conParada(c, "15", "'2026-07-20'", null);
+      const p = await conParada(c, "15", "'2026-07-20'", null, "borrador");
 
       await c.query(`select public.fijar_hora_parada($1, '08:30')`, [p]);
       const puesta = await c.query<{ hora_planificada: string }>(

@@ -141,6 +141,7 @@ export function DiaRutero({
                   {editable ? (
                     <HoraParada
                       parada={p}
+                      posicion={i + 1}
                       inactivo={pendiente}
                       onGuardar={(hora) =>
                         ejecutar(
@@ -153,6 +154,10 @@ export function DiaRutero({
                     />
                   ) : p.hora ? (
                     <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                      {/* Sin esto, un lector de pantalla lee "08:30" a secas
+                          después del nombre de la tienda y no dice de qué hora
+                          habla: en pantalla lo dice la posición, que no se oye. */}
+                      <span className="sr-only">Hora esperada: </span>
                       {p.hora}
                     </span>
                   ) : null}
@@ -303,10 +308,14 @@ export function DiaRutero({
  */
 function HoraParada({
   parada,
+  posicion,
   inactivo,
   onGuardar,
 }: {
   parada: Parada;
+  /** Va en la etiqueta: nada impide dos paradas en la MISMA tienda el mismo día,
+   *  y entonces dos campos se llamarían igual. */
+  posicion: number;
   inactivo: boolean;
   onGuardar: (hora: string) => void;
 }) {
@@ -314,7 +323,9 @@ function HoraParada({
 
   return (
     <label className="shrink-0">
-      <span className="sr-only">Hora esperada en {parada.tiendaNombre}</span>
+      <span className="sr-only">
+        Hora esperada, parada {posicion}, {parada.tiendaNombre}
+      </span>
       <input
         type="time"
         value={valor}

@@ -267,7 +267,9 @@ describe("hora esperada de una parada", () => {
     acciones.fijarHoraParada.mockResolvedValue({ ok: true });
     render(<DiaRutero dia={dia()} mercaderistaId="m1" tiendas={TIENDAS} />);
 
-    const campo = screen.getByLabelText("Hora esperada en Plaza Vea Surco");
+    const campo = screen.getByLabelText(
+      /Hora esperada, parada 1, Plaza Vea Surco/,
+    );
     fireEvent.change(campo, { target: { value: "08:30" } });
     expect(acciones.fijarHoraParada).not.toHaveBeenCalled();
 
@@ -300,7 +302,9 @@ describe("hora esperada de una parada", () => {
       />,
     );
 
-    fireEvent.blur(screen.getByLabelText("Hora esperada en Plaza Vea Surco"));
+    fireEvent.blur(
+      screen.getByLabelText(/Hora esperada, parada 1, Plaza Vea Surco/),
+    );
     expect(acciones.fijarHoraParada).not.toHaveBeenCalled();
   });
 
@@ -324,7 +328,9 @@ describe("hora esperada de una parada", () => {
       />,
     );
 
-    const campo = screen.getByLabelText("Hora esperada en Plaza Vea Surco");
+    const campo = screen.getByLabelText(
+      /Hora esperada, parada 1, Plaza Vea Surco/,
+    );
     fireEvent.change(campo, { target: { value: "" } });
     fireEvent.blur(campo);
 
@@ -362,8 +368,28 @@ describe("hora esperada de una parada", () => {
     );
 
     expect(screen.getByText("08:30")).toBeInTheDocument();
+    // Y dice QUÉ es esa hora para quien no ve dónde está colocada.
+    expect(screen.getByText("Hora esperada:")).toBeInTheDocument();
     expect(
-      screen.queryByLabelText("Hora esperada en Plaza Vea Surco"),
+      screen.queryByLabelText(/Hora esperada, parada 1, Plaza Vea Surco/),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("la hora cuando la base falla", () => {
+  it("un error se cuenta, no se pierde", async () => {
+    acciones.fijarHoraParada.mockResolvedValue({
+      ok: false,
+      error: "No se pudo guardar el cambio",
+    });
+    render(<DiaRutero dia={dia()} mercaderistaId="m1" tiendas={TIENDAS} />);
+
+    const campo = screen.getByLabelText(/Hora esperada, parada 1/);
+    fireEvent.change(campo, { target: { value: "08:30" } });
+    fireEvent.blur(campo);
+
+    expect(
+      await screen.findByText("No se pudo guardar el cambio"),
+    ).toBeInTheDocument();
   });
 });

@@ -106,7 +106,20 @@ as $$
   from public.rutero_parada rp
   join public.rutero r on r.id = rp.rutero_id
   join public.tenant t on t.id = rp.tenant_id
-  left join public.visita v on v.rutero_parada_id = rp.id
+  -- LATERAL con `limit 1`, no un `left join` a secas: nada en el esquema impide
+  -- dos visitas sobre la misma parada —no hay unique en `visita.rutero_parada_id`,
+  -- y una reintentada desde el móvil las crea— y un join normal devolvería la
+  -- parada DUPLICADA, contándola dos veces en el puntaje.
+  --
+  -- Gana la PRIMERA llegada: la puntualidad se mide contra la hora a la que
+  -- apareció, no contra la del último intento.
+  left join lateral (
+    select v2.check_in_at
+    from public.visita v2
+    where v2.rutero_parada_id = rp.id
+    order by v2.check_in_at
+    limit 1
+  ) v on true
   where r.mercaderista_id = p_mercaderista
     and r.fecha between p_desde and p_hasta
     -- Un rutero en borrador NO cuenta. Nunca se le pidió al mercaderista: es
@@ -122,6 +135,12 @@ comment on function public.puntualidad_paradas(uuid, date, date) is
 revoke execute on function public.puntualidad_paradas(uuid, date, date) from public;
 grant execute on function public.puntualidad_paradas(uuid, date, date)
   to authenticated, service_role;
+
+-- El índice que ese join necesita. La FK compuesta `(rutero_parada_id, tenant_id)`
+-- NO crea uno: en Postgres solo la clave primaria lo hace. Y la asimetría importa
+-- —`visita` crece con cada visita real, `rutero_parada` solo con lo planificado—,
+-- así que sin él el join acaba recorriendo `visita` entera.
+create index visita_rutero_parada_idx on public.visita (rutero_parada_id);
 
 -- ---------------------------------------------------------------------------
 -- La planeación devuelve la hora.
@@ -187,21 +206,39 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+declare
+  v_estado public.estado_rutero;
 begin
   if not app.es_staff() then
     raise exception 'solo el staff diseña ruteros' using errcode = '42501';
   end if;
 
-  update public.rutero_parada set hora_planificada = p_hora where id = p_parada;
+  select r.estado into v_estado
+  from public.rutero_parada rp
+  join public.rutero r on r.id = rp.rutero_id
+  where rp.id = p_parada;
 
   if not found then
     raise exception 'la parada % no existe', p_parada using errcode = 'P0002';
   end if;
+
+  -- Solo en borrador, como `reordenar_paradas`. El guard del trigger no cubre
+  -- esta columna —exime todo UPDATE que no toque rutero_id, tienda_id ni orden—,
+  -- así que sin esto la hora se podría fijar DESPUÉS de ver a qué hora fichó el
+  -- mercaderista. Es la vara con la que se mide su bono: mover el listón cuando
+  -- ya se sabe el resultado no es planificar, es fabricar el resultado.
+  if v_estado <> 'borrador' then
+    raise exception
+      'La hora de un rutero % no se cambia: ya salió del borrador', v_estado
+      using errcode = '42501';
+  end if;
+
+  update public.rutero_parada set hora_planificada = p_hora where id = p_parada;
 end;
 $$;
 
 comment on function public.fijar_hora_parada(uuid, time) is
-  'Fija la hora esperada de una parada. Omitir la hora (o pasar NULL) la quita. Solo staff.';
+  'Fija la hora esperada de una parada. Omitir la hora (o pasar NULL) la quita. Solo staff y solo mientras el rutero esté en borrador: es la vara con la que se mide la puntualidad.';
 
 revoke execute on function public.fijar_hora_parada(uuid, time) from public;
 grant execute on function public.fijar_hora_parada(uuid, time)
