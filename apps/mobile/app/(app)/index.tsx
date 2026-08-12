@@ -14,6 +14,7 @@ import { olvidarDispositivo } from "@/lib/recordar-dispositivo";
 import {
   type EstadoVisual,
   estadoVisual,
+  horaEsperada,
   type ParadaDeHoy,
   useRuteroDeHoy,
 } from "@/lib/rutero";
@@ -186,14 +187,17 @@ function ParadaItem({
   onPress: () => void;
 }) {
   const estado = estadoVisual(parada.visita_estado);
+  const hora = horaEsperada(parada.hora_planificada);
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
       // La revisión entra en la etiqueta: con un lector de pantalla, el chip de
-      // "Rechazado" es invisible y quedaría solo "Completada".
+      // "Rechazado" es invisible y quedaría solo "Completada". La hora esperada,
+      // por lo mismo: en pantalla es un número gris junto al nombre.
       accessibilityLabel={[
         parada.tienda_nombre,
+        hora ? `se espera a las ${hora}` : null,
         ETIQUETA[estado],
         parada.revision_decision
           ? etiquetaDecision(parada.revision_decision)
@@ -210,6 +214,10 @@ function ParadaItem({
         <Text style={e.tienda} numberOfLines={1}>
           {parada.tienda_nombre}
         </Text>
+        {/* Informativa, nunca bloqueante: llegar tarde no impide fichar. */}
+        {hora ? (
+          <Text style={e.horaEsperada}>Se espera a las {hora}</Text>
+        ) : null}
         {parada.tienda_direccion ? (
           <Text style={e.direccion} numberOfLines={1}>
             {parada.tienda_direccion}
@@ -359,6 +367,12 @@ const e = StyleSheet.create({
   ordenTexto: { color: colores.textoSuave, fontSize: 14, fontWeight: "700" },
   tienda: { color: colores.texto, fontSize: 16, fontWeight: "600" },
   direccion: { color: colores.textoSuave, fontSize: 13, marginTop: 2 },
+  horaEsperada: {
+    color: colores.textoSuave,
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: 2,
+  },
   chip: { flexDirection: "row", alignItems: "center", gap: 6 },
   punto: { width: 8, height: 8, borderRadius: 4 },
   chipTexto: { fontSize: 12, fontWeight: "700" },

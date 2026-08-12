@@ -50,6 +50,45 @@ export async function agregarParada(datos: unknown): Promise<ResultadoAccion> {
   return { ok: true };
 }
 
+// `HH:MM` de Lima, o cadena vacía para quitarla. El `time` de Postgres acepta
+// más formatos, pero lo que manda el navegador es esto y nada más tiene por qué
+// llegar: validar en la frontera es no confiar en que el cliente sea el nuestro.
+const fijarHoraSchema = z.object({
+  paradaId: id,
+  hora: z.union([z.literal(""), z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)]),
+});
+
+/**
+ * Fija la hora esperada de una parada, o la quita con la cadena vacía.
+ *
+ * Es la base de la puntualidad: el desvío se mide contra esto. Por eso la escribe
+ * el staff y nunca el mercaderista — si el evaluado pudiera mover la hora, la
+ * puntualidad la fijaría él.
+ */
+export async function fijarHoraParada(
+  datos: unknown,
+): Promise<ResultadoAccion> {
+  const parsed = fijarHoraSchema.safeParse(datos);
+  if (!parsed.success) return { ok: false, error: "Hora inválida" };
+
+  const sesion = await sesionDeStaff();
+  if (!sesion) return { ok: false, error: SIN_PERMISO };
+  const { supabase } = sesion;
+
+  // Sin `p_hora` la función la quita: su default es NULL. Se omite en vez de
+  // mandar null porque el generador tipa todo parámetro como no-nulo.
+  const { error } = await supabase.rpc(
+    "fijar_hora_parada",
+    parsed.data.hora === ""
+      ? { p_parada: parsed.data.paradaId }
+      : { p_parada: parsed.data.paradaId, p_hora: parsed.data.hora },
+  );
+  if (error) return fallo("fijarHoraParada", error);
+
+  revalidatePath(SECCION);
+  return { ok: true };
+}
+
 /** Quita una parada. El hueco de orden que deja lo cierra el siguiente reorden. */
 export async function quitarParada(datos: unknown): Promise<ResultadoAccion> {
   const parsed = z.object({ paradaId: id }).safeParse(datos);

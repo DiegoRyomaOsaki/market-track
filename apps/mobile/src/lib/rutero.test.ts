@@ -6,7 +6,7 @@ jest.mock("@powersync/react-native", () => ({
   useQuery: () => ({ data: [], isLoading: false, error: undefined }),
 }));
 
-import { estadoVisual } from "./rutero";
+import { estadoVisual, horaEsperada } from "./rutero";
 
 describe("estadoVisual", () => {
   it("sin visita: pendiente", () => {
@@ -23,5 +23,17 @@ describe("estadoVisual", () => {
 
   it("visita completada: completada", () => {
     expect(estadoVisual("completada")).toBe("completada");
+  });
+});
+
+describe("horaEsperada", () => {
+  it("recorta los segundos del `time` que baja la réplica", () => {
+    expect(horaEsperada("08:30:00")).toBe("08:30");
+  });
+
+  it("sin hora fijada no inventa ninguna", () => {
+    // La mayoría de las paradas no llevarán hora al principio, y un "00:00" ahí
+    // le diría al mercaderista que llegó tarde a todo.
+    expect(horaEsperada(null)).toBe(null);
   });
 });

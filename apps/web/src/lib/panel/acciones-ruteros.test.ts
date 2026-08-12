@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   agregarParada,
   duplicarPeriodo,
+  fijarHoraParada,
   publicarRutero,
   quitarParada,
   reordenarParadas,
@@ -70,6 +71,10 @@ describe("el gate de staff", () => {
       () => reordenarParadas({ ruteroId: RUTERO, paradas: [PARADA] }),
     ],
     ["publicarRutero", () => publicarRutero({ ruteroId: RUTERO })],
+    [
+      "fijarHoraParada",
+      () => fijarHoraParada({ paradaId: PARADA, hora: "08:30" }),
+    ],
     ["duplicarPeriodo", () => duplicarPeriodo(DUPLICAR_VALIDO)],
   ];
 
@@ -242,5 +247,63 @@ describe("duplicarPeriodo", () => {
     await expect(
       duplicarPeriodo({ ...DUPLICAR_VALIDO, dias: 1.5 }),
     ).resolves.toMatchObject({ ok: false });
+  });
+});
+
+describe("fijarHoraParada", () => {
+  // Es la vara con la que se mide la puntualidad del mercaderista, y de ahí sale
+  // un bono: quién puede moverla y con qué valores no es un detalle de UI.
+
+  it("una hora válida llega a la base", async () => {
+    conSupabase("supervisor");
+    await expect(
+      fijarHoraParada({ paradaId: PARADA, hora: "08:30" }),
+    ).resolves.toEqual({ ok: true });
+    expect(espia.rpcsPedidas[0]?.nombre).toBe("fijar_hora_parada");
+    expect(espia.rpcsPedidas[0]?.argumentos).toEqual({
+      p_parada: PARADA,
+      p_hora: "08:30",
+    });
+    expect(revalidatePath).toHaveBeenCalledWith("/supervisor/ruteros");
+  });
+
+  it("la cadena vacía la QUITA omitiendo el parámetro", async () => {
+    // El default de la función es NULL: omitirlo es quitarla. Si se mandara
+    // `p_hora: undefined`, supabase-js lo serializaría fuera igual, pero el test
+    // fija la forma para que un refactor no lo convierta en `"":: time` y falle.
+    conSupabase("supervisor");
+    await expect(
+      fijarHoraParada({ paradaId: PARADA, hora: "" }),
+    ).resolves.toEqual({ ok: true });
+    expect(espia.rpcsPedidas[0]?.argumentos).toEqual({ p_parada: PARADA });
+  });
+
+  it.each(["8:30", "24:00", "08:70", "08:30:00", "ocho y media", "0830"])(
+    "%s no llega a la base",
+    async (hora) => {
+      conSupabase("supervisor");
+      await expect(
+        fijarHoraParada({ paradaId: PARADA, hora }),
+      ).resolves.toEqual({ ok: false, error: "Hora inválida" });
+      expect(espia.rpcsPedidas).toHaveLength(0);
+    },
+  );
+
+  it("un id de parada que no es un uuid tampoco", async () => {
+    conSupabase("supervisor");
+    await expect(
+      fijarHoraParada({ paradaId: "la primera", hora: "08:30" }),
+    ).resolves.toEqual({ ok: false, error: "Hora inválida" });
+    expect(espia.rpcsPedidas).toHaveLength(0);
+  });
+
+  it("un fallo de la base se cuenta, no se traga", async () => {
+    conSupabase("supervisor", {
+      rpc: { error: { message: "ya salió del borrador" } },
+    });
+    await expect(
+      fijarHoraParada({ paradaId: PARADA, hora: "08:30" }),
+    ).resolves.toMatchObject({ ok: false });
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 });

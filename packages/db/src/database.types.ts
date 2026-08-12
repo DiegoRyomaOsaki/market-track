@@ -1521,6 +1521,7 @@ export type Database = {
       rutero_parada: {
         Row: {
           estado: Database["public"]["Enums"]["estado_parada"]
+          hora_planificada: string | null
           id: string
           orden: number
           rutero_id: string
@@ -1529,6 +1530,7 @@ export type Database = {
         }
         Insert: {
           estado?: Database["public"]["Enums"]["estado_parada"]
+          hora_planificada?: string | null
           id?: string
           orden: number
           rutero_id: string
@@ -1537,6 +1539,7 @@ export type Database = {
         }
         Update: {
           estado?: Database["public"]["Enums"]["estado_parada"]
+          hora_planificada?: string | null
           id?: string
           orden?: number
           rutero_id?: string
@@ -1711,18 +1714,21 @@ export type Database = {
           creado_at: string
           id: string
           nombre: string
+          tolerancia_puntualidad_min: number
         }
         Insert: {
           activo?: boolean
           creado_at?: string
           id?: string
           nombre: string
+          tolerancia_puntualidad_min?: number
         }
         Update: {
           activo?: boolean
           creado_at?: string
           id?: string
           nombre?: string
+          tolerancia_puntualidad_min?: number
         }
         Relationships: []
       }
@@ -2105,6 +2111,10 @@ export type Database = {
         }
         Returns: number
       }
+      fijar_hora_parada: {
+        Args: { p_hora?: string; p_parada: string }
+        Returns: undefined
+      }
       foto_del_levantamiento: {
         Args: {
           p_filtro: Database["public"]["Enums"]["tipo_foto"]
@@ -2187,6 +2197,7 @@ export type Database = {
         Returns: {
           estado: Database["public"]["Enums"]["estado_rutero"]
           fecha: string
+          hora_planificada: string
           orden: number
           parada_estado: Database["public"]["Enums"]["estado_parada"]
           parada_id: string
@@ -2200,6 +2211,20 @@ export type Database = {
         Returns: {
           habilitado: boolean
           modulo: Database["public"]["Enums"]["modulo_portal"]
+        }[]
+      }
+      puntualidad_paradas: {
+        Args: { p_desde: string; p_hasta: string; p_mercaderista: string }
+        Returns: {
+          asistencia: Database["public"]["Enums"]["asistencia_parada"]
+          check_in_at: string
+          dentro_tolerancia: boolean
+          fecha: string
+          hora_planificada: string
+          minutos_desvio: number
+          parada_id: string
+          rutero_id: string
+          tienda_id: string
         }[]
       }
       reordenar_paradas: {
@@ -2249,6 +2274,7 @@ export type Database = {
       }
     }
     Enums: {
+      asistencia_parada: "pendiente" | "asistio" | "falto"
       canal_alerta: "dashboard" | "email" | "whatsapp"
       canal_otp: "correo" | "sms" | "whatsapp"
       decision_revision: "aprobada" | "rechazada"
@@ -2442,6 +2468,7 @@ export const Constants = {
   },
   public: {
     Enums: {
+      asistencia_parada: ["pendiente", "asistio", "falto"],
       canal_alerta: ["dashboard", "email", "whatsapp"],
       canal_otp: ["correo", "sms", "whatsapp"],
       decision_revision: ["aprobada", "rechazada"],

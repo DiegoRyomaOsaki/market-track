@@ -16,13 +16,20 @@ type FilaCruda =
 // tiene rutero y ninguna tienda asignada todavía.
 export type FilaPlaneacion = Omit<
   FilaCruda,
-  "parada_id" | "orden" | "tienda_id" | "tienda_nombre" | "parada_estado"
+  | "parada_id"
+  | "orden"
+  | "tienda_id"
+  | "tienda_nombre"
+  | "parada_estado"
+  | "hora_planificada"
 > & {
   parada_id: string | null;
   orden: number | null;
   tienda_id: string | null;
   tienda_nombre: string | null;
   parada_estado: Database["public"]["Enums"]["estado_parada"] | null;
+  // Nula también cuando la parada SÍ existe: fijar la hora es opcional.
+  hora_planificada: string | null;
 };
 
 export type Vista = "semana" | "mes";
@@ -32,6 +39,8 @@ export type Parada = {
   orden: number;
   tiendaId: string;
   tiendaNombre: string;
+  /** `HH:MM` de Lima, o null si no se fijó ninguna. */
+  hora: string | null;
 };
 
 export type DiaPlaneado = {
@@ -40,6 +49,17 @@ export type DiaPlaneado = {
   estado: Database["public"]["Enums"]["estado_rutero"] | null;
   paradas: Parada[];
 };
+
+/**
+ * `HH:MM` a partir del `HH:MM:SS` que devuelve Postgres para un `time`.
+ *
+ * `input[type=time]` no acepta los segundos salvo que se le fije el `step`, y con
+ * ellos deja el campo vacío en silencio: el supervisor abriría el día y vería la
+ * hora en blanco creyendo que no se guardó.
+ */
+export function horaCorta(hora: string | null): string | null {
+  return hora ? hora.slice(0, 5) : null;
+}
 
 /** El lunes de la semana de `dia`. La semana laboral peruana empieza en lunes. */
 export function inicioDeSemana(dia: string): string {
@@ -126,6 +146,7 @@ export function agruparPorDia(
         orden: f.orden,
         tiendaId: f.tienda_id,
         tiendaNombre: f.tienda_nombre ?? "—",
+        hora: horaCorta(f.hora_planificada),
       });
     }
     porFecha.set(f.fecha, dia);

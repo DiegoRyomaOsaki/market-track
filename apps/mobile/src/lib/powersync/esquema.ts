@@ -89,6 +89,9 @@ const rutero_parada = new Table({
   tienda_id: column.text,
   orden: column.integer,
   estado: column.text,
+  // La hora esperada de llegada, `HH:MM:SS` de Lima. El stream baja la tabla
+  // entera, pero una columna que no se declara aquí no existe en la réplica.
+  hora_planificada: column.text,
 });
 
 const visita = new Table({

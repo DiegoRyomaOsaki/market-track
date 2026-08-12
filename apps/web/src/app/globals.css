@@ -5,6 +5,12 @@
 /* Sistema de diseño del panel (2ª iteración). Paleta zinc + acento indigo, con los
    tokens SEMÁNTICOS del dominio y sus fondos suaves. Valores del mockup de diseño. */
 :root {
+  /* Los controles NATIVOS del navegador (el reloj de `input[type=time]`, el
+     desplegable de un `select`, la barra de scroll) no leen nuestros tokens: los
+     pinta el propio navegador según esto. Sin declararlo, en modo oscuro salen
+     con su cromo claro sobre la página oscura. */
+  color-scheme: light;
+
   --radius: 0.55rem;
 
   --background: #ffffff;
@@ -45,6 +51,8 @@
 }
 
 .dark {
+  color-scheme: dark;
+
   --background: #18181b;
   --foreground: #fafafa;
   --card: #1f1f23;
