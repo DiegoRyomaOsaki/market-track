@@ -527,38 +527,39 @@ describe("visita_respuesta — el checklist del check-in", () => {
     });
   });
 
-  it("el cliente-marca lee las respuestas de su tenant; el rival, ninguna", async () => {
+  it("el supervisor lee el checklist; el cliente-marca y el rival, no", async () => {
+    // Las respuestas ("llevas botas") son el mismo dato laboral que su foto: al
+    // cliente-marca se le ocultan las dos, por la política, no por la pantalla.
     await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
       await c.query(
         `insert into public.visita_respuesta (id, tenant_id, visita_id, campo_id, valor)
          values ($1, $2, $3, 'llevas_botas', 'true'::jsonb)`,
         [IDS.nuevaRespuestaVisita, TENANTS.maracumango, IDS.visitaMrc],
       );
-      await c.query(
-        `set local request.jwt.claims = '${JSON.stringify({
-          sub: USUARIOS.clienteMaracumango,
-          role: "authenticated",
-          aal: "aal2",
-        })}'`,
-      );
-      const propio = await c.query(
-        `select id from public.visita_respuesta where id = $1`,
-        [IDS.nuevaRespuestaVisita],
-      );
-      expect(propio.rowCount).toBe(1);
+      const suplantar = (sub: string) =>
+        c.query(
+          `set local request.jwt.claims = '${JSON.stringify({
+            sub,
+            role: "authenticated",
+            aal: "aal2",
+          })}'`,
+        );
+      const cuenta = async () =>
+        (
+          await c.query(
+            `select id from public.visita_respuesta where id = $1`,
+            [IDS.nuevaRespuestaVisita],
+          )
+        ).rowCount;
 
-      await c.query(
-        `set local request.jwt.claims = '${JSON.stringify({
-          sub: USUARIOS.mercaderistaRival,
-          role: "authenticated",
-          aal: "aal2",
-        })}'`,
-      );
-      const ajeno = await c.query(
-        `select id from public.visita_respuesta where id = $1`,
-        [IDS.nuevaRespuestaVisita],
-      );
-      expect(ajeno.rowCount).toBe(0);
+      await suplantar(USUARIOS.supervisor);
+      expect(await cuenta()).toBe(1);
+
+      await suplantar(USUARIOS.clienteMaracumango);
+      expect(await cuenta()).toBe(0);
+
+      await suplantar(USUARIOS.mercaderistaRival);
+      expect(await cuenta()).toBe(0);
     });
   });
 

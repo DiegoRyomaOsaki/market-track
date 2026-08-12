@@ -194,6 +194,9 @@ const s = StyleSheet.create({
     overflow: "hidden",
   },
   opcion: {
+    // 44px de alto mínimo: se pulsa de pie, con una mano, en pasillo de tienda.
+    minHeight: 44,
+    justifyContent: "center",
     paddingHorizontal: espacio.m,
     paddingVertical: espacio.s,
     backgroundColor: colores.fondo,

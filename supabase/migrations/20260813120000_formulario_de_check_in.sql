@@ -77,8 +77,14 @@ grant all on public.visita_respuesta to service_role;
 
 create policy visresp_staff_lee on public.visita_respuesta for select to authenticated
   using ((select app.es_staff()));
+-- El cliente-marca queda FUERA: las respuestas del checklist ("llevas botas")
+-- son el mismo dato laboral que su foto, y la foto ya se le oculta. Excluir una
+-- y dejar la otra sería contarle lo mismo por otro canal.
 create policy visresp_usuario_lee_su_tenant on public.visita_respuesta for select to authenticated
-  using (tenant_id = (select app.tenant_actual()));
+  using (
+    tenant_id = (select app.tenant_actual())
+    and (select app.rol_actual()) <> 'cliente'
+  );
 
 -- El `tenant_id = app.tenant_actual()` va además del dueño de la visita: al
 -- desvincular a un mercaderista, tenant_actual() es null y la escritura falla

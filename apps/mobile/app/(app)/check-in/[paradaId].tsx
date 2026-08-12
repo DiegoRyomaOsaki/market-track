@@ -16,6 +16,7 @@ import { ControlCampo } from "@/componentes/campo-configurable";
 import {
   puedeConfirmarCheckIn,
   respuestasDeCheckIn,
+  resultadoDelChecklist,
   useFormularioCheckIn,
 } from "@/lib/check-in";
 import { encolarFoto } from "@/lib/cola-fotos-instancia";
@@ -198,6 +199,7 @@ export default function CheckIn() {
         }
       }
 
+      let checklistGuardado = true;
       try {
         await guardarRespuestasVisita({
           visita_id: visitaId,
@@ -209,16 +211,17 @@ export default function CheckIn() {
           visita_id: visitaId,
           error: mensajeDeError(err),
         });
-        setAviso(
-          "El check-in quedó registrado, pero el checklist no se pudo guardar.",
-        );
-        return; // La tarjeta "✓ Check-in realizado" (reactiva) toma la pantalla.
+        checklistGuardado = false;
       }
 
-      if (fotosPerdidas) {
-        setAviso(
-          "El check-in quedó registrado, pero la foto del checklist no se pudo guardar.",
-        );
+      const desenlace = resultadoDelChecklist({
+        checklistGuardado,
+        fotosPerdidas,
+      });
+      if (!desenlace.navegar) {
+        // La tarjeta "✓ Check-in realizado" (reactiva) toma la pantalla y el
+        // aviso queda a la vista en la región viva.
+        setAviso(desenlace.aviso);
         return;
       }
 
@@ -393,9 +396,10 @@ export default function CheckIn() {
 
       {/* Región viva siempre montada: si el checklist o su foto fallan tras el
           check-in, el aviso se anuncia aquí (la tarjeta reactiva de arriba ya
-          habrá tomado la pantalla). */}
+          habrá tomado la pantalla). Color de ALERTA, no de pista: es una pérdida
+          de datos real, no una sugerencia. */}
       <Text
-        style={[e.notaAlerta, e.avisoVivo]}
+        style={e.avisoVivo}
         accessibilityLiveRegion="polite"
         accessibilityRole="alert"
       >
@@ -486,7 +490,13 @@ const e = StyleSheet.create({
   punto: { width: 10, height: 10, borderRadius: 5 },
   notaAlerta: { color: colores.textoSuave, fontSize: 13, lineHeight: 18 },
   aviso: { color: colores.texto, fontSize: 15, textAlign: "center" },
-  avisoVivo: { marginTop: espacio.s, textAlign: "center" },
+  avisoVivo: {
+    color: colores.alertaTexto,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: espacio.s,
+    textAlign: "center",
+  },
   campo: { gap: espacio.xs, marginTop: espacio.xs },
   campoEtiqueta: { color: colores.texto, fontSize: 15, fontWeight: "600" },
   boton: {
