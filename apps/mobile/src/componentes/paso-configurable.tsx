@@ -24,8 +24,10 @@ import { mensajeDeError } from "@/lib/error";
 import type { FotoCapturada } from "@/lib/foto-captura";
 import {
   coercionValorRespuesta,
+  crudoDesdeValor,
   estaContestado,
   faltanObligatorios,
+  fotosPorEncolar,
   type RespuestaCruda,
 } from "@/lib/formulario";
 import { guardarRespuestas, useRespuestas } from "@/lib/levantamiento";
@@ -48,20 +50,6 @@ type Props = {
   onCompletar: () => void;
   onContingencia: () => void;
 };
-
-/** El valor guardado (JSON) de vuelta a su forma cruda para editar. */
-function crudoDesdeValor(json: string): RespuestaCruda {
-  try {
-    const v: unknown = JSON.parse(json);
-    if (typeof v === "number") return String(v);
-    if (typeof v === "boolean") return v;
-    if (Array.isArray(v)) return v.map(String);
-    if (typeof v === "string") return v;
-    return undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 export function PasoConfigurable({
   paso,
@@ -122,7 +110,14 @@ export function PasoConfigurable({
   function recibirFoto(foto: FotoCapturada) {
     if (!camaraPara) return;
     const id = Crypto.randomUUID();
-    setFotosPendientes((prev) => ({ ...prev, [id]: foto }));
+    // En una recaptura, la entrada del uuid reemplazado se elimina: si se
+    // quedara, crecería con cada repetición durante toda la visita.
+    const anterior = valores[camaraPara];
+    setFotosPendientes((prev) => {
+      const siguiente = { ...prev, [id]: foto };
+      if (typeof anterior === "string") delete siguiente[anterior];
+      return siguiente;
+    });
     set(camaraPara, id);
     setCamaraPara(null);
   }
@@ -136,15 +131,14 @@ export function PasoConfigurable({
       // se reproducen en orden de inserción, así la fila `foto` llega al servidor
       // antes que la respuesta que la referencia.
       try {
-        for (const c of paso.campos) {
-          if (c.tipo !== "foto") continue;
-          const id = valores[c.id];
-          if (typeof id !== "string") continue;
-          const pendiente = fotosPendientes[id];
-          if (!pendiente) continue; // ya encolada en una entrada anterior
+        for (const { id, foto } of fotosPorEncolar(
+          paso.campos,
+          valores,
+          fotosPendientes,
+        )) {
           await encolarFoto({
             id,
-            foto: pendiente,
+            foto,
             tipo: "campo_extra",
             tenantId,
             visitaId,
@@ -309,11 +303,13 @@ function Control({
             {capturada ? "Foto tomada" : "Toma la foto (solo cámara)"}
           </Text>
         </View>
+        {/* El label contiene el texto visible (WCAG 2.5.3): quien dicta "Abrir
+            cámara" por control de voz tiene que encontrar este botón. */}
         <Pressable
           onPress={onAbrirCamara}
           style={p.botonSec}
           accessibilityRole="button"
-          accessibilityLabel={`${capturada ? "Repetir" : "Tomar"} foto — ${campo.etiqueta}`}
+          accessibilityLabel={`${capturada ? "Repetir foto" : "Abrir cámara"} — ${campo.etiqueta}`}
         >
           <Text style={p.botonSecTexto}>
             {capturada ? "Repetir foto" : "Abrir cámara"}

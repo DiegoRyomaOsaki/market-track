@@ -3,8 +3,10 @@ import { describe, expect, it } from "@jest/globals";
 
 import {
   coercionValorRespuesta,
+  crudoDesdeValor,
   estaContestado,
   faltanObligatorios,
+  fotosPorEncolar,
   parseDefinicionFormulario,
   resolverVersionAnclada,
 } from "./formulario";
@@ -327,5 +329,63 @@ describe("estaContestado / faltanObligatorios", () => {
   it("una foto opcional sin capturar no bloquea el paso", () => {
     const campos = [campo({ id: "f", tipo: "foto", obligatorio: false })];
     expect(faltanObligatorios(campos, {})).toBe(false);
+  });
+});
+
+describe("crudoDesdeValor", () => {
+  it("el uuid de una foto guardada vuelve tal cual (round-trip)", () => {
+    const id = "b3e9c2a1-4f6d-4b8e-9c2a-1f6d4b8e9c2a";
+    expect(crudoDesdeValor(JSON.stringify(id))).toBe(id);
+  });
+
+  it("números y booleanos vuelven a su forma de edición", () => {
+    expect(crudoDesdeValor("4.5")).toBe("4.5");
+    expect(crudoDesdeValor("true")).toBe(true);
+    expect(crudoDesdeValor('["A","B"]')).toEqual(["A", "B"]);
+  });
+
+  it("un JSON roto o de forma inesperada cae a sin-contestar, no revienta", () => {
+    expect(crudoDesdeValor("{roto")).toBeUndefined();
+    expect(crudoDesdeValor('{"un":"objeto"}')).toBeUndefined();
+    expect(crudoDesdeValor("null")).toBeUndefined();
+  });
+});
+
+describe("fotosPorEncolar", () => {
+  const ID_A = "aaaaaaaa-0000-0000-0000-000000000001";
+  const ID_B = "bbbbbbbb-0000-0000-0000-000000000002";
+  const campos = [
+    campo({ id: "f1", tipo: "foto" }),
+    campo({ id: "texto", tipo: "texto" }),
+    campo({ id: "f2", tipo: "foto" }),
+  ];
+
+  it("devuelve solo los campos foto con captura pendiente, en orden", () => {
+    const r = fotosPorEncolar(
+      campos,
+      { f1: ID_A, texto: "hola", f2: ID_B },
+      { [ID_A]: "fotoA", [ID_B]: "fotoB" },
+    );
+    expect(r).toEqual([
+      { campoId: "f1", id: ID_A, foto: "fotoA" },
+      { campoId: "f2", id: ID_B, foto: "fotoB" },
+    ]);
+  });
+
+  it("un uuid sin entrada pendiente no se re-encola (reintento tras fallo parcial)", () => {
+    // La primera foto se encoló y su entrada se limpió; la segunda falló. Al
+    // reintentar, solo la segunda debe volver a la cola.
+    const r = fotosPorEncolar(
+      campos,
+      { f1: ID_A, f2: ID_B },
+      { [ID_B]: "fotoB" },
+    );
+    expect(r).toEqual([{ campoId: "f2", id: ID_B, foto: "fotoB" }]);
+  });
+
+  it("un campo foto sin capturar y una entrada huérfana no producen nada", () => {
+    // La entrada huérfana (uuid que ya no está en valores) fue reemplazada por
+    // una recaptura: no debe encolarse.
+    expect(fotosPorEncolar(campos, {}, { [ID_A]: "huerfana" })).toEqual([]);
   });
 });

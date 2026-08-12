@@ -163,6 +163,45 @@ export function coercionValorRespuesta(
 // `undefined` = el control no se ha tocado.
 export type RespuestaCruda = string | boolean | string[] | undefined;
 
+/** El valor guardado (JSON) de vuelta a su forma cruda para editar. Un JSON
+ * roto o de una forma inesperada cae a `undefined` (campo sin contestar), nunca
+ * revienta: la fila viene de la réplica y pudo escribirla otra versión. */
+export function crudoDesdeValor(json: string): RespuestaCruda {
+  try {
+    const v: unknown = JSON.parse(json);
+    if (typeof v === "number") return String(v);
+    if (typeof v === "boolean") return v;
+    if (Array.isArray(v)) return v.map(String);
+    if (typeof v === "string") return v;
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Las capturas que faltan por encolar antes de guardar el paso: campos `foto`
+ * cuyo valor es un uuid con entrada viva en `pendientes`. Un uuid sin entrada ya
+ * se encoló en una pasada anterior (el reintento no debe re-encolarlo) y una
+ * entrada cuyo uuid ya no está en `valores` fue reemplazada por una recaptura.
+ */
+export function fotosPorEncolar<T>(
+  campos: CampoFormulario[],
+  valores: Record<string, RespuestaCruda>,
+  pendientes: Record<string, T>,
+): { campoId: string; id: string; foto: T }[] {
+  const resultado: { campoId: string; id: string; foto: T }[] = [];
+  for (const c of campos) {
+    if (c.tipo !== "foto") continue;
+    const id = valores[c.id];
+    if (typeof id !== "string") continue;
+    const foto = pendientes[id];
+    if (foto === undefined) continue;
+    resultado.push({ campoId: c.id, id, foto });
+  }
+  return resultado;
+}
+
 /** ¿El campo está contestado? Un número en blanco ("") NO cuenta —por eso el
  * gate mira el crudo y no el coercionado, que convertiría "" en 0. */
 export function estaContestado(valor: RespuestaCruda): boolean {
