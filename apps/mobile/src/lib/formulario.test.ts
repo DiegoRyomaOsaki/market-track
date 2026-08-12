@@ -54,6 +54,7 @@ describe("parseDefinicionFormulario", () => {
 
 describe("resolverVersionAnclada", () => {
   const marca = "m1";
+  const paraLev = { ambito: "levantamiento", marcaId: marca } as const;
   const formEspecifico = { id: "fe", marca_id: marca, creado_at: "2026-07-02" };
   const formTodas = { id: "ft", marca_id: null, creado_at: "2026-07-01" };
 
@@ -64,7 +65,7 @@ describe("resolverVersionAnclada", () => {
         { id: "vt", formulario_id: "ft", version: 3 },
         { id: "ve", formulario_id: "fe", version: 1 },
       ],
-      marca,
+      paraLev,
     );
     expect(v).toBe("ve");
   });
@@ -73,7 +74,7 @@ describe("resolverVersionAnclada", () => {
     const v = resolverVersionAnclada(
       [formTodas],
       [{ id: "vt", formulario_id: "ft", version: 1 }],
-      marca,
+      paraLev,
     );
     expect(v).toBe("vt");
   });
@@ -87,7 +88,7 @@ describe("resolverVersionAnclada", () => {
         { id: "v_viejo", formulario_id: "viejo", version: 99 },
         { id: "v_nuevo", formulario_id: "nuevo", version: 1 },
       ],
-      marca,
+      paraLev,
     );
     expect(v).toBe("v_nuevo");
   });
@@ -99,7 +100,7 @@ describe("resolverVersionAnclada", () => {
         { id: "vt1", formulario_id: "ft", version: 1 },
         { id: "vt2", formulario_id: "ft", version: 2 },
       ],
-      marca,
+      paraLev,
     );
     expect(v).toBe("vt2");
   });
@@ -108,13 +109,80 @@ describe("resolverVersionAnclada", () => {
     const v = resolverVersionAnclada(
       [formTodas, formEspecifico],
       [{ id: "vt", formulario_id: "ft", version: 1 }],
-      marca,
+      paraLev,
     );
     expect(v).toBe("vt");
   });
 
   it("devuelve null si no hay formulario para la marca", () => {
-    expect(resolverVersionAnclada([], [], marca)).toBeNull();
+    expect(resolverVersionAnclada([], [], paraLev)).toBeNull();
+  });
+
+  it("el ámbito levantamiento IGNORA los formularios de check-in", () => {
+    // Sin este filtro, un checklist de check-in (marca_id null) entraría al
+    // levantamiento como candidato "de todas las marcas".
+    const checkIn = {
+      id: "fc",
+      marca_id: null,
+      creado_at: "2026-08-01",
+      ambito: "check_in",
+    };
+    const v = resolverVersionAnclada(
+      [checkIn, { ...formTodas, ambito: "levantamiento" }],
+      [
+        { id: "vc", formulario_id: "fc", version: 5 },
+        { id: "vt", formulario_id: "ft", version: 1 },
+      ],
+      paraLev,
+    );
+    expect(v).toBe("vt");
+  });
+
+  it("el ámbito check_in elige el checklist más reciente e ignora los del levantamiento", () => {
+    const viejo = {
+      id: "c1",
+      marca_id: null,
+      creado_at: "2026-08-01",
+      ambito: "check_in",
+    };
+    const nuevo = {
+      id: "c2",
+      marca_id: null,
+      creado_at: "2026-08-10",
+      ambito: "check_in",
+    };
+    const v = resolverVersionAnclada(
+      [{ ...formTodas, ambito: "levantamiento" }, viejo, nuevo],
+      [
+        { id: "vt", formulario_id: "ft", version: 9 },
+        { id: "v1", formulario_id: "c1", version: 3 },
+        { id: "v2", formulario_id: "c2", version: 1 },
+      ],
+      { ambito: "check_in" },
+    );
+    expect(v).toBe("v2");
+  });
+
+  it("un formulario con ámbito NULO (réplica anterior a la migración) cuenta como levantamiento", () => {
+    // PowerSync solo reenvía una fila cuando cambia: un teléfono con la réplica
+    // de antes de la migración trae `ambito` null indefinidamente. Sin este
+    // fallback, el primer arranque tras actualizar la app perdería TODOS los
+    // formularios de levantamiento existentes.
+    const sinAmbito = { id: "ft", marca_id: null, creado_at: "2026-07-01" };
+    expect(
+      resolverVersionAnclada(
+        [sinAmbito],
+        [{ id: "vt", formulario_id: "ft", version: 1 }],
+        paraLev,
+      ),
+    ).toBe("vt");
+    expect(
+      resolverVersionAnclada(
+        [sinAmbito],
+        [{ id: "vt", formulario_id: "ft", version: 1 }],
+        { ambito: "check_in" },
+      ),
+    ).toBeNull();
   });
 });
 

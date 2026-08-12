@@ -53,6 +53,14 @@ describe("streams.yaml — contrato de seguridad", () => {
     );
   });
 
+  it("el checklist de check-in se acota a las visitas del propio usuario", () => {
+    // Sin el IN, cada teléfono bajaría las respuestas del checklist de todos
+    // sus compañeros — dato laboral de otros, no suyo.
+    expect(streams).toMatch(
+      /FROM visita_respuesta WHERE .*visita_id IN \(SELECT id FROM visita WHERE mercaderista_id = auth\.user_id\(\)\)/,
+    );
+  });
+
   it("exige acceso efectivo: usuario activo y su cliente activo", () => {
     // Espeja app.perfil_efectivo(): si el cliente se cancela, deja de replicar.
     expect(streams).toMatch(/p\.activo\s*=\s*true/);

@@ -47,6 +47,7 @@ type Props = {
   activoInicial: boolean;
   cliente: string;
   marca: string | null;
+  ambito: "levantamiento" | "check_in";
   definicionInicial: DefinicionBorrador;
   versionPublicada: number | null;
   publicadaAt: string | null;
@@ -88,6 +89,7 @@ export function ConstructorFormulario({
   activoInicial,
   cliente,
   marca,
+  ambito,
   definicionInicial,
   versionPublicada,
   publicadaAt,
@@ -226,6 +228,7 @@ export function ConstructorFormulario({
       <TarjetaCabecera
         cliente={cliente}
         marca={marca}
+        ambito={ambito}
         versionPublicada={versionPublicada}
         publicadaAt={publicadaAt}
         nombre={nombre}
@@ -303,6 +306,7 @@ export function ConstructorFormulario({
       ) : (
         <Editor
           pasos={pasos}
+          esCheckIn={ambito === "check_in"}
           problemas={problemas}
           onAgregarPaso={agregarPaso}
           onEditarPaso={editarPaso}
@@ -321,6 +325,7 @@ export function ConstructorFormulario({
 function TarjetaCabecera({
   cliente,
   marca,
+  ambito,
   versionPublicada,
   publicadaAt,
   nombre,
@@ -330,6 +335,7 @@ function TarjetaCabecera({
 }: {
   cliente: string;
   marca: string | null;
+  ambito: "levantamiento" | "check_in";
   versionPublicada: number | null;
   publicadaAt: string | null;
   nombre: string;
@@ -337,6 +343,7 @@ function TarjetaCabecera({
   onNombre: (v: string) => void;
   onActivo: (v: boolean) => void;
 }) {
+  const esCheckIn = ambito === "check_in";
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-border bg-background p-6">
       <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-muted-foreground">
@@ -344,7 +351,10 @@ function TarjetaCabecera({
           {cliente}
         </span>
         <span className="rounded-full bg-accent px-2.5 py-0.5 font-semibold text-accent-foreground">
-          {marca ?? "Todas las marcas"}
+          {esCheckIn ? "Check-in" : "Levantamiento"}
+        </span>
+        <span className="rounded-full bg-accent px-2.5 py-0.5 font-semibold text-accent-foreground">
+          {marca ?? (esCheckIn ? "De la visita" : "Todas las marcas")}
         </span>
         {versionPublicada != null ? (
           <span>
@@ -414,6 +424,7 @@ function BotonVista({
 
 function Editor({
   pasos,
+  esCheckIn,
   problemas,
   onAgregarPaso,
   onEditarPaso,
@@ -425,6 +436,7 @@ function Editor({
   onMoverCampo,
 }: {
   pasos: PasoEditable[];
+  esCheckIn: boolean;
   problemas: string[];
   onAgregarPaso: () => void;
   onEditarPaso: (idx: number, cambio: Partial<PasoEditable>) => void;
@@ -464,6 +476,7 @@ function Editor({
           <PasoTarjeta
             key={paso.id}
             paso={paso}
+            esCheckIn={esCheckIn}
             indice={i}
             total={pasos.length}
             onEditar={(cambio) => onEditarPaso(i, cambio)}
@@ -492,6 +505,7 @@ function Editor({
 
 function PasoTarjeta({
   paso,
+  esCheckIn,
   indice,
   total,
   onEditar,
@@ -503,6 +517,7 @@ function PasoTarjeta({
   onMoverCampo,
 }: {
   paso: PasoEditable;
+  esCheckIn: boolean;
   indice: number;
   total: number;
   onEditar: (cambio: Partial<PasoEditable>) => void;
@@ -544,6 +559,7 @@ function PasoTarjeta({
             <CampoTarjeta
               key={campoItem.id}
               campo={campoItem}
+              esCheckIn={esCheckIn}
               indice={j}
               total={paso.campos.length}
               onEditar={(cambio) => onEditarCampo(j, cambio)}
@@ -567,6 +583,7 @@ function PasoTarjeta({
 
 function CampoTarjeta({
   campo: c,
+  esCheckIn,
   indice,
   total,
   onEditar,
@@ -574,6 +591,7 @@ function CampoTarjeta({
   onMover,
 }: {
   campo: CampoEditable;
+  esCheckIn: boolean;
   indice: number;
   total: number;
   onEditar: (cambio: Partial<CampoEditable>) => void;
@@ -663,15 +681,21 @@ function CampoTarjeta({
         />
       </label>
 
-      <label className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={c.obligatorio}
-          onChange={(e) => onEditar({ obligatorio: e.target.checked })}
-          className="size-4"
-        />
-        <span className={etiqueta}>Obligatorio</span>
-      </label>
+      {esCheckIn ? (
+        <p className="text-[12px] text-muted-foreground">
+          El checklist nunca bloquea el check-in: no hay campos obligatorios.
+        </p>
+      ) : (
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={c.obligatorio}
+            onChange={(e) => onEditar({ obligatorio: e.target.checked })}
+            className="size-4"
+          />
+          <span className={etiqueta}>Obligatorio</span>
+        </label>
+      )}
     </div>
   );
 }

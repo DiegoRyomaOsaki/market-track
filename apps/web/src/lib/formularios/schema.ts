@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import {
+  ambitoFormularioSchema,
   definicionFormularioSchema,
   tipoCampoFormularioSchema,
   TOPES_FORMULARIO,
@@ -31,11 +32,18 @@ const marcaOpcional = z
   .optional()
   .transform((v) => (v == null || v === "" ? null : v));
 
-export const altaFormularioSchema = z.object({
-  nombre,
-  tenant_id: z.guid("Elige un cliente"),
-  marca_id: marcaOpcional,
-});
+export const altaFormularioSchema = z
+  .object({
+    nombre,
+    tenant_id: z.guid("Elige un cliente"),
+    marca_id: marcaOpcional,
+    // Ausente en el alta clásica: el único ámbito que existía era el wizard.
+    ambito: ambitoFormularioSchema.default("levantamiento"),
+  })
+  .refine((v) => v.ambito === "levantamiento" || v.marca_id === null, {
+    message: "Un formulario de check-in es de la visita, no de una marca",
+    path: ["marca_id"],
+  });
 
 export type AltaFormulario = z.infer<typeof altaFormularioSchema>;
 

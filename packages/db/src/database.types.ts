@@ -501,6 +501,7 @@ export type Database = {
       formulario_levantamiento: {
         Row: {
           activo: boolean
+          ambito: Database["public"]["Enums"]["ambito_formulario"]
           creado_at: string
           id: string
           marca_id: string | null
@@ -509,6 +510,7 @@ export type Database = {
         }
         Insert: {
           activo?: boolean
+          ambito?: Database["public"]["Enums"]["ambito_formulario"]
           creado_at?: string
           id?: string
           marca_id?: string | null
@@ -517,6 +519,7 @@ export type Database = {
         }
         Update: {
           activo?: boolean
+          ambito?: Database["public"]["Enums"]["ambito_formulario"]
           creado_at?: string
           id?: string
           marca_id?: string | null
@@ -1852,6 +1855,7 @@ export type Database = {
           check_out_recibido_at: string | null
           creado_at: string
           estado: Database["public"]["Enums"]["estado_visita"]
+          formulario_version_id: string | null
           id: string
           mercaderista_id: string
           rutero_parada_id: string
@@ -1873,6 +1877,7 @@ export type Database = {
           check_out_recibido_at?: string | null
           creado_at?: string
           estado?: Database["public"]["Enums"]["estado_visita"]
+          formulario_version_id?: string | null
           id?: string
           mercaderista_id: string
           rutero_parada_id: string
@@ -1894,6 +1899,7 @@ export type Database = {
           check_out_recibido_at?: string | null
           creado_at?: string
           estado?: Database["public"]["Enums"]["estado_visita"]
+          formulario_version_id?: string | null
           id?: string
           mercaderista_id?: string
           rutero_parada_id?: string
@@ -1903,6 +1909,13 @@ export type Database = {
           tienda_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "visita_formulario_version_id_fkey"
+            columns: ["formulario_version_id"]
+            isOneToOne: false
+            referencedRelation: "formulario_version"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "visita_mercaderista_id_fkey"
             columns: ["mercaderista_id"]
@@ -1937,6 +1950,48 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "tienda"
             referencedColumns: ["id", "tenant_id"]
+          },
+        ]
+      }
+      visita_respuesta: {
+        Row: {
+          campo_id: string
+          creado_at: string
+          id: string
+          tenant_id: string
+          valor: Json
+          visita_id: string
+        }
+        Insert: {
+          campo_id: string
+          creado_at?: string
+          id?: string
+          tenant_id: string
+          valor: Json
+          visita_id: string
+        }
+        Update: {
+          campo_id?: string
+          creado_at?: string
+          id?: string
+          tenant_id?: string
+          valor?: Json
+          visita_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vis_resp_visita_fk"
+            columns: ["visita_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "visita"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "visita_respuesta_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -2274,6 +2329,7 @@ export type Database = {
       }
     }
     Enums: {
+      ambito_formulario: "levantamiento" | "check_in"
       asistencia_parada: "pendiente" | "asistio" | "falto"
       canal_alerta: "dashboard" | "email" | "whatsapp"
       canal_otp: "correo" | "sms" | "whatsapp"
@@ -2469,6 +2525,7 @@ export const Constants = {
   },
   public: {
     Enums: {
+      ambito_formulario: ["levantamiento", "check_in"],
       asistencia_parada: ["pendiente", "asistio", "falto"],
       canal_alerta: ["dashboard", "email", "whatsapp"],
       canal_otp: ["correo", "sms", "whatsapp"],

@@ -221,6 +221,77 @@ describe("galeria_evidencia — la foto de un campo configurable (campo_extra)",
   });
 });
 
+describe("la foto de herramientas del check-in — dato laboral, no evidencia de tienda", () => {
+  // `campo_extra` con `levantamiento_id` NULL es la foto del checklist del
+  // check-in (MAR-98): botas, casco, metro. Es personal de la outsourcing; el
+  // cliente-marca no la ve — mismo criterio y misma política que la selfie. El
+  // staff sí: para el supervisor es evidencia de cumplimiento.
+  const FOTO_HERRAMIENTAS = "e0000015-0000-0000-0000-000000000096";
+
+  async function sembrarFotoHerramientas(c: Client): Promise<void> {
+    await c.query("set local role postgres");
+    await c.query(
+      `insert into public.foto (id, tenant_id, visita_id, levantamiento_id, tipo, capturada_at)
+       values ($1, $2, $3, null, 'campo_extra', now())`,
+      [FOTO_HERRAMIENTAS, TENANTS.maracumango, VISITA_MRC],
+    );
+    await c.query("set local role authenticated");
+  }
+
+  it("el cliente-marca NO la ve, ni en la galería ni consultando `foto`", async () => {
+    await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
+      await sembrarFotoHerramientas(c);
+      const directa = await c.query(
+        `select id from public.foto where id = $1`,
+        [FOTO_HERRAMIENTAS],
+      );
+      expect(directa.rowCount).toBe(0);
+
+      const arbol = await galeria(c);
+      const fotosVisita =
+        arbol.tiendas[0]?.visitas[0]?.fotos_visita.map((f) => f.tipo) ?? [];
+      expect(fotosVisita).not.toContain("campo_extra");
+    });
+  });
+
+  it("el supervisor SÍ la ve en `fotos_visita`", async () => {
+    await comoUsuario(db, USUARIOS.supervisor, async (c) => {
+      await sembrarFotoHerramientas(c);
+      const arbol = await galeria(c);
+      const fotosVisita = arbol.tiendas
+        .flatMap((t) => t.visitas)
+        .flatMap((v) => v.fotos_visita)
+        .map((f) => f.tipo);
+      expect(fotosVisita).toContain("campo_extra");
+    });
+  });
+
+  it("la foto campo_extra DE UN LEVANTAMIENTO sigue visible para el cliente", async () => {
+    // La exclusión es quirúrgica: solo la del check-in (sin levantamiento). La
+    // evidencia de góndola capturada por un campo del wizard es de la tienda y
+    // el cliente la compra.
+    await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
+      await c.query("set local role postgres");
+      await c.query(
+        `insert into public.foto (id, tenant_id, visita_id, levantamiento_id, tipo, capturada_at)
+         values ($1, $2, $3, $4, 'campo_extra', now())`,
+        [
+          "e0000015-0000-0000-0000-000000000095",
+          TENANTS.maracumango,
+          VISITA_MRC,
+          LEVANTAMIENTO_MRC,
+        ],
+      );
+      await c.query("set local role authenticated");
+      const directa = await c.query(
+        `select id from public.foto where id = $1`,
+        ["e0000015-0000-0000-0000-000000000095"],
+      );
+      expect(directa.rowCount).toBe(1);
+    });
+  });
+});
+
 describe("galeria_evidencia — filtros", () => {
   it("pedir la tienda REAL del rival por parámetro no devuelve nada", async () => {
     // Distinto de pasar un uuid inventado: aquí la tienda existe y tiene visitas

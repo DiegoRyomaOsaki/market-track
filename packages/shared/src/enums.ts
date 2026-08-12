@@ -61,6 +61,12 @@ export const estadoImportacionSchema = z.enum(
 // (MAR-74). Es el contrato tipado que consumen el shell (MAR-54) y el toggle
 // admin (MAR-81) sin redefinir la lista.
 export const moduloPortalSchema = z.enum(Constants.public.Enums.modulo_portal);
+// Dónde se usa un formulario configurable: el wizard del levantamiento (por
+// marca) o el check-in (de la visita).
+export const ambitoFormularioSchema = z.enum(
+  Constants.public.Enums.ambito_formulario,
+);
+export const AMBITOS_FORMULARIO = Constants.public.Enums.ambito_formulario;
 
 export type RolUsuario = z.infer<typeof rolUsuarioSchema>;
 export type EstadoVisita = z.infer<typeof estadoVisitaSchema>;
@@ -79,3 +85,4 @@ export type EstadoPase = z.infer<typeof estadoPaseSchema>;
 export type TipoTienda = z.infer<typeof tipoTiendaSchema>;
 export type EstadoImportacion = z.infer<typeof estadoImportacionSchema>;
 export type ModuloPortal = z.infer<typeof moduloPortalSchema>;
+export type AmbitoFormulario = z.infer<typeof ambitoFormularioSchema>;

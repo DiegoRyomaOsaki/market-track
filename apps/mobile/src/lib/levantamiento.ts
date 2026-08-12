@@ -126,8 +126,13 @@ async function resolverVersionParaMarca(
   marcaId: string,
 ): Promise<string | null> {
   const [formularios, versiones] = await Promise.all([
-    db.getAll<{ id: string; marca_id: string | null; creado_at: string }>(
-      `SELECT id, marca_id, creado_at FROM formulario_levantamiento
+    db.getAll<{
+      id: string;
+      marca_id: string | null;
+      creado_at: string;
+      ambito: string | null;
+    }>(
+      `SELECT id, marca_id, creado_at, ambito FROM formulario_levantamiento
        WHERE tenant_id = ? AND activo = 1`,
       [tenantId],
     ),
@@ -137,7 +142,10 @@ async function resolverVersionParaMarca(
       [tenantId],
     ),
   ]);
-  return resolverVersionAnclada(formularios, versiones, marcaId);
+  return resolverVersionAnclada(formularios, versiones, {
+    ambito: "levantamiento",
+    marcaId,
+  });
 }
 
 /** La definición ANCLADA al levantamiento (no la última publicada), ya validada

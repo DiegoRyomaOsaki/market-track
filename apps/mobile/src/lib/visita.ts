@@ -23,6 +23,10 @@ export type DatosCheckIn = {
   // Minutos de traslado desde la tienda anterior (modo tránsito). Null si es la
   // primera visita del día o no venía un cronómetro en curso.
   tiempo_traslado_min: number | null;
+  // La versión del formulario de check-in que se le MOSTRÓ (MAR-98). Se resuelve
+  // al renderizar, no al confirmar: lo que vio es lo que queda anclado. Null si
+  // el cliente no tiene checklist configurado.
+  formulario_version_id: string | null;
 };
 
 /** Crea la visita del check-in y devuelve su id. */
@@ -31,8 +35,9 @@ export async function crearVisitaCheckIn(d: DatosCheckIn): Promise<string> {
   await db.execute(
     `INSERT INTO visita
        (id, tenant_id, rutero_parada_id, tienda_id, mercaderista_id,
-        check_in_at, check_in_geo, estado, selfie_foto_id, tiempo_traslado_min)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'en_curso', ?, ?)`,
+        check_in_at, check_in_geo, estado, selfie_foto_id, tiempo_traslado_min,
+        formulario_version_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'en_curso', ?, ?, ?)`,
     [
       id,
       d.tenant_id,
@@ -43,9 +48,36 @@ export async function crearVisitaCheckIn(d: DatosCheckIn): Promise<string> {
       puntoAEwkt(d.punto),
       d.selfie_foto_id,
       d.tiempo_traslado_min,
+      d.formulario_version_id,
     ],
   );
   return id;
+}
+
+/**
+ * Guarda las respuestas del checklist de check-in (una fila por campo
+ * contestado). Réplica local; PowerSync las sube por el CRUD. Quien llama ya
+ * encoló las fotos: la fila `foto` tiene que viajar antes que la respuesta que
+ * la referencia por uuid.
+ */
+export async function guardarRespuestasVisita(d: {
+  visita_id: string;
+  tenant_id: string;
+  respuestas: { campo_id: string; valor: unknown }[];
+}): Promise<void> {
+  for (const r of d.respuestas) {
+    await db.execute(
+      `INSERT INTO visita_respuesta (id, tenant_id, visita_id, campo_id, valor)
+       VALUES (?, ?, ?, ?, ?)`,
+      [
+        Crypto.randomUUID(),
+        d.tenant_id,
+        d.visita_id,
+        r.campo_id,
+        JSON.stringify(r.valor),
+      ],
+    );
+  }
 }
 
 /**
