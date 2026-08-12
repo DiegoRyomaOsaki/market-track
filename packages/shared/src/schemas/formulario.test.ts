@@ -354,7 +354,9 @@ describe("tope de tamaño total", () => {
 
 describe("topeDeTexto", () => {
   // El párrafo admite más que una línea de texto, y todo lo demás que guarde una
-  // cadena (incluida la referencia de una foto) se trata como texto corto.
+  // cadena se trata como texto corto. La respuesta de una foto ya no pasa por
+  // aquí (el móvil la valida como uuid), pero la función sigue siendo total
+  // sobre la unión de tipos: `foto` conserva un tope definido.
 
   it("el párrafo admite más que el texto corto", () => {
     expect(topeDeTexto("parrafo")).toBe(TOPES_RESPUESTA.parrafoChars);

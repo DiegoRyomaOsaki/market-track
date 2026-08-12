@@ -376,6 +376,40 @@ describe("formulario de levantamiento — config del admin, publicar congela", (
   });
 });
 
+describe("foto de campo configurable — tipo campo_extra", () => {
+  // La respuesta de un campo foto guarda el uuid de la fila `foto` en su `valor`
+  // jsonb, sin FK: el enlace lo resuelve cualquier lectura bajo RLS. Este par de
+  // escrituras es exactamente lo que sube el móvil al continuar el paso, y fija
+  // que el enum nuevo no necesita ni grant ni política nueva.
+  it("el mercaderista inserta la foto campo_extra y la respuesta que la referencia", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const foto = await c.query(
+        `insert into public.foto (id, tenant_id, visita_id, levantamiento_id, tipo, capturada_at)
+         values ($1, $2, $3, $4, 'campo_extra', now())`,
+        [
+          IDS.nuevaFoto,
+          TENANTS.maracumango,
+          IDS.visitaMrc,
+          IDS.levantamientoMrc,
+        ],
+      );
+      expect(foto.rowCount).toBe(1);
+
+      const respuesta = await c.query(
+        `insert into public.levantamiento_respuesta (id, tenant_id, levantamiento_id, campo_id, valor)
+         values ($1, $2, $3, 'foto_gondola', to_jsonb($4::text))`,
+        [
+          IDS.nuevaRespuesta,
+          TENANTS.maracumango,
+          IDS.levantamientoMrc,
+          IDS.nuevaFoto,
+        ],
+      );
+      expect(respuesta.rowCount).toBe(1);
+    });
+  });
+});
+
 describe("levantamiento_respuesta — el mercaderista escribe lo que levanta", () => {
   it("el mercaderista guarda una respuesta en SU levantamiento", async () => {
     await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {

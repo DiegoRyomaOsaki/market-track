@@ -185,6 +185,42 @@ describe("galeria_evidencia — el par antes/después", () => {
   });
 });
 
+describe("galeria_evidencia — la foto de un campo configurable (campo_extra)", () => {
+  // El enum creció sin tocar el SQL de la galería: su cubeta `otras` es
+  // `tipo not in ('selfie','antes','despues')`. Derived SQL cuyo comportamiento
+  // cambia con el enum → se verifica contra la base sembrada, no contra el tipo.
+  const FOTO_CAMPO = "e0000015-0000-0000-0000-000000000097";
+
+  async function sembrarFotoCampo(c: Client): Promise<void> {
+    await c.query("set local role postgres");
+    await c.query(
+      `insert into public.foto (id, tenant_id, visita_id, levantamiento_id, tipo, capturada_at)
+       values ($1, $2, $3, $4, 'campo_extra', now())`,
+      [FOTO_CAMPO, TENANTS.maracumango, VISITA_MRC, LEVANTAMIENTO_MRC],
+    );
+    await c.query("set local role authenticated");
+  }
+
+  it("sale en la cubeta `otras` de su levantamiento", async () => {
+    await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
+      await sembrarFotoCampo(c);
+      const lev = (await galeria(c)).tiendas[0]?.visitas[0]?.levantamientos[0];
+      expect(lev?.otras.map((f) => f.tipo)).toContain("campo_extra");
+    });
+  });
+
+  it("filtrar por campo_extra la deja sola y apaga el par antes/después", async () => {
+    await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
+      await sembrarFotoCampo(c);
+      const filtrado = await galeria(c, { tipo: "campo_extra" });
+      const lev = filtrado.tiendas[0]?.visitas[0]?.levantamientos[0];
+      expect(lev?.otras.map((f) => f.tipo)).toEqual(["campo_extra"]);
+      expect(lev?.antes).toBeNull();
+      expect(lev?.despues).toBeNull();
+    });
+  });
+});
+
 describe("galeria_evidencia — filtros", () => {
   it("pedir la tienda REAL del rival por parámetro no devuelve nada", async () => {
     // Distinto de pasar un uuid inventado: aquí la tienda existe y tiene visitas

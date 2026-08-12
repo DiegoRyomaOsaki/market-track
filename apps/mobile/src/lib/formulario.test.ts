@@ -3,8 +3,10 @@ import { describe, expect, it } from "@jest/globals";
 
 import {
   coercionValorRespuesta,
+  crudoDesdeValor,
   estaContestado,
   faltanObligatorios,
+  fotosPorEncolar,
   parseDefinicionFormulario,
   resolverVersionAnclada,
 } from "./formulario";
@@ -259,6 +261,37 @@ describe("coercionValorRespuesta", () => {
     const c = campo({ tipo: "seleccion_multiple", opciones: ["A", "B"] });
     expect(coercionValorRespuesta(c, ["A", "Z", "B"])).toEqual(["A", "B"]);
   });
+
+  it("la respuesta de una foto es su uuid, devuelto tal cual", () => {
+    const c = campo({ tipo: "foto" });
+    const id = "b3e9c2a1-4f6d-4b8e-9c2a-1f6d4b8e9c2a";
+    expect(coercionValorRespuesta(c, id)).toBe(id);
+  });
+
+  it("acepta un uuid de seed sin bits de versión (z.guid, no z.uuid)", () => {
+    // Postgres no exige los bits de versión/variante del RFC 9562; los ids del
+    // seed del proyecto no los cumplen y aun así son uuid válidos para la base.
+    const c = campo({ tipo: "foto" });
+    const seed = "11111111-1111-1111-1111-111111111111";
+    expect(coercionValorRespuesta(c, seed)).toBe(seed);
+  });
+
+  it("texto arbitrario en un campo foto no pasa por referencia", () => {
+    // Un valor que no es uuid no apunta a ninguna fila `foto`: guardarlo dejaría
+    // el campo "contestado" con una referencia que la app no puede resolver.
+    const c = campo({ tipo: "foto" });
+    expect(coercionValorRespuesta(c, "foto.jpg")).toBe("");
+    expect(coercionValorRespuesta(c, "si")).toBe("");
+  });
+
+  it("un no-string en un campo foto cae a vacío", () => {
+    const c = campo({ tipo: "foto" });
+    expect(coercionValorRespuesta(c, 42)).toBe("");
+    expect(coercionValorRespuesta(c, true)).toBe("");
+    expect(coercionValorRespuesta(c, null)).toBe("");
+    expect(coercionValorRespuesta(c, ["a"])).toBe("");
+    expect(coercionValorRespuesta(c, {})).toBe("");
+  });
 });
 
 describe("estaContestado / faltanObligatorios", () => {
@@ -280,5 +313,79 @@ describe("estaContestado / faltanObligatorios", () => {
     ];
     expect(faltanObligatorios(campos, {})).toBe(true);
     expect(faltanObligatorios(campos, { req: "listo" })).toBe(false);
+  });
+
+  it("una foto obligatoria falta hasta que hay captura, y su uuid la satisface", () => {
+    const campos = [campo({ id: "f", tipo: "foto", obligatorio: true })];
+    expect(faltanObligatorios(campos, {})).toBe(true);
+    expect(faltanObligatorios(campos, { f: "" })).toBe(true);
+    expect(
+      faltanObligatorios(campos, {
+        f: "b3e9c2a1-4f6d-4b8e-9c2a-1f6d4b8e9c2a",
+      }),
+    ).toBe(false);
+  });
+
+  it("una foto opcional sin capturar no bloquea el paso", () => {
+    const campos = [campo({ id: "f", tipo: "foto", obligatorio: false })];
+    expect(faltanObligatorios(campos, {})).toBe(false);
+  });
+});
+
+describe("crudoDesdeValor", () => {
+  it("el uuid de una foto guardada vuelve tal cual (round-trip)", () => {
+    const id = "b3e9c2a1-4f6d-4b8e-9c2a-1f6d4b8e9c2a";
+    expect(crudoDesdeValor(JSON.stringify(id))).toBe(id);
+  });
+
+  it("números y booleanos vuelven a su forma de edición", () => {
+    expect(crudoDesdeValor("4.5")).toBe("4.5");
+    expect(crudoDesdeValor("true")).toBe(true);
+    expect(crudoDesdeValor('["A","B"]')).toEqual(["A", "B"]);
+  });
+
+  it("un JSON roto o de forma inesperada cae a sin-contestar, no revienta", () => {
+    expect(crudoDesdeValor("{roto")).toBeUndefined();
+    expect(crudoDesdeValor('{"un":"objeto"}')).toBeUndefined();
+    expect(crudoDesdeValor("null")).toBeUndefined();
+  });
+});
+
+describe("fotosPorEncolar", () => {
+  const ID_A = "aaaaaaaa-0000-0000-0000-000000000001";
+  const ID_B = "bbbbbbbb-0000-0000-0000-000000000002";
+  const campos = [
+    campo({ id: "f1", tipo: "foto" }),
+    campo({ id: "texto", tipo: "texto" }),
+    campo({ id: "f2", tipo: "foto" }),
+  ];
+
+  it("devuelve solo los campos foto con captura pendiente, en orden", () => {
+    const r = fotosPorEncolar(
+      campos,
+      { f1: ID_A, texto: "hola", f2: ID_B },
+      { [ID_A]: "fotoA", [ID_B]: "fotoB" },
+    );
+    expect(r).toEqual([
+      { campoId: "f1", id: ID_A, foto: "fotoA" },
+      { campoId: "f2", id: ID_B, foto: "fotoB" },
+    ]);
+  });
+
+  it("un uuid sin entrada pendiente no se re-encola (reintento tras fallo parcial)", () => {
+    // La primera foto se encoló y su entrada se limpió; la segunda falló. Al
+    // reintentar, solo la segunda debe volver a la cola.
+    const r = fotosPorEncolar(
+      campos,
+      { f1: ID_A, f2: ID_B },
+      { [ID_B]: "fotoB" },
+    );
+    expect(r).toEqual([{ campoId: "f2", id: ID_B, foto: "fotoB" }]);
+  });
+
+  it("un campo foto sin capturar y una entrada huérfana no producen nada", () => {
+    // La entrada huérfana (uuid que ya no está en valores) fue reemplazada por
+    // una recaptura: no debe encolarse.
+    expect(fotosPorEncolar(campos, {}, { [ID_A]: "huerfana" })).toEqual([]);
   });
 });

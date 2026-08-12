@@ -244,8 +244,10 @@ function PasoActivo({
     return (
       <PasoConfigurable
         paso={paso}
+        visitaId={visitaId}
         levantamientoId={levantamientoId}
         tenantId={tenantId}
+        usuario={usuario}
         onCompletar={onCompletar}
         onContingencia={onContingencia}
       />

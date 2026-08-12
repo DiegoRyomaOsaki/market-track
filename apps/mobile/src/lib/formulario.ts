@@ -4,8 +4,12 @@ import {
   definicionFormularioSchema,
   recortarRespuesta,
 } from "@market-track/shared";
+import { z } from "zod";
 
 import { mensajeDeError } from "./error";
+
+/** `z.guid()`, no `z.uuid()`: el estricto exige bits de versión que Postgres no impone. */
+const uuid = z.guid();
 
 // La lógica pura del formulario configurable en el móvil (MAR-80, ADR-0010):
 //   - parsear la `definicion` sincronizada (texto en SQLite) con Zod al LEER,
@@ -118,10 +122,15 @@ export function coercionValorRespuesta(
   switch (campo.tipo) {
     case "texto":
     case "parrafo":
-    case "foto":
       return typeof raw === "string"
         ? recortarRespuesta(raw.trim(), campo.tipo)
         : "";
+    // La respuesta de un campo foto es el ID de la fila `foto`, no texto. Un
+    // valor que no sea un uuid no es una referencia: es basura que ninguna
+    // pantalla puede resolver, y guardarla dejaría el campo "contestado"
+    // apuntando a nada.
+    case "foto":
+      return typeof raw === "string" && uuid.safeParse(raw).success ? raw : "";
     case "entero": {
       const n = Number(raw);
       return Number.isFinite(n)
@@ -154,6 +163,45 @@ export function coercionValorRespuesta(
 // `undefined` = el control no se ha tocado.
 export type RespuestaCruda = string | boolean | string[] | undefined;
 
+/** El valor guardado (JSON) de vuelta a su forma cruda para editar. Un JSON
+ * roto o de una forma inesperada cae a `undefined` (campo sin contestar), nunca
+ * revienta: la fila viene de la réplica y pudo escribirla otra versión. */
+export function crudoDesdeValor(json: string): RespuestaCruda {
+  try {
+    const v: unknown = JSON.parse(json);
+    if (typeof v === "number") return String(v);
+    if (typeof v === "boolean") return v;
+    if (Array.isArray(v)) return v.map(String);
+    if (typeof v === "string") return v;
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Las capturas que faltan por encolar antes de guardar el paso: campos `foto`
+ * cuyo valor es un uuid con entrada viva en `pendientes`. Un uuid sin entrada ya
+ * se encoló en una pasada anterior (el reintento no debe re-encolarlo) y una
+ * entrada cuyo uuid ya no está en `valores` fue reemplazada por una recaptura.
+ */
+export function fotosPorEncolar<T>(
+  campos: CampoFormulario[],
+  valores: Record<string, RespuestaCruda>,
+  pendientes: Record<string, T>,
+): { campoId: string; id: string; foto: T }[] {
+  const resultado: { campoId: string; id: string; foto: T }[] = [];
+  for (const c of campos) {
+    if (c.tipo !== "foto") continue;
+    const id = valores[c.id];
+    if (typeof id !== "string") continue;
+    const foto = pendientes[id];
+    if (foto === undefined) continue;
+    resultado.push({ campoId: c.id, id, foto });
+  }
+  return resultado;
+}
+
 /** ¿El campo está contestado? Un número en blanco ("") NO cuenta —por eso el
  * gate mira el crudo y no el coercionado, que convertiría "" en 0. */
 export function estaContestado(valor: RespuestaCruda): boolean {
@@ -165,8 +213,8 @@ export function estaContestado(valor: RespuestaCruda): boolean {
 
 /**
  * ¿Falta contestar algún campo obligatorio? Gobierna el botón "Continuar" de un
- * paso configurable. Los campos `foto` obligatorios cuentan como faltantes
- * mientras no se soporte la captura (el paso se pasa por contingencia).
+ * paso configurable. Un campo `foto` cuenta como contestado cuando su valor es
+ * el uuid de la captura (la UI lo fija al recibir la foto).
  */
 export function faltanObligatorios(
   campos: CampoFormulario[],
