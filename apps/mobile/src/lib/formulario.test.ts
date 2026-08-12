@@ -259,6 +259,37 @@ describe("coercionValorRespuesta", () => {
     const c = campo({ tipo: "seleccion_multiple", opciones: ["A", "B"] });
     expect(coercionValorRespuesta(c, ["A", "Z", "B"])).toEqual(["A", "B"]);
   });
+
+  it("la respuesta de una foto es su uuid, devuelto tal cual", () => {
+    const c = campo({ tipo: "foto" });
+    const id = "b3e9c2a1-4f6d-4b8e-9c2a-1f6d4b8e9c2a";
+    expect(coercionValorRespuesta(c, id)).toBe(id);
+  });
+
+  it("acepta un uuid de seed sin bits de versión (z.guid, no z.uuid)", () => {
+    // Postgres no exige los bits de versión/variante del RFC 9562; los ids del
+    // seed del proyecto no los cumplen y aun así son uuid válidos para la base.
+    const c = campo({ tipo: "foto" });
+    const seed = "11111111-1111-1111-1111-111111111111";
+    expect(coercionValorRespuesta(c, seed)).toBe(seed);
+  });
+
+  it("texto arbitrario en un campo foto no pasa por referencia", () => {
+    // Un valor que no es uuid no apunta a ninguna fila `foto`: guardarlo dejaría
+    // el campo "contestado" con una referencia que la app no puede resolver.
+    const c = campo({ tipo: "foto" });
+    expect(coercionValorRespuesta(c, "foto.jpg")).toBe("");
+    expect(coercionValorRespuesta(c, "si")).toBe("");
+  });
+
+  it("un no-string en un campo foto cae a vacío", () => {
+    const c = campo({ tipo: "foto" });
+    expect(coercionValorRespuesta(c, 42)).toBe("");
+    expect(coercionValorRespuesta(c, true)).toBe("");
+    expect(coercionValorRespuesta(c, null)).toBe("");
+    expect(coercionValorRespuesta(c, ["a"])).toBe("");
+    expect(coercionValorRespuesta(c, {})).toBe("");
+  });
 });
 
 describe("estaContestado / faltanObligatorios", () => {
@@ -280,5 +311,21 @@ describe("estaContestado / faltanObligatorios", () => {
     ];
     expect(faltanObligatorios(campos, {})).toBe(true);
     expect(faltanObligatorios(campos, { req: "listo" })).toBe(false);
+  });
+
+  it("una foto obligatoria falta hasta que hay captura, y su uuid la satisface", () => {
+    const campos = [campo({ id: "f", tipo: "foto", obligatorio: true })];
+    expect(faltanObligatorios(campos, {})).toBe(true);
+    expect(faltanObligatorios(campos, { f: "" })).toBe(true);
+    expect(
+      faltanObligatorios(campos, {
+        f: "b3e9c2a1-4f6d-4b8e-9c2a-1f6d4b8e9c2a",
+      }),
+    ).toBe(false);
+  });
+
+  it("una foto opcional sin capturar no bloquea el paso", () => {
+    const campos = [campo({ id: "f", tipo: "foto", obligatorio: false })];
+    expect(faltanObligatorios(campos, {})).toBe(false);
   });
 });

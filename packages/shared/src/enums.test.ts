@@ -12,6 +12,8 @@ describe("enums derivados de la base", () => {
   it("acepta los valores que la base considera válidos", () => {
     expect(rolUsuarioSchema.parse("mercaderista")).toBe("mercaderista");
     expect(tipoFotoSchema.parse("contingencia")).toBe("contingencia");
+    // La foto de un campo configurable del formulario (MAR-90).
+    expect(tipoFotoSchema.parse("campo_extra")).toBe("campo_extra");
     expect(pasoLevantamientoSchema.parse("share_of_shelf")).toBe(
       "share_of_shelf",
     );

@@ -4,8 +4,12 @@ import {
   definicionFormularioSchema,
   recortarRespuesta,
 } from "@market-track/shared";
+import { z } from "zod";
 
 import { mensajeDeError } from "./error";
+
+/** `z.guid()`, no `z.uuid()`: el estricto exige bits de versión que Postgres no impone. */
+const uuid = z.guid();
 
 // La lógica pura del formulario configurable en el móvil (MAR-80, ADR-0010):
 //   - parsear la `definicion` sincronizada (texto en SQLite) con Zod al LEER,
@@ -118,10 +122,15 @@ export function coercionValorRespuesta(
   switch (campo.tipo) {
     case "texto":
     case "parrafo":
-    case "foto":
       return typeof raw === "string"
         ? recortarRespuesta(raw.trim(), campo.tipo)
         : "";
+    // La respuesta de un campo foto es el ID de la fila `foto`, no texto. Un
+    // valor que no sea un uuid no es una referencia: es basura que ninguna
+    // pantalla puede resolver, y guardarla dejaría el campo "contestado"
+    // apuntando a nada.
+    case "foto":
+      return typeof raw === "string" && uuid.safeParse(raw).success ? raw : "";
     case "entero": {
       const n = Number(raw);
       return Number.isFinite(n)
@@ -165,8 +174,8 @@ export function estaContestado(valor: RespuestaCruda): boolean {
 
 /**
  * ¿Falta contestar algún campo obligatorio? Gobierna el botón "Continuar" de un
- * paso configurable. Los campos `foto` obligatorios cuentan como faltantes
- * mientras no se soporte la captura (el paso se pasa por contingencia).
+ * paso configurable. Un campo `foto` cuenta como contestado cuando su valor es
+ * el uuid de la captura (la UI lo fija al recibir la foto).
  */
 export function faltanObligatorios(
   campos: CampoFormulario[],

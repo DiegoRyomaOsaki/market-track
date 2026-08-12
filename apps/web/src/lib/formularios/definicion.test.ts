@@ -85,6 +85,32 @@ describe("construirDefinicion", () => {
     ]);
     expect(definicionFormularioSchema.safeParse(d).success).toBe(true);
   });
+
+  it("un campo foto no arrastra opciones ni mín/máx de un cambio de tipo", () => {
+    // El admin elige "Selección", teclea opciones, y cambia el tipo a "Foto":
+    // el estado del editor conserva los restos, la definición no debe emitirlos.
+    const d = construirDefinicion([
+      paso({
+        campos: [
+          campo({
+            id: "f",
+            tipo: "foto",
+            etiqueta: "Foto de la góndola",
+            obligatorio: true,
+            opcionesTexto: "A\nB",
+            min: "1",
+            max: "5",
+          }),
+        ],
+      }),
+    ]);
+    const emitido = d.pasos[0]?.campos[0];
+    expect(emitido).toMatchObject({ tipo: "foto", obligatorio: true });
+    expect(emitido).not.toHaveProperty("opciones");
+    expect(emitido).not.toHaveProperty("min");
+    expect(emitido).not.toHaveProperty("max");
+    expect(definicionFormularioSchema.safeParse(d).success).toBe(true);
+  });
 });
 
 describe("definicionADraft", () => {
@@ -207,6 +233,16 @@ describe("problemasDeDefinicion", () => {
     [
       "definición válida",
       [paso({ campos: [campo({ tipo: "texto", etiqueta: "Nota" })] })],
+    ],
+    [
+      "campo foto bien formado",
+      [
+        paso({
+          campos: [
+            campo({ tipo: "foto", etiqueta: "Góndola", obligatorio: true }),
+          ],
+        }),
+      ],
     ],
   ])("coincide con el veredicto del esquema estricto: %s", (_caso, pasos) => {
     const hayProblemas = problemasDeDefinicion(pasos).length > 0;

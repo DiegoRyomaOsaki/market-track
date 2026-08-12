@@ -15,6 +15,8 @@ jest.mock("expo-file-system/legacy", () => ({
   EncodingType: { Base64: "base64" },
 }));
 
+import manifest from "../../package.json";
+
 import { lineasWatermark } from "./foto-captura";
 
 describe("lineasWatermark", () => {
@@ -42,5 +44,25 @@ describe("lineasWatermark", () => {
     expect(lineasWatermark(base)[1]).toMatch(
       /^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/,
     );
+  });
+});
+
+describe("la captura no ofrece la galería como origen", () => {
+  it("no hay ningún selector de imágenes instalado en la app", () => {
+    // Decisión del cliente sobre la integridad de la evidencia: "la foto es del
+    // momento, desde la cámara, no es desde la galería". El único camino de
+    // captura es CamaraFoto (expo-camera). Este assert es la forma mecánica de
+    // fijar esa decisión: si alguien instala un picker, este test lo delata.
+    const instaladas: Record<string, string> = {
+      ...manifest.dependencies,
+      ...manifest.devDependencies,
+    };
+    for (const picker of [
+      "expo-image-picker",
+      "react-native-image-picker",
+      "expo-media-library",
+    ]) {
+      expect(instaladas).not.toHaveProperty(picker);
+    }
   });
 });

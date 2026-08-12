@@ -2335,6 +2335,7 @@ export type Database = {
         | "exhibicion"
         | "precio"
         | "contingencia"
+        | "campo_extra"
       tipo_solicitud_ruta: "cambio_tienda" | "cambio_dia" | "no_visita" | "otro"
       tipo_tienda: "hiper" | "super" | "express"
       unidad_sos: "frentes" | "centimetros"
@@ -2534,6 +2535,7 @@ export const Constants = {
         "exhibicion",
         "precio",
         "contingencia",
+        "campo_extra",
       ],
       tipo_solicitud_ruta: ["cambio_tienda", "cambio_dia", "no_visita", "otro"],
       tipo_tienda: ["hiper", "super", "express"],

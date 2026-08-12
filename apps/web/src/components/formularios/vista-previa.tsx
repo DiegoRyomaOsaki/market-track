@@ -88,7 +88,7 @@ function ControlPrevia({ campo }: { campo: CampoEditable }) {
   if (tipo === "foto") {
     return (
       <span className="flex h-24 items-center justify-center rounded-[9px] border border-dashed border-border bg-muted/40 text-[13px] text-muted-foreground">
-        📷 Foto
+        📷 Foto — solo cámara, nunca galería
       </span>
     );
   }
