@@ -64,3 +64,19 @@ necesitar **lógica** (cálculos, reglas entre campos, alertas), la frontera
 "presentación + campos libres" está goteando y estaríamos reimplementando el
 motor de derivados en el cliente — justo lo que esta decisión evita. Ahí habría
 que replantear (o subir esa lógica a la base como un campo derivado más).
+
+## Addendum (ago 2026) — el mismo formulario llega al check-in
+
+MAR-98 extendió la decisión sin crear una segunda familia de tablas: la
+cabecera ganó `ambito` (`'levantamiento' | 'check_in'`), con el mismo
+constructor, el mismo versionado inmutable y la misma `definicion` jsonb. Un
+formulario de check-in es **de la visita**, nunca de una marca (CHECK en la
+base), y sus respuestas viven en `visita_respuesta` — el espejo de
+`levantamiento_respuesta` colgando de `visita`. La visita ancla la versión que
+se le mostró (`visita.formulario_version_id`), igual que el levantamiento.
+
+Dos reglas propias del check-in: **nada bloquea el flujo** (el gate del
+check-in sigue siendo ubicación + selfie; `obligatorio` se ignora y el builder
+lo oculta en este ámbito), y **la ausencia es un dato derivable** — un campo
+sin contestar no guarda centinela; la definición anclada dice qué se pidió y el
+puntaje (MAR-100) cuenta filas, nunca referencias dentro de `valor`.

@@ -113,6 +113,9 @@ const visita = new Table({
   selfie_foto_id: column.text,
   check_in_geocerca_ok: column.integer,
   check_out_geocerca_ok: column.integer,
+  // Ancla a la versión del formulario de check-in que se mostró al fichar
+  // (MAR-98): dice qué ítems se pidieron aunque no se contestara ninguno.
+  formulario_version_id: column.text,
 });
 
 const levantamiento = new Table({
@@ -192,6 +195,9 @@ const formulario_levantamiento = new Table({
   nombre: column.text,
   activo: column.integer,
   creado_at: column.text,
+  // 'levantamiento' o 'check_in' (MAR-98). Null en una réplica anterior a la
+  // migración que lo añadió: se interpreta como 'levantamiento' al resolver.
+  ambito: column.text,
 });
 
 const formulario_version = new Table({
@@ -206,6 +212,15 @@ const formulario_version = new Table({
 const levantamiento_respuesta = new Table({
   tenant_id: column.text,
   levantamiento_id: column.text,
+  campo_id: column.text,
+  valor: column.text,
+});
+
+// Las respuestas del checklist de check-in (MAR-98): como
+// `levantamiento_respuesta`, pero colgando de la VISITA.
+const visita_respuesta = new Table({
+  tenant_id: column.text,
+  visita_id: column.text,
   campo_id: column.text,
   valor: column.text,
 });
@@ -280,6 +295,7 @@ export const AppSchema = new Schema({
   formulario_levantamiento,
   formulario_version,
   levantamiento_respuesta,
+  visita_respuesta,
   revision_visita,
   foto,
 });

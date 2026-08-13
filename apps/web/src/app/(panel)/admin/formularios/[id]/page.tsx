@@ -43,7 +43,7 @@ export default async function EditarFormularioPage({
     supabase
       .from("formulario_levantamiento")
       .select(
-        "id, nombre, activo, tenant:tenant_id(nombre), marca:marca_id(nombre)",
+        "id, nombre, activo, ambito, tenant:tenant_id(nombre), marca:marca_id(nombre)",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -85,6 +85,7 @@ export default async function EditarFormularioPage({
       activoInicial={formulario.activo}
       cliente={formulario.tenant?.nombre ?? "—"}
       marca={formulario.marca?.nombre ?? null}
+      ambito={formulario.ambito}
       definicionInicial={definicion.definicion}
       versionPublicada={publicada?.version ?? null}
       publicadaAt={publicada?.publicada_at ?? null}

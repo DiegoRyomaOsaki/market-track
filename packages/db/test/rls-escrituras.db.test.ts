@@ -34,6 +34,8 @@ const IDS = {
   otraFoto: "e0000015-0000-0000-0000-000000000098",
   nuevaContingencia: "e0000014-0000-0000-0000-000000000099",
   visitaDeCompanero: "e0000010-0000-0000-0000-000000000098",
+  nuevaRespuestaVisita: "e0000046-0000-0000-0000-000000000099",
+  nuevoFormularioCheckIn: "e0000047-0000-0000-0000-000000000099",
 } as const;
 
 // Los tests de "no puede escribir en el tenant ajeno" y "revocación en la
@@ -372,6 +374,209 @@ describe("formulario de levantamiento — config del admin, publicar congela", (
           [IDS.nuevoFormulario, TENANTS.maracumango],
         ),
       );
+    });
+  });
+
+  it("un formulario de check-in no puede colgar de una marca (CHECK)", async () => {
+    // El check-in es de la VISITA. La verja es de la base, no solo del Zod del
+    // panel: una llamada directa por PostgREST tampoco puede crearlo.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const marca = await c.query<{ id: string }>(
+        `select id from public.marca where tenant_id = $1 limit 1`,
+        [TENANTS.maracumango],
+      );
+      await expect(
+        c.query(
+          `insert into public.formulario_levantamiento (id, tenant_id, nombre, ambito, marca_id)
+           values ($1, $2, 'Checklist mal colgado', 'check_in', $3)`,
+          [IDS.nuevoFormularioCheckIn, TENANTS.maracumango, marca.rows[0]!.id],
+        ),
+      ).rejects.toMatchObject({
+        code: "23514",
+        constraint: "formulario_check_in_sin_marca",
+      });
+    });
+  });
+
+  it("el admin crea un formulario de check-in sin marca", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const r = await c.query(
+        `insert into public.formulario_levantamiento (id, tenant_id, nombre, ambito)
+         values ($1, $2, 'Checklist de herramientas', 'check_in')`,
+        [IDS.nuevoFormularioCheckIn, TENANTS.maracumango],
+      );
+      expect(r.rowCount).toBe(1);
+    });
+  });
+});
+
+describe("visita_respuesta — el checklist del check-in", () => {
+  it("el mercaderista guarda una respuesta del checklist en SU visita", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const r = await c.query(
+        `insert into public.visita_respuesta (id, tenant_id, visita_id, campo_id, valor)
+         values ($1, $2, $3, 'llevas_botas', 'true'::jsonb)`,
+        [IDS.nuevaRespuestaVisita, TENANTS.maracumango, IDS.visitaMrc],
+      );
+      expect(r.rowCount).toBe(1);
+    });
+  });
+
+  it("NO puede contestar el check-in de un COMPAÑERO del mismo cliente", async () => {
+    // Visita del MISMO tenant a propósito: la FK compuesta pasa y lo único que
+    // puede rechazar es el WITH CHECK, que exige ser el dueño de la visita.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await c.query("set local role postgres");
+      await c.query(
+        `insert into public.visita
+           (id, tenant_id, rutero_parada_id, mercaderista_id, tienda_id, estado)
+         values ($1, $2, $3, $4, $5, 'en_curso')`,
+        [
+          IDS.visitaDeCompanero,
+          TENANTS.maracumango,
+          IDS.ruteroParadaMrc,
+          USUARIOS.desvinculado,
+          IDS.tiendaMrc,
+        ],
+      );
+      await c.query("set local role authenticated");
+
+      await esRechazado(() =>
+        c.query(
+          `insert into public.visita_respuesta (id, tenant_id, visita_id, campo_id, valor)
+           values ($1, $2, $3, 'llevas_botas', 'true'::jsonb)`,
+          [
+            IDS.nuevaRespuestaVisita,
+            TENANTS.maracumango,
+            IDS.visitaDeCompanero,
+          ],
+        ),
+      );
+    });
+  });
+
+  it("el DESVINCULADO no inserta: la revocación llega al checklist", async () => {
+    // tenant_actual() es null para él → `tenant_id = tenant_actual()` falla
+    // cerrado aunque conociera una visita del tenant.
+    await comoUsuario(db, USUARIOS.desvinculado, async (c) => {
+      await esRechazado(() =>
+        c.query(
+          `insert into public.visita_respuesta (id, tenant_id, visita_id, campo_id, valor)
+           values ($1, $2, $3, 'llevas_botas', 'true'::jsonb)`,
+          [IDS.nuevaRespuestaVisita, TENANTS.maracumango, IDS.visitaMrc],
+        ),
+      );
+    });
+  });
+
+  it("la base rechaza una respuesta enorme aunque no pase por la app", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await expect(
+        c.query(
+          `insert into public.visita_respuesta (id, tenant_id, visita_id, campo_id, valor)
+           values ($1, $2, $3, 'notas', to_jsonb(repeat('x', 20000)))`,
+          [IDS.nuevaRespuestaVisita, TENANTS.maracumango, IDS.visitaMrc],
+        ),
+      ).rejects.toMatchObject({
+        code: "23514",
+        constraint: "visita_respuesta_valor_tamano",
+      });
+    });
+  });
+
+  it("puede corregir el VALOR pero no mover la respuesta de campo (trigger)", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await c.query(
+        `insert into public.visita_respuesta (id, tenant_id, visita_id, campo_id, valor)
+         values ($1, $2, $3, 'llevas_botas', 'true'::jsonb)`,
+        [IDS.nuevaRespuestaVisita, TENANTS.maracumango, IDS.visitaMrc],
+      );
+      const ok = await c.query(
+        `update public.visita_respuesta set valor = 'false'::jsonb where id = $1`,
+        [IDS.nuevaRespuestaVisita],
+      );
+      expect(ok.rowCount).toBe(1);
+      await esRechazado(() =>
+        c.query(
+          `update public.visita_respuesta set campo_id = 'otro' where id = $1`,
+          [IDS.nuevaRespuestaVisita],
+        ),
+      );
+    });
+  });
+
+  it("el upsert de reintento de PowerSync pasa el trigger", async () => {
+    // El conector reenvía la fila ENTERA con `on conflict do update`: mismos
+    // valores de identidad, `is distinct from` no salta.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await c.query(
+        `insert into public.visita_respuesta (id, tenant_id, visita_id, campo_id, valor, creado_at)
+         values ($1, $2, $3, 'llevas_botas', 'true'::jsonb, '2026-08-13T09:00:00Z')`,
+        [IDS.nuevaRespuestaVisita, TENANTS.maracumango, IDS.visitaMrc],
+      );
+      const r = await c.query(
+        `insert into public.visita_respuesta (id, tenant_id, visita_id, campo_id, valor, creado_at)
+         values ($1, $2, $3, 'llevas_botas', 'false'::jsonb, '2026-08-13T09:00:00Z')
+         on conflict (id) do update set
+           tenant_id = excluded.tenant_id, visita_id = excluded.visita_id,
+           campo_id = excluded.campo_id, valor = excluded.valor,
+           creado_at = excluded.creado_at`,
+        [IDS.nuevaRespuestaVisita, TENANTS.maracumango, IDS.visitaMrc],
+      );
+      expect(r.rowCount).toBe(1);
+    });
+  });
+
+  it("el supervisor lee el checklist; el cliente-marca y el rival, no", async () => {
+    // Las respuestas ("llevas botas") son el mismo dato laboral que su foto: al
+    // cliente-marca se le ocultan las dos, por la política, no por la pantalla.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await c.query(
+        `insert into public.visita_respuesta (id, tenant_id, visita_id, campo_id, valor)
+         values ($1, $2, $3, 'llevas_botas', 'true'::jsonb)`,
+        [IDS.nuevaRespuestaVisita, TENANTS.maracumango, IDS.visitaMrc],
+      );
+      const suplantar = (sub: string) =>
+        c.query(
+          `set local request.jwt.claims = '${JSON.stringify({
+            sub,
+            role: "authenticated",
+            aal: "aal2",
+          })}'`,
+        );
+      const cuenta = async () =>
+        (
+          await c.query(
+            `select id from public.visita_respuesta where id = $1`,
+            [IDS.nuevaRespuestaVisita],
+          )
+        ).rowCount;
+
+      await suplantar(USUARIOS.supervisor);
+      expect(await cuenta()).toBe(1);
+
+      await suplantar(USUARIOS.clienteMaracumango);
+      expect(await cuenta()).toBe(0);
+
+      await suplantar(USUARIOS.mercaderistaRival);
+      expect(await cuenta()).toBe(0);
+    });
+  });
+
+  it("borrar la visita arrastra sus respuestas (cascade)", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await c.query(
+        `insert into public.visita_respuesta (id, tenant_id, visita_id, campo_id, valor)
+         values ($1, $2, $3, 'llevas_botas', 'true'::jsonb)`,
+        [IDS.nuevaRespuestaVisita, TENANTS.maracumango, IDS.visitaMrc],
+      );
+      await c.query("set local role postgres");
+      await c.query(`delete from public.visita where id = $1`, [IDS.visitaMrc]);
+      const r = await c.query(
+        `select id from public.visita_respuesta where id = $1`,
+        [IDS.nuevaRespuestaVisita],
+      );
+      expect(r.rowCount).toBe(0);
     });
   });
 });

@@ -470,10 +470,19 @@ trimestral, anual), con desglose por variable y el nivel de bono alcanzado. Los
 pesos y los rangos de bono son configuración, no código. Un periodo cerrado
 conserva su puntaje.
 
-**Checklist de herramientas del check-in** — ítems sí/no configurables por
-cliente, respondidos en el check-in y enlazados a la `visita`. Obliga a extender
-el formulario configurable al paso de check-in: hoy la definición cuelga de
-cliente + marca, y **el check-in es de la visita, no de una marca**.
+**Checklist de herramientas del check-in** — implementado (MAR-98). El
+formulario configurable llegó al check-in con
+`formulario_levantamiento.ambito` (`'levantamiento' | 'check_in'`; un check-in
+nunca cuelga de una marca — CHECK en la base). La visita ancla la versión que
+se mostró (`visita.formulario_version_id`) y las respuestas viven en
+**`visita_respuesta`** (`id, tenant_id, visita_id, campo_id, valor jsonb,
+creado_at` — espejo de `levantamiento_respuesta` colgando de la visita, con el
+mismo tope de 16 KB y el mismo trigger de identidad). El checklist **nunca
+bloquea el check-in**: la ausencia de una respuesta (o de la foto opcional,
+`foto.tipo = 'campo_extra'` con `levantamiento_id` null) es un dato derivable
+de la definición anclada, no un centinela guardado. Esa foto de herramientas es
+dato laboral de la outsourcing: el cliente-marca **no** la lee (misma política
+que la selfie).
 
 **`surtido_ideal`** (🟡) — plantilla `marca × tipo_tienda × sku` que se *expande*
 a `tienda_sku`. No sustituye a la matriz de codificados: `tienda_sku` sigue siendo

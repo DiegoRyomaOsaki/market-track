@@ -45,6 +45,32 @@ describe("altaFormularioSchema", () => {
     ).toBe(false);
   });
 
+  it("sin ámbito, el alta clásica sigue siendo de levantamiento", () => {
+    // Compatibilidad: el alta existente no envía `ambito` y no debe cambiar.
+    const r = altaFormularioSchema.parse({ nombre: "X", tenant_id: TENANT });
+    expect(r.ambito).toBe("levantamiento");
+  });
+
+  it("un formulario de check-in no puede colgar de una marca", () => {
+    // Misma verja que el CHECK de la base: el check-in es de la visita.
+    expect(
+      altaFormularioSchema.safeParse({
+        nombre: "Checklist",
+        tenant_id: TENANT,
+        ambito: "check_in",
+        marca_id: MARCA,
+      }).success,
+    ).toBe(false);
+    const sinMarca = altaFormularioSchema.parse({
+      nombre: "Checklist",
+      tenant_id: TENANT,
+      ambito: "check_in",
+      marca_id: "",
+    });
+    expect(sinMarca.marca_id).toBeNull();
+    expect(sinMarca.ambito).toBe("check_in");
+  });
+
   it("rechaza un nombre vacío", () => {
     expect(
       altaFormularioSchema.safeParse({ nombre: "  ", tenant_id: TENANT })

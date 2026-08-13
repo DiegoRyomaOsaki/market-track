@@ -51,15 +51,24 @@ type FormularioActivo = {
   id: string;
   marca_id: string | null;
   creado_at: string;
+  // Null o ausente en una réplica anterior a la migración que lo añadió:
+  // PowerSync solo reenvía una fila cuando cambia. Se interpreta como
+  // 'levantamiento', el único ámbito que existía entonces.
+  ambito?: string | null;
 };
 type VersionPublicada = { id: string; formulario_id: string; version: number };
 
+/** Qué formulario se busca: el del levantamiento de una marca o el del check-in. */
+export type CriterioFormulario =
+  { ambito: "levantamiento"; marcaId: string } | { ambito: "check_in" };
+
 /**
- * Resuelve la versión publicada que ANCLA un levantamiento. Precedencia: el
- * formulario específico de la marca gana al de "todas las marcas"; a igualdad, el
- * más reciente. Dentro del elegido, la versión publicada más alta. Si el
- * preferido no tiene versión publicada, cae al siguiente candidato. Ninguna →
- * `null` (el wizard usa solo los 5 pasos fijos).
+ * Resuelve la versión publicada que ANCLA un levantamiento o un check-in.
+ * Para el levantamiento: el formulario específico de la marca gana al de "todas
+ * las marcas"; a igualdad, el más reciente. Para el check-in: el más reciente
+ * (no hay marca que desempatar). Dentro del elegido, la versión publicada más
+ * alta; si el preferido no tiene versión publicada, cae al siguiente candidato.
+ * Ninguna → `null` (levantamiento: solo pasos fijos; check-in: sin checklist).
  *
  * `formularios` ya viene filtrado a los ACTIVOS y `versiones` a las PUBLICADAS
  * (las sync rules solo bajan esas).
@@ -67,13 +76,20 @@ type VersionPublicada = { id: string; formulario_id: string; version: number };
 export function resolverVersionAnclada(
   formularios: FormularioActivo[],
   versiones: VersionPublicada[],
-  marcaId: string,
+  criterio: CriterioFormulario,
 ): string | null {
+  const marcaId = criterio.ambito === "levantamiento" ? criterio.marcaId : null;
   const candidatos = formularios
-    .filter((f) => f.marca_id === marcaId || f.marca_id === null)
+    .filter((f) => (f.ambito ?? "levantamiento") === criterio.ambito)
+    .filter(
+      (f) =>
+        criterio.ambito === "check_in" ||
+        f.marca_id === marcaId ||
+        f.marca_id === null,
+    )
     .sort((a, b) => {
       const preferido = (f: FormularioActivo) =>
-        f.marca_id === marcaId ? 1 : 0;
+        marcaId !== null && f.marca_id === marcaId ? 1 : 0;
       const dif = preferido(b) - preferido(a);
       return dif !== 0 ? dif : b.creado_at.localeCompare(a.creado_at);
     });

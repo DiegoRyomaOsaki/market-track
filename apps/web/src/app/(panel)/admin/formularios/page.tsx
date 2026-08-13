@@ -58,7 +58,7 @@ export default async function FormulariosPage({
   let query = supabase
     .from("formulario_levantamiento")
     .select(
-      "id, nombre, activo, tenant:tenant_id(nombre), marca:marca_id(nombre), versiones:formulario_version(version, publicada)",
+      "id, nombre, activo, ambito, tenant:tenant_id(nombre), marca:marca_id(nombre), versiones:formulario_version(version, publicada)",
     )
     .order("creado_at", { ascending: false });
   if (busqueda) query = query.ilike("nombre", `%${busqueda}%`);
@@ -105,6 +105,9 @@ export default async function FormulariosPage({
                 MARCA
               </th>
               <th scope="col" className={TH}>
+                ÁMBITO
+              </th>
+              <th scope="col" className={TH}>
                 VERSIÓN
               </th>
               <th scope="col" className={TH}>
@@ -128,7 +131,10 @@ export default async function FormulariosPage({
                   {f.tenant?.nombre ?? "—"}
                 </td>
                 <td className={`${TD} text-muted-foreground`}>
-                  {f.marca?.nombre ?? "Todas"}
+                  {f.marca?.nombre ?? (f.ambito === "check_in" ? "—" : "Todas")}
+                </td>
+                <td className={`${TD} text-muted-foreground`}>
+                  {f.ambito === "check_in" ? "Check-in" : "Levantamiento"}
                 </td>
                 <td className={`${TD} text-muted-foreground`}>
                   {estadoDeVersiones(f.versiones ?? [])}

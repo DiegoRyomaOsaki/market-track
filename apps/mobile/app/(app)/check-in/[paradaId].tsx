@@ -1,8 +1,10 @@
+import * as Crypto from "expo-crypto";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -10,8 +12,17 @@ import {
 
 import { AyudaBoton } from "@/componentes/ayuda-boton";
 import { CamaraFoto } from "@/componentes/camara-foto";
+import { ControlCampo } from "@/componentes/campo-configurable";
+import {
+  puedeConfirmarCheckIn,
+  respuestasDeCheckIn,
+  resultadoDelChecklist,
+  useFormularioCheckIn,
+} from "@/lib/check-in";
 import { encolarFoto } from "@/lib/cola-fotos-instancia";
+import { mensajeDeError } from "@/lib/error";
 import { type FotoCapturada } from "@/lib/foto-captura";
+import { fotosPorEncolar, type RespuestaCruda } from "@/lib/formulario";
 import { dentroDeGeocerca, distanciaMetros } from "@/lib/geo";
 import { useParada } from "@/lib/rutero";
 import {
@@ -20,25 +31,35 @@ import {
   minutosDeTraslado,
 } from "@/lib/transito";
 import { type ResultadoUbicacion, ubicacionActual } from "@/lib/ubicacion";
-import { crearVisitaCheckIn } from "@/lib/visita";
+import { crearVisitaCheckIn, guardarRespuestasVisita } from "@/lib/visita";
 import { useSesion } from "@/sesion";
 import { colores, espacio, radio } from "@/tema";
 
-// Check-in geocercado + selfie con watermark. La geocerca del cliente es SOLO UX
-// (se puede hacer check-in fuera de radio); el servidor re-valida al sincronizar
-// (MAR-30). La selfie se captura con watermark y se encola; enlazarla a la visita
+// Check-in geocercado + selfie con watermark + checklist configurable (MAR-98).
+// La geocerca del cliente es SOLO UX (se puede hacer check-in fuera de radio); el
+// servidor re-valida al sincronizar (MAR-30). El checklist NUNCA bloquea el
+// check-in: se registra lo que haya y afecta al puntaje, no al flujo.
+
+type Camara = { clase: "selfie" } | { clase: "campo"; campoId: string };
 
 export default function CheckIn() {
   const router = useRouter();
   const sesion = useSesion();
   const { paradaId } = useLocalSearchParams<{ paradaId: string }>();
   const { parada, cargando } = useParada(paradaId);
+  const { versionId, campos } = useFormularioCheckIn(parada?.tenant_id ?? null);
 
-  const [paso, setPaso] = useState<"form" | "camara">("form");
+  const [camara, setCamara] = useState<Camara | null>(null);
   const [ubic, setUbic] = useState<ResultadoUbicacion | null>(null);
   const [ubicando, setUbicando] = useState(true);
   const [foto, setFoto] = useState<FotoCapturada | null>(null);
+  const [valores, setValores] = useState<Record<string, RespuestaCruda>>({});
+  const [fotosPendientes, setFotosPendientes] = useState<
+    Record<string, FotoCapturada>
+  >({});
+  const [aviso, setAviso] = useState("");
   const [guardando, setGuardando] = useState(false);
+  const sembrado = useRef(false);
 
   useEffect(() => {
     void ubicacionActual().then((r) => {
@@ -46,6 +67,19 @@ export default function CheckIn() {
       setUbicando(false);
     });
   }, []);
+
+  // Los sí/no arrancan en "No" (siempre contestados): no llevar las botas es una
+  // respuesta, no un hueco. Las listas, vacías.
+  useEffect(() => {
+    if (sembrado.current || campos.length === 0) return;
+    sembrado.current = true;
+    const inicial: Record<string, RespuestaCruda> = {};
+    for (const c of campos) {
+      if (c.tipo === "booleano") inicial[c.id] = false;
+      if (c.tipo === "seleccion_multiple") inicial[c.id] = [];
+    }
+    setValores(inicial);
+  }, [campos]);
 
   if (cargando) {
     return (
@@ -68,18 +102,31 @@ export default function CheckIn() {
 
   const yaHizoCheckIn = parada.visita_id != null;
 
-  if (paso === "camara" && sesion) {
+  if (camara && sesion) {
     return (
       <CamaraFoto
         usuario={sesion.user.email ?? "Mercaderista"}
         lat={ubic?.ok ? ubic.punto.lat : null}
         lng={ubic?.ok ? ubic.punto.lng : null}
-        etiqueta="Tomar selfie"
+        facing={camara.clase === "selfie" ? "front" : "back"}
+        etiqueta={camara.clase === "selfie" ? "Tomar selfie" : "Tomar foto"}
         onListo={(f) => {
-          setFoto(f);
-          setPaso("form");
+          if (camara.clase === "selfie") {
+            setFoto(f);
+          } else {
+            const id = Crypto.randomUUID();
+            // En una recaptura, la entrada del uuid reemplazado se elimina.
+            const anterior = valores[camara.campoId];
+            setFotosPendientes((prev) => {
+              const siguiente = { ...prev, [id]: f };
+              if (typeof anterior === "string") delete siguiente[anterior];
+              return siguiente;
+            });
+            setValores((prev) => ({ ...prev, [camara.campoId]: id }));
+          }
+          setCamara(null);
         }}
-        onCancelar={() => setPaso("form")}
+        onCancelar={() => setCamara(null)}
       />
     );
   }
@@ -87,6 +134,7 @@ export default function CheckIn() {
   async function confirmar() {
     if (!parada || !sesion || !ubic?.ok || !foto) return;
     setGuardando(true);
+    setAviso("");
     try {
       const ahora = new Date().toISOString();
       // Cierra el cronómetro de tránsito de la tienda anterior: sus minutos son
@@ -97,7 +145,7 @@ export default function CheckIn() {
         : null;
       if (trasladoDesde) await limpiarTransito();
 
-      // La VISITA primero y la selfie después. Al revés, la operación de `foto`
+      // La VISITA primero y las fotos después. Al revés, la operación de `foto`
       // viajaría antes que la de `visita` en la cola del sync y su FK la
       // rechazaría con un 23503, que el conector descarta como definitivo.
       const visitaId = await crearVisitaCheckIn({
@@ -109,6 +157,9 @@ export default function CheckIn() {
         capturado_at: ahora,
         selfie_foto_id: null,
         tiempo_traslado_min: tiempoTraslado,
+        // Lo que se le MOSTRÓ es lo que queda anclado, aunque se publique otra
+        // versión entre abrir la pantalla y confirmar.
+        formulario_version_id: versionId,
       });
 
       await encolarFoto({
@@ -118,6 +169,62 @@ export default function CheckIn() {
         levantamientoId: null,
         tipo: "selfie",
       });
+
+      // La foto del checklist es OPCIONAL por diseño: si su encolado falla, se
+      // descarta la referencia y el check-in sigue — la ausencia ya descuenta
+      // en el puntaje, que es exactamente lo acordado con el cliente.
+      const valoresEfectivos = { ...valores };
+      let fotosPerdidas = false;
+      for (const { campoId, id, foto: pendiente } of fotosPorEncolar(
+        campos,
+        valores,
+        fotosPendientes,
+      )) {
+        try {
+          await encolarFoto({
+            id,
+            foto: pendiente,
+            tipo: "campo_extra",
+            tenantId: parada.tenant_id,
+            visitaId,
+            levantamientoId: null,
+          });
+        } catch (err) {
+          console.error("[check-in] no se pudo encolar la foto del checklist", {
+            campo_id: campoId,
+            error: mensajeDeError(err),
+          });
+          delete valoresEfectivos[campoId];
+          fotosPerdidas = true;
+        }
+      }
+
+      let checklistGuardado = true;
+      try {
+        await guardarRespuestasVisita({
+          visita_id: visitaId,
+          tenant_id: parada.tenant_id,
+          respuestas: respuestasDeCheckIn(campos, valoresEfectivos),
+        });
+      } catch (err) {
+        console.error("[check-in] no se pudo guardar el checklist", {
+          visita_id: visitaId,
+          error: mensajeDeError(err),
+        });
+        checklistGuardado = false;
+      }
+
+      const desenlace = resultadoDelChecklist({
+        checklistGuardado,
+        fotosPerdidas,
+      });
+      if (!desenlace.navegar) {
+        // La tarjeta "✓ Check-in realizado" (reactiva) toma la pantalla y el
+        // aviso queda a la vista en la región viva.
+        setAviso(desenlace.aviso);
+        return;
+      }
+
       // El levantamiento por marca es el siguiente paso; `replace` deja el
       // check-in fuera de la pila (volver desde el selector regresa a Mi día).
       router.replace(`/levantamiento/${visitaId}`);
@@ -146,8 +253,18 @@ export default function CheckIn() {
         )
       : null;
 
+  const puedeConfirmar = puedeConfirmarCheckIn({
+    ubicacionOk: ubic?.ok === true,
+    selfieTomada: foto !== null,
+    guardando,
+  });
+
   return (
-    <View style={e.pantalla}>
+    <ScrollView
+      style={e.pantalla}
+      contentContainerStyle={e.contenido}
+      keyboardShouldPersistTaps="handled"
+    >
       <Pressable onPress={() => router.back()} hitSlop={8} style={e.volver}>
         <Text style={e.volverTexto}>‹ Mi día</Text>
       </Pressable>
@@ -226,7 +343,7 @@ export default function CheckIn() {
               </Text>
             </Fila>
             <Pressable
-              onPress={() => setPaso("camara")}
+              onPress={() => setCamara({ clase: "selfie" })}
               style={e.botonSec}
               accessibilityRole="button"
             >
@@ -236,13 +353,36 @@ export default function CheckIn() {
             </Pressable>
           </Seccion>
 
+          {campos.length > 0 ? (
+            <Seccion titulo="Checklist de herramientas">
+              <Text style={e.nota}>
+                Marca lo que llevas hoy. No bloquea el check-in.
+              </Text>
+              {campos.map((campo) => (
+                <View key={campo.id} style={e.campo}>
+                  <Text style={e.campoEtiqueta}>{campo.etiqueta}</Text>
+                  <ControlCampo
+                    campo={campo}
+                    valor={valores[campo.id]}
+                    onCambio={(v) =>
+                      setValores((prev) => ({ ...prev, [campo.id]: v }))
+                    }
+                    onAbrirCamara={() =>
+                      setCamara({ clase: "campo", campoId: campo.id })
+                    }
+                  />
+                  {campo.ayuda ? (
+                    <Text style={e.nota}>{campo.ayuda}</Text>
+                  ) : null}
+                </View>
+              ))}
+            </Seccion>
+          ) : null}
+
           <Pressable
             onPress={() => void confirmar()}
-            disabled={!ubic?.ok || !foto || guardando}
-            style={[
-              e.boton,
-              (!ubic?.ok || !foto || guardando) && e.botonInactivo,
-            ]}
+            disabled={!puedeConfirmar}
+            style={[e.boton, !puedeConfirmar && e.botonInactivo]}
             accessibilityRole="button"
           >
             {guardando ? (
@@ -253,7 +393,19 @@ export default function CheckIn() {
           </Pressable>
         </>
       )}
-    </View>
+
+      {/* Región viva siempre montada: si el checklist o su foto fallan tras el
+          check-in, el aviso se anuncia aquí (la tarjeta reactiva de arriba ya
+          habrá tomado la pantalla). Color de ALERTA, no de pista: es una pérdida
+          de datos real, no una sugerencia. */}
+      <Text
+        style={e.avisoVivo}
+        accessibilityLiveRegion="polite"
+        accessibilityRole="alert"
+      >
+        {aviso}
+      </Text>
+    </ScrollView>
   );
 }
 
@@ -281,7 +433,8 @@ const Punto = ({ color }: { color: string }) => (
 );
 
 const e = StyleSheet.create({
-  pantalla: { flex: 1, backgroundColor: colores.fondo, padding: espacio.m },
+  pantalla: { flex: 1, backgroundColor: colores.fondo },
+  contenido: { padding: espacio.m, paddingBottom: espacio.xl },
   centro: {
     flex: 1,
     alignItems: "center",
@@ -337,6 +490,15 @@ const e = StyleSheet.create({
   punto: { width: 10, height: 10, borderRadius: 5 },
   notaAlerta: { color: colores.textoSuave, fontSize: 13, lineHeight: 18 },
   aviso: { color: colores.texto, fontSize: 15, textAlign: "center" },
+  avisoVivo: {
+    color: colores.alertaTexto,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: espacio.s,
+    textAlign: "center",
+  },
+  campo: { gap: espacio.xs, marginTop: espacio.xs },
+  campoEtiqueta: { color: colores.texto, fontSize: 15, fontWeight: "600" },
   boton: {
     height: 52,
     borderRadius: radio.m,

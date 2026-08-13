@@ -55,6 +55,7 @@ export async function crearFormulario(
       nombre: parsed.data.nombre,
       tenant_id: parsed.data.tenant_id,
       marca_id: parsed.data.marca_id,
+      ambito: parsed.data.ambito,
     })
     .select("id")
     .maybeSingle();

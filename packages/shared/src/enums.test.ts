@@ -2,6 +2,7 @@ import { Constants } from "@market-track/db";
 import { describe, expect, it } from "vitest";
 
 import {
+  ambitoFormularioSchema,
   moduloPortalSchema,
   pasoLevantamientoSchema,
   rolUsuarioSchema,
@@ -14,6 +15,8 @@ describe("enums derivados de la base", () => {
     expect(tipoFotoSchema.parse("contingencia")).toBe("contingencia");
     // La foto de un campo configurable del formulario (MAR-90).
     expect(tipoFotoSchema.parse("campo_extra")).toBe("campo_extra");
+    // El formulario configurable del check-in (MAR-98).
+    expect(ambitoFormularioSchema.parse("check_in")).toBe("check_in");
     expect(pasoLevantamientoSchema.parse("share_of_shelf")).toBe(
       "share_of_shelf",
     );
