@@ -5,8 +5,11 @@ import { revalidatePath } from "next/cache";
 import {
   altaConfigMerchandiserSchema,
   altaConfigPerfectStoreSchema,
+  pesosMerchandiserSchema,
+  pesosPerfectStoreSchema,
   publicarEscaleraBonoSchema,
 } from "@market-track/shared";
+import { z } from "zod";
 
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
@@ -197,6 +200,14 @@ export async function publicarEscaleraBono(
   return { ok: true };
 }
 
+// La previa también valida en la frontera. Una Server Action es un endpoint
+// POST alcanzable sin pasar por el formulario: sin esto, un `pesos` con claves
+// de más o valores fuera de rango llegaría tal cual a la RPC.
+//
+// `z.guid()` y no `z.uuid()`: el estricto exige bits de versión que Postgres no
+// impone y rechazaría ids perfectamente válidos.
+const idSchema = z.guid();
+
 export type PreviaPuntaje = {
   etiqueta: string;
   detalle: string;
@@ -211,9 +222,18 @@ export async function previsualizarPerfectStore(
 ): Promise<
   { ok: true; previa: PreviaPuntaje | null } | { ok: false; error: string }
 > {
+  const marca = idSchema.safeParse(marcaId);
+  const validos = pesosPerfectStoreSchema.safeParse(pesos);
+  if (!marca.success || !validos.success) {
+    return { ok: false, error: "Revisa los pesos antes de ver el efecto" };
+  }
+
   const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase
-    .rpc("previsualizar_perfect_store", { p_marca_id: marcaId, p_pesos: pesos })
+    .rpc("previsualizar_perfect_store", {
+      p_marca_id: marca.data,
+      p_pesos: validos.data,
+    })
     .maybeSingle();
 
   if (error) {
@@ -243,11 +263,17 @@ export async function previsualizarMerchandiser(
 ): Promise<
   { ok: true; previa: PreviaPuntaje | null } | { ok: false; error: string }
 > {
+  const tenant = idSchema.safeParse(tenantId);
+  const validos = pesosMerchandiserSchema.safeParse(pesos);
+  if (!tenant.success || !validos.success) {
+    return { ok: false, error: "Revisa los pesos antes de ver el efecto" };
+  }
+
   const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase
     .rpc("previsualizar_merchandiser", {
-      p_tenant_id: tenantId,
-      p_pesos: pesos,
+      p_tenant_id: tenant.data,
+      p_pesos: validos.data,
     })
     .maybeSingle();
 

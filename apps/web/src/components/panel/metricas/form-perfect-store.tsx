@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 
 import {
   altaConfigPerfectStoreSchema,
@@ -10,6 +10,7 @@ import {
 } from "@market-track/shared";
 
 import { campo, Errores, etiqueta } from "@/components/panel/campos";
+import { botonPrimario } from "@/components/panel/estilos";
 import {
   previsualizarPerfectStore,
   publicarConfigPerfectStore,
@@ -75,6 +76,8 @@ export function FormPerfectStore({
   const [pendiente, arrancar] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [publicado, setPublicado] = useState("");
+  const primerPeso = useRef<HTMLInputElement>(null);
+  const resultado = useRef<HTMLParagraphElement>(null);
 
   function enviar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -103,13 +106,24 @@ export function FormPerfectStore({
     });
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? "Revisa los campos");
+      // El foco va al campo que hay que corregir, no se queda en el botón: si
+      // no, quien navega con teclado tiene que buscar a mano cuál era el
+      // problema. Casi todos los errores de este formulario son de los pesos.
+      primerPeso.current?.focus();
       return;
     }
 
     arrancar(async () => {
       const r = await publicarConfigPerfectStore(parsed.data);
-      if (r.ok) setPublicado("Configuración publicada");
-      else setError(r.error);
+      if (r.ok) {
+        setPublicado("Configuración publicada");
+        // Tras publicar, lo que importa es el resultado: se lleva el foco ahí
+        // para que un lector de pantalla lo anuncie.
+        resultado.current?.focus();
+      } else {
+        setError(r.error);
+        primerPeso.current?.focus();
+      }
     });
   }
 
@@ -161,27 +175,32 @@ export function FormPerfectStore({
         {VARIABLES_PERFECT_STORE.map((v) => {
           const nombreCampo = CAMPOS_PESO[v];
           return (
-            <label key={v} className="flex flex-col gap-1">
-              <span className={etiqueta}>{ETIQUETA_PERFECT_STORE[v]}</span>
-              <input
-                type="number"
-                min={0}
-                max={100}
-                step="0.01"
-                value={pesos[nombreCampo]}
-                onChange={(e) =>
-                  setPesos((p) => ({ ...p, [nombreCampo]: e.target.value }))
-                }
-                aria-describedby={`ayuda-ps-${v}`}
-                className={`${campo} w-40`}
-              />
+            <div key={v} className="flex flex-col gap-1">
+              <label className="flex flex-col gap-1">
+                <span className={etiqueta}>{ETIQUETA_PERFECT_STORE[v]}</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="0.01"
+                  ref={v === "distribucion" ? primerPeso : undefined}
+                  value={pesos[nombreCampo]}
+                  onChange={(e) =>
+                    setPesos((p) => ({ ...p, [nombreCampo]: e.target.value }))
+                  }
+                  aria-describedby={`ayuda-ps-${v}`}
+                  className={`${campo} w-40`}
+                />
+              </label>
+              {/* FUERA del `label`: dentro entraría en el nombre accesible del
+                  campo y se leería dos veces (nombre + descripción). */}
               <span
                 id={`ayuda-ps-${v}`}
                 className="text-[11.5px] text-muted-foreground"
               >
                 {EXPLICACION_PERFECT_STORE[v]}
               </span>
-            </label>
+            </div>
           );
         })}
         <p
@@ -303,6 +322,8 @@ export function FormPerfectStore({
 
           <Errores error={error} />
           <p
+            ref={resultado}
+            tabIndex={-1}
             aria-live="polite"
             className="text-[12.5px] font-semibold empty:hidden"
           >
@@ -312,7 +333,7 @@ export function FormPerfectStore({
           <button
             type="submit"
             disabled={pendiente}
-            className="h-[38px] self-start rounded-[9px] bg-primary px-4 text-[13px] font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-60"
+            className={`${botonPrimario} self-start disabled:opacity-60`}
           >
             {pendiente ? "Publicando…" : "Publicar versión"}
           </button>

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 
 import { publicarEscaleraBonoSchema } from "@market-track/shared";
 
 import { campo, Errores, etiqueta } from "@/components/panel/campos";
+import { botonPrimario } from "@/components/panel/estilos";
 import { publicarEscaleraBono } from "@/lib/metricas/acciones";
 import type { NivelBono } from "@/lib/metricas/datos";
 import { NOTA_PUBLICAR } from "@/lib/metricas/textos";
@@ -45,6 +46,8 @@ export function EditorEscalera({
   const [pendiente, arrancar] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [publicado, setPublicado] = useState("");
+  const primerNombre = useRef<HTMLInputElement>(null);
+  const resultado = useRef<HTMLParagraphElement>(null);
 
   function editar(i: number, cambio: Partial<Peldano>) {
     setPeldanos((prev) =>
@@ -71,13 +74,19 @@ export function EditorEscalera({
     const parsed = publicarEscaleraBonoSchema.safeParse(datos);
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? "Revisa los campos");
+      primerNombre.current?.focus();
       return;
     }
 
     arrancar(async () => {
       const r = await publicarEscaleraBono(parsed.data);
-      if (r.ok) setPublicado("Escalera publicada");
-      else setError(r.error);
+      if (r.ok) {
+        setPublicado("Escalera publicada");
+        resultado.current?.focus();
+      } else {
+        setError(r.error);
+        primerNombre.current?.focus();
+      }
     });
   }
 
@@ -112,6 +121,7 @@ export function EditorEscalera({
             <label className="flex flex-1 flex-col gap-1">
               <span className={etiqueta}>Nivel</span>
               <input
+                ref={i === 0 ? primerNombre : undefined}
                 value={p.nombre}
                 onChange={(e) => editar(i, { nombre: e.target.value })}
                 placeholder="Bronce"
@@ -188,7 +198,7 @@ export function EditorEscalera({
       <button
         type="submit"
         disabled={pendiente}
-        className="h-[38px] self-start rounded-[9px] bg-primary px-4 text-[13px] font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-60"
+        className={`${botonPrimario} self-start disabled:opacity-60`}
       >
         {pendiente ? "Publicando…" : "Publicar escalera"}
       </button>

@@ -369,6 +369,71 @@ describe("previsualizar_merchandiser", () => {
   });
 });
 
+describe("publicar no mueve un puntaje ya calculado", () => {
+  // El criterio de aceptación del ticket. Sale gratis del diseño —cada puntaje
+  // guarda su `config_id` y las filas de configuración son inmutables— pero eso
+  // es justo lo que hay que fijar: si algún día alguien "arreglara" el editor
+  // para actualizar en vez de insertar, este test se pondría rojo.
+  it("publicar una configuración nueva de Perfect Store deja el puntaje intacto", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await conPuntajePs(
+        c,
+        LEVANTAMIENTO_MRC,
+        TENANTS.maracumango,
+        CONFIG_PS_MRC,
+      );
+
+      await c.query(
+        `insert into public.config_perfect_store
+           (tenant_id, marca_id, peso_distribucion, peso_visibilidad,
+            peso_precio, peso_pop, peso_orden, sos_objetivo_pct, vigente_desde)
+         values ($1, $2, 90, 5, 5, 0, 0, 80, '2026-09-01')`,
+        [TENANTS.maracumango, MARCA_MRC],
+      );
+
+      const r = await c.query<{ total_pct: string; config_id: string }>(
+        `select total_pct, config_id from public.puntaje_perfect_store
+         where levantamiento_id = $1`,
+        [LEVANTAMIENTO_MRC],
+      );
+      expect(r.rows[0]?.total_pct).toBe("80.00");
+      expect(r.rows[0]?.config_id).toBe(CONFIG_PS_MRC);
+    });
+  });
+
+  it("publicar una escalera nueva no cambia el nivel de un puntaje cerrado", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await c.query("set local role postgres");
+      await c.query(
+        `insert into public.puntaje_merchandiser
+           (mercaderista_id, tipo, periodo_inicio, tenant_id, config_id,
+            total_pct, nivel_bono_id, cerrado_at)
+         values ($1, 'mensual', '2026-02-01', $2, $3, 85,
+                 'a0000022-0000-0000-0000-000000000002', now())`,
+        [
+          USUARIOS.mercaderistaMaracumango,
+          TENANTS.maracumango,
+          "a0000021-0000-0000-0000-000000000001",
+        ],
+      );
+      await c.query("set local role authenticated");
+
+      await publicar(c, "2026-09-01", [nivel("Todo vale", 0, 9999)]);
+
+      const r = await c.query<{ nivel_bono_id: string; total_pct: string }>(
+        `select nivel_bono_id, total_pct from public.puntaje_merchandiser
+         where mercaderista_id = $1 and periodo_inicio = '2026-02-01'`,
+        [USUARIOS.mercaderistaMaracumango],
+      );
+      // Sigue apuntando a Plata, el nivel con el que se calculó y se pagó.
+      expect(r.rows[0]?.nivel_bono_id).toBe(
+        "a0000022-0000-0000-0000-000000000002",
+      );
+      expect(r.rows[0]?.total_pct).toBe("85.00");
+    });
+  });
+});
+
 describe("periodicidad del plan de lealtad", () => {
   it("la configuración vigente la devuelve, con 'mensual' de defecto", async () => {
     await comoUsuario(db, USUARIOS.admin, async (c) => {

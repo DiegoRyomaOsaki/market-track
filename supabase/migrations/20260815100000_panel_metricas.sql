@@ -136,6 +136,11 @@ as $$
       -- `jsonb_populate_record` arma la fila de configuración a partir de los
       -- pesos sin guardar. Los campos que no vienen quedan nulos y el ponderador
       -- no los mira: solo usa los cinco pesos.
+      --
+      -- Ojo: la fila es EFÍMERA, nunca se inserta, así que los CHECK de la tabla
+      -- (que los pesos sumen 100) NO se evalúan aquí. Una previa con pesos que
+      -- no suman 100 devuelve un número fuera del contrato 0-100. Quien llama
+      -- valida en su frontera; esto es de solo lectura y no persiste nada.
       jsonb_populate_record(null::public.config_perfect_store, p_pesos),
       p.distribucion_pct, p.visibilidad_pct, p.precio_pct
     )

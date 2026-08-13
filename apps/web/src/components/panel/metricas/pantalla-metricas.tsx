@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { Pestanas } from "@/components/panel/pestanas";
 import { Aviso, Tarjeta, TD, TH } from "@/components/panel/tabla";
 import { diaEnLima } from "@/lib/fecha-lima";
@@ -150,7 +152,7 @@ async function PerfectStore({
     <div className="flex flex-col gap-4">
       <nav aria-label="Marca" className="flex flex-wrap gap-1.5">
         {marcas.map((m) => (
-          <a
+          <Link
             key={m.id}
             href={`${base}?vista=perfect-store&marca=${m.id}`}
             aria-current={m.id === marcaElegida ? "page" : undefined}
@@ -161,7 +163,7 @@ async function PerfectStore({
             }`}
           >
             {m.nombre}
-          </a>
+          </Link>
         ))}
       </nav>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 
 import {
   altaConfigMerchandiserSchema,
@@ -8,6 +8,7 @@ import {
 } from "@market-track/shared";
 
 import { campo, Errores, etiqueta } from "@/components/panel/campos";
+import { botonPrimario } from "@/components/panel/estilos";
 import {
   previsualizarMerchandiser,
   publicarConfigMerchandiser,
@@ -73,6 +74,8 @@ export function FormMerchandiser({
   const [pendiente, arrancar] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [publicado, setPublicado] = useState("");
+  const primerPeso = useRef<HTMLInputElement>(null);
+  const resultado = useRef<HTMLParagraphElement>(null);
 
   function datosActuales() {
     return {
@@ -98,12 +101,20 @@ export function FormMerchandiser({
     const parsed = altaConfigMerchandiserSchema.safeParse(datosActuales());
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? "Revisa los campos");
+      // Al campo que hay que corregir, no al botón: quien navega con teclado no
+      // tiene por qué buscar a mano dónde estaba el problema.
+      primerPeso.current?.focus();
       return;
     }
     arrancar(async () => {
       const r = await publicarConfigMerchandiser(parsed.data);
-      if (r.ok) setPublicado("Configuración publicada");
-      else setError(r.error);
+      if (r.ok) {
+        setPublicado("Configuración publicada");
+        resultado.current?.focus();
+      } else {
+        setError(r.error);
+        primerPeso.current?.focus();
+      }
     });
   }
 
@@ -122,32 +133,37 @@ export function FormMerchandiser({
           const nombreCampo = CAMPOS_PESO[v];
           const apagada = v === "tiempo_efectivo";
           return (
-            <label key={v} className="flex flex-col gap-1">
-              <span className={etiqueta}>{ETIQUETA_MERCHANDISER[v]}</span>
-              <input
-                type="number"
-                min={0}
-                max={100}
-                step="0.01"
-                value={pesos[nombreCampo]}
-                onChange={(e) =>
-                  setPesos((p) => ({ ...p, [nombreCampo]: e.target.value }))
-                }
-                // La base lo fija en 0 con un CHECK: ofrecer el control sería
-                // ofrecer un clic que termina en error.
-                disabled={apagada}
-                aria-describedby={`ayuda-${v}`}
-                className={`${campo} w-40 disabled:opacity-60`}
-              />
-              {/* Enlazada con aria-describedby y no en un popover: así el lector
-                  de pantalla la lee al enfocar el campo, sin abrir nada. */}
+            <div key={v} className="flex flex-col gap-1">
+              <label className="flex flex-col gap-1">
+                <span className={etiqueta}>{ETIQUETA_MERCHANDISER[v]}</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="0.01"
+                  ref={v === "puntualidad" ? primerPeso : undefined}
+                  value={pesos[nombreCampo]}
+                  onChange={(e) =>
+                    setPesos((p) => ({ ...p, [nombreCampo]: e.target.value }))
+                  }
+                  // La base lo fija en 0 con un CHECK: ofrecer el control sería
+                  // ofrecer un clic que termina en error.
+                  disabled={apagada}
+                  aria-describedby={`ayuda-${v}`}
+                  className={`${campo} w-40 disabled:opacity-60`}
+                />
+              </label>
+              {/* FUERA del `label` a propósito: dentro, su texto entraría en el
+                  NOMBRE accesible del campo y el lector de pantalla lo leería
+                  dos veces —una como nombre, otra por `aria-describedby`—. Aquí
+                  es solo la descripción, que es lo que es. */}
               <span
                 id={`ayuda-${v}`}
                 className="text-[11.5px] text-muted-foreground"
               >
                 {EXPLICACION_MERCHANDISER[v]}
               </span>
-            </label>
+            </div>
           );
         })}
         <p
@@ -269,6 +285,8 @@ export function FormMerchandiser({
 
           <Errores error={error} />
           <p
+            ref={resultado}
+            tabIndex={-1}
             aria-live="polite"
             className="text-[12.5px] font-semibold empty:hidden"
           >
@@ -278,7 +296,7 @@ export function FormMerchandiser({
           <button
             type="submit"
             disabled={pendiente}
-            className="h-[38px] self-start rounded-[9px] bg-primary px-4 text-[13px] font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-60"
+            className={`${botonPrimario} self-start disabled:opacity-60`}
           >
             {pendiente ? "Publicando…" : "Publicar versión"}
           </button>

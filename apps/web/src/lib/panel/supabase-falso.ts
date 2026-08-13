@@ -88,9 +88,44 @@ function escrituraSobre(
       filtros.push([columna, valor]);
       return encadenable;
     },
-    select: () => Promise.resolve(resultado),
+    select: () => esperableOUna(resultado),
   };
   return encadenable;
+}
+
+/**
+ * Un resultado que se puede esperar tal cual O pedir con `.maybeSingle()`.
+ *
+ * Hace falta porque el patrón con el que el proyecto detecta un INSERT que la
+ * RLS bloqueó es `.insert(...).select(...).maybeSingle()` —0 filas y SIN error—,
+ * y un doble que solo devolviera la promesa dejaría ese camino sin poder
+ * probarse. Lo mismo vale para una RPC que devuelve un conjunto.
+ */
+function esperableOUna(resultado: RespuestaLista) {
+  return esperableCrudo(resultado.data, resultado.error);
+}
+
+function esperableCrudo(
+  data: unknown,
+  error: { message: string; code?: string } | null,
+) {
+  return {
+    then: (
+      alResolver: (r: { data: unknown; error: unknown }) => unknown,
+      alFallar?: (e: unknown) => unknown,
+    ) => Promise.resolve({ data, error }).then(alResolver, alFallar),
+    maybeSingle: () =>
+      Promise.resolve(
+        error !== null
+          ? { data: null, error }
+          : {
+              data: Array.isArray(data)
+                ? ((data as unknown[])[0] ?? null)
+                : data,
+              error: null,
+            },
+      ),
+  };
 }
 
 export type OpcionesFalso = {
@@ -105,8 +140,12 @@ export type OpcionesFalso = {
   lecturas?: Record<string, Fila[]>;
   /** Lo que devuelve cualquier escritura sobre otra tabla. */
   escritura?: RespuestaLista;
-  /** Lo que devuelve cada `rpc(...)`. */
-  rpc?: { data?: unknown; error: { message: string } | null };
+  /**
+   * Lo que devuelve cada `rpc(...)`. El error lleva `code` por lo mismo que el
+   * de una tabla: una función también levanta SQLSTATE (23514 de un CHECK, 42501
+   * de la RLS) y las acciones los traducen a mensajes distintos.
+   */
+  rpc?: { data?: unknown; error: { message: string; code?: string } | null };
 };
 
 /**
@@ -144,7 +183,10 @@ export function supabaseFalso({
     },
     rpc: (nombre: string, argumentos: unknown) => {
       rpcsPedidas.push({ nombre, argumentos });
-      return Promise.resolve({ data: rpc.data ?? null, error: rpc.error });
+      // Una RPC se puede esperar tal cual (devuelve lo que le pongan) o pedir
+      // con `.maybeSingle()` si devuelve un conjunto. `data` se pasa SIN tocar
+      // en el primer caso: hay acciones que devuelven un escalar o un objeto.
+      return esperableCrudo(rpc.data ?? null, rpc.error);
     },
   };
 

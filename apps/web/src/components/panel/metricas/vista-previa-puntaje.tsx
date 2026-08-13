@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 
+import { botonSecundario } from "@/components/panel/estilos";
 import type { PreviaPuntaje } from "@/lib/metricas/acciones";
 import { LIMITE_VISTA_PREVIA } from "@/lib/metricas/textos";
 
@@ -58,7 +59,7 @@ export function VistaPreviaPuntaje({
           type="button"
           onClick={calcular}
           disabled={pendiente || deshabilitado}
-          className="h-[34px] rounded-[9px] border border-border bg-background px-3 text-[12.5px] font-semibold hover:bg-muted disabled:opacity-60"
+          className={`${botonSecundario} disabled:opacity-60`}
         >
           {pendiente ? "Calculando…" : "Ver efecto"}
         </button>
