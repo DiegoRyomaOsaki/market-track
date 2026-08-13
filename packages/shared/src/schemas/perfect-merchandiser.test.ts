@@ -104,6 +104,23 @@ describe("altaConfigMerchandiserSchema", () => {
     ).toBe(false);
   });
 
+  it("un campo AUSENTE se rechaza, igual que uno inválido", () => {
+    // Ausente y vacío son caminos distintos: un formulario que no envía la clave
+    // no puede colarse por la puerta de atrás de un default.
+    for (const campo of [
+      "tenant_id",
+      "peso_puntualidad",
+      "peso_tiempo_efectivo",
+      "tolerancia_puntualidad_min",
+      "vigente_desde",
+    ]) {
+      const { [campo]: _, ...sinCampo } = CONFIG as Record<string, unknown>;
+      expect(altaConfigMerchandiserSchema.safeParse(sinCampo).success).toBe(
+        false,
+      );
+    }
+  });
+
   it("acepta un id de seed: usa z.guid(), no z.uuid()", () => {
     // El estricto exige los bits de versión del RFC 9562 que Postgres no impone,
     // y rechazaría todos los ids del seed del proyecto.
@@ -162,6 +179,23 @@ describe("publicarEscaleraBonoSchema", () => {
         niveles: [{ nombre: "X", puntaje_min: 101, monto: 10 }],
       }).success,
     ).toBe(false);
+  });
+
+  it("un peldaño al que le falta una clave se rechaza", () => {
+    for (const campo of ["nombre", "puntaje_min", "monto"]) {
+      const nivel: Record<string, unknown> = {
+        nombre: "X",
+        puntaje_min: 60,
+        monto: 100,
+      };
+      delete nivel[campo];
+      expect(
+        publicarEscaleraBonoSchema.safeParse({
+          ...ESCALERA,
+          niveles: [nivel],
+        }).success,
+      ).toBe(false);
+    }
   });
 
   it("rechaza un nivel sin nombre", () => {

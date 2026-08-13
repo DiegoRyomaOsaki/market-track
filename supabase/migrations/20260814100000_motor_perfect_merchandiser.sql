@@ -255,6 +255,7 @@ create function app.ponderar_merchandiser(
 returns numeric
 language sql
 immutable
+set search_path = ''
 as $$
   select case
     -- Sin peso evaluado no hay ponderado. Pasa si no se evaluó ninguna variable,
@@ -558,23 +559,38 @@ begin
         where ct.levantamiento_id = l.id
           and ct.paso in ('foto_antes', 'foto_despues')
       ), 0) + c.fotos_campo as esperadas,
-      -- `hash is not null` es el criterio de "no corrupta" que hay hoy: se
-      -- calcula al capturar (ADR-0006), así que su ausencia significa que el
-      -- pipeline de captura falló. `subida_at` NO puntúa a propósito — la
-      -- subida es de la red y del servidor, no del mercaderista.
+      -- `hash is not null` detecta la foto cuyo pipeline de captura falló: el
+      -- hash se calcula al capturar (ADR-0006) y sin él algo se rompió.
+      --
+      -- ⚠️ NO es prueba de autenticidad: la columna la escribe el móvil, y un
+      -- mercaderista puede insertar una fila `foto` de su propia visita con un
+      -- hash inventado. Los `least` de abajo acotan CUÁNTAS filas se acreditan,
+      -- no si cada una es real. Cerrar eso es la verja de autenticidad de
+      -- MAR-117; este motor hereda el hueco y lo acota, no lo resuelve.
+      --
+      -- `subida_at` tampoco serviría: lo escribe el mismo móvil tras el PUT a
+      -- R2. Y puntuar la subida contradiría "solo lo que el mercaderista
+      -- controla": quedarse sin señal no es culpa suya.
       --
       -- Se cuentan FILAS `foto`, nunca el uuid guardado en el `valor` de una
       -- respuesta: esa referencia no tiene verja de autenticidad. Y los `least`
       -- impiden inflar el numerador insertando fotos de más.
+      --
+      -- El `visita_id` va en el predicado aunque el `levantamiento_id` ya
+      -- identifique la foto: `foto_visita_lev_tipo_idx` empieza por `visita_id`
+      -- y sin acotarlo el índice no puede buscar. Medido con EXPLAIN: sin él el
+      -- plan es un Seq Scan de `foto` ENTERA —todos los clientes— y esto corre
+      -- tres veces por levantamiento, dentro del bucle de la RPC.
       least((select count(*) from public.foto ft
-             where ft.levantamiento_id = l.id and ft.tipo = 'antes'
-               and ft.hash is not null), 1)
+             where ft.visita_id = v.id and ft.levantamiento_id = l.id
+               and ft.tipo = 'antes' and ft.hash is not null), 1)
       + least((select count(*) from public.foto ft
-               where ft.levantamiento_id = l.id and ft.tipo = 'despues'
-                 and ft.hash is not null), 1)
+               where ft.visita_id = v.id and ft.levantamiento_id = l.id
+                 and ft.tipo = 'despues' and ft.hash is not null), 1)
       + least((select count(*) from public.foto ft
-               where ft.levantamiento_id = l.id and ft.tipo = 'campo_extra'
-                 and ft.hash is not null), c.fotos_campo) as presentes
+               where ft.visita_id = v.id and ft.levantamiento_id = l.id
+                 and ft.tipo = 'campo_extra' and ft.hash is not null),
+              c.fotos_campo) as presentes
   ) f
   where r.mercaderista_id = p_mercaderista
     and r.fecha between p_inicio and v_fin

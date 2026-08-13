@@ -815,6 +815,81 @@ describe("el periodo: alineado, en el día de Lima, y cerrado para siempre", () 
     });
   });
 
+  it("el trimestre abarca sus tres meses", async () => {
+    // `app.fin_periodo` solo se ejercitaba con 'mensual'. Una parada del último
+    // día de marzo tiene que caer dentro del trimestre que empieza en enero.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const p = await conParada(c, "64", "'2026-03-31'::date", "09:00");
+      await llegaA(c, p, "64", enLima("2026-03-31", "09:00"));
+      const r = await calcular(c, "'2026-01-01'::date", "trimestral");
+      expect(r?.paradas_evaluables).toBe(1);
+      expect(r?.asistencia_pct).toBe("100.00");
+    });
+  });
+
+  it("el año abarca sus doce meses", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const p = await conParada(c, "65", "'2026-12-31'::date", "09:00");
+      await llegaA(c, p, "65", enLima("2026-12-31", "09:00"));
+      const r = await calcular(c, "'2026-01-01'::date", "anual");
+      expect(r?.paradas_evaluables).toBe(1);
+    });
+  });
+
+  it("una parada del día SIGUIENTE al fin del periodo queda fuera", async () => {
+    // La otra mitad de `fin_periodo`: no basta con que incluya lo suyo, tiene
+    // que excluir lo ajeno. El 1 de marzo no es de febrero.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const p = await conParada(c, "66", "'2026-03-01'::date", "09:00");
+      await llegaA(c, p, "66", enLima("2026-03-01", "09:00"));
+      expect((await calcular(c, MES_CERRADO))?.paradas_evaluables).toBe(0);
+    });
+  });
+
+  it("sin configuración vigente no se inventa un puntaje", async () => {
+    // La config del seed rige desde 2026-01-01: un periodo anterior no tiene
+    // reglas con las que medir, y un default inventado sería un número que nadie
+    // acordó.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const p = await conParada(c, "67", "'2025-06-10'::date", "09:00");
+      await llegaA(c, p, "67", enLima("2025-06-10", "09:00"));
+      expect(await calcular(c, "'2025-06-01'::date")).toBeUndefined();
+    });
+  });
+
+  it("si la configuración desaparece, la fila abierta se borra", async () => {
+    // La rama de borrado: un periodo que se calculó y luego se queda sin reglas
+    // no puede conservar un puntaje calculado con unas que ya no existen.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await c.query("set local role postgres");
+      await c.query(
+        `insert into public.puntaje_merchandiser
+           (mercaderista_id, tipo, periodo_inicio, tenant_id, config_id, total_pct)
+         values ($1, 'mensual', '2025-06-01', $2, $3, 88)`,
+        [MERCADERISTA, TENANTS.maracumango, CONFIG_SEED],
+      );
+      await c.query("set local role authenticated");
+
+      expect(await calcular(c, "'2025-06-01'::date")).toBeUndefined();
+    });
+  });
+
+  it("un usuario sin cliente (staff) no tiene plan de lealtad", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await c.query("set local role postgres");
+      await c.query(
+        `select app.calcular_puntaje_merchandiser($1, 'mensual', '2026-02-01')`,
+        [USUARIOS.admin],
+      );
+      const r = await c.query(
+        `select 1 from public.puntaje_merchandiser where mercaderista_id = $1`,
+        [USUARIOS.admin],
+      );
+      await c.query("set local role authenticated");
+      expect(r.rowCount).toBe(0);
+    });
+  });
+
   it("un periodo terminado pero DENTRO de la gracia sigue abierto", async () => {
     // El móvil es offline-first: cerrar antes de que sincronice le cobraría al
     // mercaderista la falta de cobertura de su zona.
@@ -1025,9 +1100,27 @@ describe("quién ve y quién dispara el puntaje", () => {
     );
   }
 
-  async function cuenta(c: Client, tabla: string): Promise<number> {
+  /**
+   * Cuántas filas ve este usuario de LO QUE ESTE TEST SEMBRÓ.
+   *
+   * Acotado al periodo del caso y no un `count(*)` de la tabla entera: contar
+   * todo hace que una fila dejada por otra sesión —una consola abierta, un
+   * cálculo manual fuera de transacción— rompa la aserción aunque la política
+   * esté perfecta. Ya pasó una vez en este proyecto.
+   */
+  async function cuentaPuntajes(c: Client): Promise<number> {
     const r = await c.query<{ n: string }>(
-      `select count(*)::text as n from public.${tabla}`,
+      `select count(*)::text as n from public.puntaje_merchandiser
+       where tipo = 'mensual' and periodo_inicio = ${MES_CERRADO}`,
+    );
+    return Number(r.rows[0]?.n ?? "0");
+  }
+
+  /** Lo mismo para la configuración y la escalera: acotado al cliente del caso. */
+  async function cuentaConfig(c: Client, tabla: string): Promise<number> {
+    const r = await c.query<{ n: string }>(
+      `select count(*)::text as n from public.${tabla} where tenant_id = $1`,
+      [TENANTS.maracumango],
     );
     return Number(r.rows[0]?.n ?? "0");
   }
@@ -1036,7 +1129,7 @@ describe("quién ve y quién dispara el puntaje", () => {
     await comoUsuario(db, USUARIOS.admin, async (c) => {
       await sembrarPuntaje(c);
       await comoOtro(c, MERCADERISTA);
-      expect(await cuenta(c, "puntaje_merchandiser")).toBe(1);
+      expect(await cuentaPuntajes(c)).toBe(1);
     });
   });
 
@@ -1052,7 +1145,7 @@ describe("quién ve y quién dispara el puntaje", () => {
       );
       await c.query("set local role authenticated");
       await comoOtro(c, MERCADERISTA);
-      expect(await cuenta(c, "puntaje_merchandiser")).toBe(0);
+      expect(await cuentaPuntajes(c)).toBe(0);
     });
   });
 
@@ -1062,9 +1155,9 @@ describe("quién ve y quién dispara el puntaje", () => {
     await comoUsuario(db, USUARIOS.admin, async (c) => {
       await sembrarPuntaje(c);
       await comoOtro(c, USUARIOS.clienteMaracumango);
-      expect(await cuenta(c, "puntaje_merchandiser")).toBe(0);
-      expect(await cuenta(c, "config_perfect_merchandiser")).toBe(0);
-      expect(await cuenta(c, "nivel_bono_merchandiser")).toBe(0);
+      expect(await cuentaPuntajes(c)).toBe(0);
+      expect(await cuentaConfig(c, "config_perfect_merchandiser")).toBe(0);
+      expect(await cuentaConfig(c, "nivel_bono_merchandiser")).toBe(0);
     });
   });
 
@@ -1072,7 +1165,7 @@ describe("quién ve y quién dispara el puntaje", () => {
     await comoUsuario(db, USUARIOS.admin, async (c) => {
       await sembrarPuntaje(c);
       await comoOtro(c, USUARIOS.supervisor);
-      expect(await cuenta(c, "puntaje_merchandiser")).toBe(1);
+      expect(await cuentaPuntajes(c)).toBe(1);
     });
   });
 
@@ -1091,6 +1184,8 @@ describe("quién ve y quién dispara el puntaje", () => {
 
   it("solo el admin publica configuración y niveles", async () => {
     await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      // Se fija el CÓDIGO, no un throw a secas: sin él, un typo en el SQL o una
+      // FK rota harían pasar el test sin que la política dijera nada.
       await expect(
         c.query(
           `insert into public.config_perfect_merchandiser
@@ -1100,7 +1195,34 @@ describe("quién ve y quién dispara el puntaje", () => {
            values ($1, 25, 25, 0, 25, 25, 15, '2026-09-01')`,
           [TENANTS.maracumango],
         ),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ code: "42501" });
+    });
+  });
+
+  // Un caso por test: el primer error aborta la transacción del harness, así que
+  // dos rechazos seguidos harían que el segundo fallara por "transaction is
+  // aborted" en vez de por lo que se quiere probar.
+  //
+  // El grant deliberadamente NO incluye `delete`. Es la otra cara de la pitfall
+  // del proyecto: además de cubrir cada verbo que la política permite, hay que
+  // fijar el que se excluyó a propósito — borrarlos dejaría huérfanos los
+  // puntajes que los referencian.
+  it("nadie borra una configuración desde la app", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await expect(
+        c.query(
+          `delete from public.config_perfect_merchandiser where id = $1`,
+          [CONFIG_SEED],
+        ),
+      ).rejects.toThrow(/permission denied/);
+    });
+  });
+
+  it("nadie borra un nivel de bono desde la app", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await expect(
+        c.query(`delete from public.nivel_bono_merchandiser`),
+      ).rejects.toThrow(/permission denied/);
     });
   });
 
@@ -1119,9 +1241,28 @@ describe("quién ve y quién dispara el puntaje", () => {
       const r = await c.query<{ recalcular_puntaje_merchandiser: number }>(
         `select public.recalcular_puntaje_merchandiser('mensual', '2026-02-01')`,
       );
-      // Los mercaderistas del seed con tenant: el de Maracumango, el del rival y
-      // el desvinculado (sigue siendo mercaderista de su cliente).
-      expect(r.rows[0]!.recalcular_puntaje_merchandiser).toBeGreaterThan(0);
+      // Los tres mercaderistas del seed con cliente: el de Maracumango, el del
+      // rival y el desvinculado (sigue siendo mercaderista del suyo). El número
+      // EXACTO: un "más de cero" pasaría igual si el bucle contara de más.
+      expect(r.rows[0]!.recalcular_puntaje_merchandiser).toBe(3);
+    });
+  });
+
+  it("recalcular a UNO no toca al resto", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const r = await c.query<{ recalcular_puntaje_merchandiser: number }>(
+        `select public.recalcular_puntaje_merchandiser('mensual', '2026-02-01', $1)`,
+        [MERCADERISTA],
+      );
+      expect(r.rows[0]!.recalcular_puntaje_merchandiser).toBe(1);
+
+      const filas = await c.query<{ mercaderista_id: string }>(
+        `select mercaderista_id from public.puntaje_merchandiser
+         where periodo_inicio = '2026-02-01'`,
+      );
+      expect(filas.rows.every((f) => f.mercaderista_id === MERCADERISTA)).toBe(
+        true,
+      );
     });
   });
 });
