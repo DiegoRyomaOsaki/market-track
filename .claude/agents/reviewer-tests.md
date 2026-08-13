@@ -78,6 +78,10 @@ Read `CLAUDE.md` for full context. Key facts for this project:
 - [ ] Scope/tier enforcement tested — higher-tier or out-of-scope content is absent, not merely hidden
 - [ ] Permission revocation blocks access immediately — a revoked grant denies on the next request
 
+**Your final message MUST be the report below.** If you run low on budget,
+emit it with whatever you have: a partial report delivers value, stopping
+mid-investigation delivers nothing.
+
 ## Output Format
 
 ```

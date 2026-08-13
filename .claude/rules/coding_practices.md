@@ -212,6 +212,18 @@ leaves the actual computation uncovered.
 **Test failure cases.** Cover invalid input, missing data, permission denial,
 duplicate submissions, and upstream service failure.
 
+**A function that branches over an enum is tested with every value.** One
+covered case leaves the other branches unexercised — a period window computed
+wrong for one enum value surfaces months later, at close.
+
+**Assertions scope to what the test itself seeded.** A `count(*)` over the
+whole table breaks on a row left by another session even with the policy
+intact — or worse, passes green while masking a real failure.
+
+**Logic inside a component of a workspace without component tests is untested
+by construction.** Extract it to a pure function; that is the only way its
+error branches get covered.
+
 **Keep tests fast and deterministic.** No network calls in unit tests. No
 sleep-based timing. No order-dependent setup.
 
@@ -393,8 +405,9 @@ live in `packages/shared`. Apps import from those packages — never redefine a
 row or domain shape locally.
 
 **Zod at every boundary.** Edge Function bodies, webhook payloads, push
-notification payloads, deep link params, and sync-uploaded rows are parsed
-with Zod before use.
+notification payloads, deep link params, **Server Actions** (they are reachable
+POST endpoints — the client form is not a gate), and sync-uploaded rows are
+parsed with Zod before use.
 
 **`z.guid()` for ids, never `z.uuid()`.** The strict one enforces the RFC 9562
 version and variant bits, which Postgres does not: it rejects ids the database
