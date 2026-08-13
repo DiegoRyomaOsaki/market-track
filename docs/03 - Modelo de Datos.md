@@ -465,10 +465,45 @@ categoría, tipo de tienda y periodo. Dos invariantes:
   aplica o un paso quedó en contingencia, su peso se reparte entre las evaluadas.
   Un cero silencioso convierte una visita incompleta en una tienda mal ejecutada.
 
-**Puntajes de Perfect Merchandiser** — por mercaderista y **periodo** (mensual,
-trimestral, anual), con desglose por variable y el nivel de bono alcanzado. Los
-pesos y los rangos de bono son configuración, no código. Un periodo cerrado
-conserva su puntaje.
+**Puntajes de Perfect Merchandiser** — implementado (MAR-100). Tres tablas:
+
+- **`config_perfect_merchandiser`** — los cinco pesos por cliente (sin ejes de
+  marca ni tipo de tienda: ponderar por ahí volvería a medir al mercaderista por
+  el tamaño de su tienda), más la **política** de puntualidad —tolerancia y
+  minutos a los que la parada puntúa 0— y los días de gracia antes de congelar
+  el periodo. Filas **inmutables**, versionadas por `vigente_desde`.
+- **`nivel_bono_merchandiser`** — la escalera de bonos como **umbrales**
+  (`puntaje_min`, sin máximo): "todos los que llegan a este nivel reciben tanto".
+  Un rango con mínimo y máximo admitiría huecos y solapes silenciosos. Publicar
+  una escalera nueva **reemplaza la anterior entera**, en una transacción.
+- **`puntaje_merchandiser`** — clave `(mercaderista_id, tipo, periodo_inicio)`,
+  con los cinco porcentajes, el total, diez contadores de cobertura que explican
+  el número, el `config_id` que lo produjo y `cerrado_at`.
+
+Cuatro invariantes:
+
+- **El puntaje guarda con qué configuración se calculó.** Cambiar los pesos no
+  reescribe la historia (ADR-0011).
+- **Una variable no evaluada renormaliza su peso, no puntúa cero.** Un cero
+  silencioso convertiría un periodo a medio medir en un mal desempeño.
+- **Un periodo cerrado no se recalcula.** Se sella solo, en el propio cálculo,
+  pasada la ventana de gracia — que existe porque el móvil es offline-first y un
+  teléfono sin señal sincroniza después de que el mes terminó. No hay reapertura.
+- **La política es del motor; el hecho, de `puntualidad_paradas`.** El motor usa
+  `minutos_desvio` y aplica su propia tolerancia versionada, nunca la editable de
+  `tenant.tolerancia_puntualidad_min`.
+
+El **tiempo efectivo de atención** existe como columna pero llega **apagado**: su
+peso está fijado a 0 por CHECK y su porcentaje es siempre NULL. No hay fórmula
+acordada —"puede ser un incentivo perverso de que haga todo mal y rápido"— y un
+peso libre habría hecho que la renormalización lo repartiera en silencio.
+Encenderla es una migración, no un cambio de configuración.
+
+Reparto sin doble conteo entre las dos variables que leen formularios: los de
+ámbito `levantamiento` puntúan **calidad de registro**, los de ámbito `check_in`
+puntúan **herramientas de trabajo**. Las dos cuentan **filas `foto`**, nunca el
+uuid guardado dentro del `valor` de una respuesta: esa referencia no tiene verja
+de autenticidad.
 
 **Checklist de herramientas del check-in** — implementado (MAR-98). El
 formulario configurable llegó al check-in con

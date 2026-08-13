@@ -21,5 +21,6 @@ export * from "./schemas/alerta";
 export * from "./schemas/galeria";
 export * from "./schemas/importacion";
 export * from "./schemas/levantamiento";
+export * from "./schemas/perfect-merchandiser";
 export * from "./schemas/perfect-store";
 export * from "./schemas/revision";
