@@ -107,6 +107,16 @@ export const NAV_ADMIN: readonly ItemNav[] = [
     ayuda:
       "Carga del maestro comercial sobre el cliente-marca activo. Se descarga la plantilla —una hoja por entidad, con sus cabeceras—, el cliente la rellena, y al subirla se previsualiza fila por fila: los errores se listan con su número de fila del Excel y hasta que no queda ninguno no se puede aplicar. Aplicar es todo o nada. Un reimport actualiza lo que ya existe y crea lo nuevo; nada se borra ni se desactiva por no venir en el archivo.",
   },
+  {
+    href: "/admin/metricas",
+    label: "Métricas y bonos",
+    icono: "🎯",
+    area: "admin",
+    titulo: "Métricas y bonos",
+    subtitulo: "Pesos de Perfect Store y del plan de lealtad",
+    ayuda:
+      "Los pesos con los que se calculan las dos métricas: Perfect Store (por marca, afinable por categoría y tipo de tienda) y el plan de lealtad del mercaderista, con su escalera de bonos. Publicar crea una versión nueva: los puntajes ya calculados guardan con qué configuración se hicieron y no se mueven.",
+  },
 ];
 
 export const NAV_SUPERVISOR: readonly ItemNav[] = [
@@ -159,6 +169,16 @@ export const NAV_SUPERVISOR: readonly ItemNav[] = [
     subtitulo: "Cola de aprobación de visitas cerradas",
     ayuda:
       "La cola de visitas cerradas por aprobar. Se abre el reporte —fotos antes/después, Share of Shelf, stock, precios, contingencias y bitácora— y se aprueba o se rechaza. Rechazar exige un motivo, y el mercaderista lo lee en su app: es lo que le dice qué corregir. Una visita sin cerrar no entra aquí; esa se persigue desde el Tablero.",
+  },
+  {
+    href: "/supervisor/metricas",
+    label: "Métricas y bonos",
+    icono: "🎯",
+    area: "supervisor",
+    titulo: "Métricas y bonos",
+    subtitulo: "Pesos de Perfect Store y del plan de lealtad",
+    ayuda:
+      "Los pesos con los que se calculan las dos métricas: Perfect Store (por marca, afinable por categoría y tipo de tienda) y el plan de lealtad del mercaderista, con su escalera de bonos. Publicar crea una versión nueva: los puntajes ya calculados guardan con qué configuración se hicieron y no se mueven. Solo el admin publica; aquí se consultan.",
   },
 ];
 

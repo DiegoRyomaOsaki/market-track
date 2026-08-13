@@ -121,6 +121,28 @@ describe("altaConfigMerchandiserSchema", () => {
     }
   });
 
+  it("sin periodicidad, el plan es mensual", () => {
+    // Compatibilidad con el alta que existía antes de que la columna naciera.
+    expect(altaConfigMerchandiserSchema.parse(CONFIG).periodicidad).toBe(
+      "mensual",
+    );
+  });
+
+  it("acepta trimestral y anual, y rechaza una cadencia inventada", () => {
+    expect(
+      altaConfigMerchandiserSchema.parse({
+        ...CONFIG,
+        periodicidad: "trimestral",
+      }).periodicidad,
+    ).toBe("trimestral");
+    expect(
+      altaConfigMerchandiserSchema.safeParse({
+        ...CONFIG,
+        periodicidad: "semanal",
+      }).success,
+    ).toBe(false);
+  });
+
   it("acepta un id de seed: usa z.guid(), no z.uuid()", () => {
     // El estricto exige los bits de versión del RFC 9562 que Postgres no impone,
     // y rechazaría todos los ids del seed del proyecto.

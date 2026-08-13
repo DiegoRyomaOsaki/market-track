@@ -17,6 +17,9 @@ import { tipoTiendaSchema } from "../enums";
 export const unidadSosSchema = z.enum(Constants.public.Enums.unidad_sos);
 export const politicaPopSchema = z.enum(Constants.public.Enums.politica_pop);
 
+export type UnidadSos = z.infer<typeof unidadSosSchema>;
+export type PoliticaPop = z.infer<typeof politicaPopSchema>;
+
 /** Los valores del enum, para pintar un desplegable sin escribirlos a mano. */
 export const UNIDADES_SOS = Constants.public.Enums.unidad_sos;
 export const POLITICAS_POP = Constants.public.Enums.politica_pop;

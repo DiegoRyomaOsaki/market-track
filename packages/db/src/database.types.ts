@@ -175,6 +175,7 @@ export type Database = {
           dias_gracia_cierre: number
           id: string
           minutos_tardanza_cero: number
+          periodicidad: Database["public"]["Enums"]["periodo_puntaje"]
           peso_asistencia: number
           peso_calidad: number
           peso_herramientas: number
@@ -190,6 +191,7 @@ export type Database = {
           dias_gracia_cierre?: number
           id?: string
           minutos_tardanza_cero?: number
+          periodicidad?: Database["public"]["Enums"]["periodo_puntaje"]
           peso_asistencia: number
           peso_calidad: number
           peso_herramientas: number
@@ -205,6 +207,7 @@ export type Database = {
           dias_gracia_cierre?: number
           id?: string
           minutos_tardanza_cero?: number
+          periodicidad?: Database["public"]["Enums"]["periodo_puntaje"]
           peso_asistencia?: number
           peso_calidad?: number
           peso_herramientas?: number
@@ -2488,6 +2491,31 @@ export type Database = {
           habilitado: boolean
           modulo: Database["public"]["Enums"]["modulo_portal"]
         }[]
+      }
+      previsualizar_merchandiser: {
+        Args: { p_pesos: Json; p_tenant_id: string }
+        Returns: {
+          mercaderista: string
+          mercaderista_id: string
+          periodo_inicio: string
+          tipo: Database["public"]["Enums"]["periodo_puntaje"]
+          total_actual: number
+          total_previsto: number
+        }[]
+      }
+      previsualizar_perfect_store: {
+        Args: { p_marca_id: string; p_pesos: Json }
+        Returns: {
+          calculado_at: string
+          levantamiento_id: string
+          tienda_nombre: string
+          total_actual: number
+          total_previsto: number
+        }[]
+      }
+      publicar_escalera_bono: {
+        Args: { p_niveles: Json; p_tenant_id: string; p_vigente_desde: string }
+        Returns: number
       }
       puntualidad_paradas: {
         Args: { p_desde: string; p_hasta: string; p_mercaderista: string }
