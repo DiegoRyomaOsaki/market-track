@@ -53,6 +53,8 @@ constants) to understand the available token palette.
 - [ ] Every page/route sets a meaningful document title (WCAG 2.4.2)
 - [ ] Programmatic blob downloads attach the anchor to the document before `.click()` and remove it after (some browsers ignore `.click()` on a detached anchor), and defer `URL.revokeObjectURL` (e.g. via a timeout)
 - [ ] Focus management on dialog open/close
+- [ ] After a failed validation, focus moves to the first invalid field; after an action with a visible result, to the element announcing it — leaving focus on the button forces keyboard users to hunt for the problem
+- [ ] Per-field help text lives OUTSIDE its `<label>` and is linked via `aria-describedby` — inside the label it joins the field's accessible NAME and screen readers announce it twice
 - [ ] Data grids navigable via keyboard (if applicable)
 - [ ] Canvas/WebGL map interactions (MapLibre pin clicks) have a keyboard-operable equivalent — a click-only feature handler is unreachable without a mouse (WCAG 2.1.1)
 - [ ] Touch targets at least 44x44px on interactive elements
@@ -74,6 +76,10 @@ constants) to understand the available token palette.
 - [ ] Both light and dark token values defined and tested
 - [ ] No hardcoded colors that break in alternate themes
 - [ ] Theme transitions are smooth (no flash of wrong theme)
+
+**Your final message MUST be the report below.** If you run low on budget,
+emit it with whatever you have: a partial report delivers value, stopping
+mid-investigation delivers nothing.
 
 ## Output Format
 

@@ -349,3 +349,19 @@ Aún no hay `.env`. Al scaffoldear, crear `.env.example` por app. Previstas:
 - **La ayuda contextual (`?`) viaja con la app, no se descarga** — el
   mercaderista la consulta en un sótano sin señal. Contenido estático en
   `packages/shared`, no una tabla de BD.
+- **Un predicado que omite la columna LÍDER de un índice compuesto no puede
+  buscar.** `foto_visita_lev_tipo_idx` empieza por `visita_id`: filtrar solo por
+  `levantamiento_id` degrada a un Seq Scan de la tabla entera, cruzando todos
+  los clientes. Medido con EXPLAIN. Hermana de la pitfall del cast por fila.
+- **El esquema `app` NO está expuesto por PostgREST** (`config.toml` publica solo
+  `public` y `graphql_public`): `supabase.rpc(...)` no alcanza ninguna función de
+  `app`. Para llamarla desde la app hace falta una envoltura delgada en `public`.
+- **Una columna que escribe el cliente no prueba nada del mundo real.**
+  `foto.hash` y `foto.subida_at` los escribe el móvil, y un uuid dentro de
+  `*_respuesta.valor` no tiene verja de autenticidad: cualquier lógica que pague
+  o puntúe sobre ellos es falsificable. Acotar cuántas filas se acreditan
+  (`least`) limita el daño, no valida que cada una sea real (ver MAR-117).
+- **Una configuración que es un CONJUNTO se publica por RPC con guardia, no con
+  un insert de varias filas.** Insertar sobre una `vigente_desde` que ya existe
+  no falla: FUSIONA (la clave natural solo choca en el duplicado exacto) — y sin
+  `delete` para `authenticated`, la mezcla no se puede deshacer desde la app.

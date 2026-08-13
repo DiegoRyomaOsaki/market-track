@@ -36,6 +36,7 @@ Read `CLAUDE.md` for full context. Key facts for this project:
 - [ ] Helpers that lazy-import config or modules cache the resolved promise at module level when called more than once per request, instead of re-triggering module evaluation on each call
 - [ ] No aggregate orders by the jsonb it just built (`jsonb_agg(x order by x->>'campo')`) — it re-evaluates the whole `jsonb_build_object`, subqueries included, just for the sort key; order by the raw column
 - [ ] No per-row cast on an indexed column in a filter predicate (`col::date between …` on a `timestamptz` defeats the `(tenant_id, fecha)` index — use a half-open range on the raw column: `col >= $1 and col < ($2 + 1)`)
+- [ ] Every predicate on a growing table binds the LEADING column of the index it intends to use — without it the index cannot seek and the plan degrades to a full Seq Scan; verify with EXPLAIN, not by inspection
 
 ### Caching
 - [ ] Cache TTL configured appropriately (not too aggressive for mutable data)
@@ -72,6 +73,10 @@ Read `CLAUDE.md` for full context. Key facts for this project:
 - [ ] Package store and build cache reused between CI runs
 - [ ] Per-job timeouts set
 - [ ] CLI-only tools kept out of production dependencies
+
+**Your final message MUST be the report below.** If you run low on budget,
+emit it with whatever you have: a partial report delivers value, stopping
+mid-investigation delivers nothing.
 
 ## Output Format
 

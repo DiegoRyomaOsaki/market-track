@@ -104,6 +104,10 @@ Read `CLAUDE.md` for full context. Key facts for this project:
 - [ ] Third-party actions pinned to specific versions, not floating tags
 - [ ] Per-job timeouts set
 
+**Your final message MUST be the report below.** If you run low on budget,
+emit it with whatever you have: a partial report delivers value, stopping
+mid-investigation delivers nothing.
+
 ## Output Format
 
 Begin your final reply with the Critical/High/Medium/Low/Info summary even if analysis is incomplete; never spend the whole turn budget investigating before writing it.
