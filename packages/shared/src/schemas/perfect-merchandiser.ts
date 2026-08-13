@@ -1,3 +1,4 @@
+import { Constants } from "@market-track/db";
 import { z } from "zod";
 
 // El plan de lealtad del mercaderista en la frontera: lo que se puede escribir.
@@ -22,6 +23,13 @@ export const SUMA_DE_PESOS_MERCHANDISER = 100;
 function centesimas(valor: number): number {
   return Math.round(valor * 100);
 }
+
+/** Cada cuánto se cierra y se paga el plan. Del PLAN, no de cada nivel de bono. */
+export const periodoPuntajeSchema = z.enum(
+  Constants.public.Enums.periodo_puntaje,
+);
+export const PERIODOS_PUNTAJE = Constants.public.Enums.periodo_puntaje;
+export type PeriodoPuntaje = z.infer<typeof periodoPuntajeSchema>;
 
 /**
  * Los cinco pesos del plan de lealtad.
@@ -96,6 +104,10 @@ export const altaConfigMerchandiserSchema = z
       .number("Escribe los días de gracia")
       .int("Tienen que ser días enteros")
       .min(0, "No puede ser negativo"),
+
+    // Con default para no romper a quien ya publicaba sin ella: la columna nació
+    // con `default 'mensual'` y el alta clásica no la enviaba.
+    periodicidad: periodoPuntajeSchema.default("mensual"),
 
     vigente_desde: z.iso.date("Elige desde cuándo rige"),
   })

@@ -36,6 +36,15 @@ describe("itemActivo", () => {
     expect(itemActivo("/cliente")).toBeUndefined();
   });
 
+  it("la sección de métricas resuelve en las dos áreas", () => {
+    // Es la misma pantalla para admin y supervisor, en dos rutas distintas: cada
+    // una tiene que resolver su propio item, o el header titularía la ajena.
+    expect(itemActivo("/admin/metricas")?.area).toBe("admin");
+    expect(itemActivo("/supervisor/metricas")?.area).toBe("supervisor");
+    // Con la pestaña en la query sigue resolviendo (el match es por prefijo).
+    expect(itemActivo("/admin/metricas")?.label).toBe("Métricas y bonos");
+  });
+
   it("todo item de NAV tiene título y ayuda contextual", () => {
     // Ninguna sección puede quedarse sin su texto de ayuda (`?`): el popover lo
     // lee de aquí, que es la fuente única.

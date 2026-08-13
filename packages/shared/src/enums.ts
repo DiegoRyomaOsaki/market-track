@@ -54,6 +54,8 @@ export const CANALES_OTP = Constants.public.Enums.canal_otp;
 export const estadoPaseSchema = z.enum(Constants.public.Enums.estado_pase);
 export const ESTADOS_PASE = Constants.public.Enums.estado_pase;
 export const tipoTiendaSchema = z.enum(Constants.public.Enums.tipo_tienda);
+/** Los valores del enum, para pintar un desplegable sin escribirlos a mano. */
+export const TIPOS_TIENDA = Constants.public.Enums.tipo_tienda;
 export const estadoImportacionSchema = z.enum(
   Constants.public.Enums.estado_importacion,
 );
