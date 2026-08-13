@@ -168,6 +168,69 @@ export type Database = {
           },
         ]
       }
+      config_perfect_merchandiser: {
+        Row: {
+          creado_at: string
+          creado_por: string | null
+          dias_gracia_cierre: number
+          id: string
+          minutos_tardanza_cero: number
+          peso_asistencia: number
+          peso_calidad: number
+          peso_herramientas: number
+          peso_puntualidad: number
+          peso_tiempo_efectivo: number
+          tenant_id: string
+          tolerancia_puntualidad_min: number
+          vigente_desde: string
+        }
+        Insert: {
+          creado_at?: string
+          creado_por?: string | null
+          dias_gracia_cierre?: number
+          id?: string
+          minutos_tardanza_cero?: number
+          peso_asistencia: number
+          peso_calidad: number
+          peso_herramientas: number
+          peso_puntualidad: number
+          peso_tiempo_efectivo?: number
+          tenant_id: string
+          tolerancia_puntualidad_min: number
+          vigente_desde?: string
+        }
+        Update: {
+          creado_at?: string
+          creado_por?: string | null
+          dias_gracia_cierre?: number
+          id?: string
+          minutos_tardanza_cero?: number
+          peso_asistencia?: number
+          peso_calidad?: number
+          peso_herramientas?: number
+          peso_puntualidad?: number
+          peso_tiempo_efectivo?: number
+          tenant_id?: string
+          tolerancia_puntualidad_min?: number
+          vigente_desde?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "config_perfect_merchandiser_creado_por_fkey"
+            columns: ["creado_por"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "config_perfect_merchandiser_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       config_perfect_store: {
         Row: {
           categoria_id: string | null
@@ -1022,6 +1085,54 @@ export type Database = {
           },
         ]
       }
+      nivel_bono_merchandiser: {
+        Row: {
+          creado_at: string
+          creado_por: string | null
+          id: string
+          monto: number
+          nombre: string
+          puntaje_min: number
+          tenant_id: string
+          vigente_desde: string
+        }
+        Insert: {
+          creado_at?: string
+          creado_por?: string | null
+          id?: string
+          monto: number
+          nombre: string
+          puntaje_min: number
+          tenant_id: string
+          vigente_desde?: string
+        }
+        Update: {
+          creado_at?: string
+          creado_por?: string | null
+          id?: string
+          monto?: number
+          nombre?: string
+          puntaje_min?: number
+          tenant_id?: string
+          vigente_desde?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nivel_bono_merchandiser_creado_por_fkey"
+            columns: ["creado_por"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nivel_bono_merchandiser_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pase_acceso_temporal: {
         Row: {
           codigo_hash: string
@@ -1267,6 +1378,116 @@ export type Database = {
           },
           {
             foreignKeyName: "promocion_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      puntaje_merchandiser: {
+        Row: {
+          asistencia_pct: number | null
+          calculado_at: string
+          calidad_pct: number | null
+          campos_obligatorios: number
+          campos_respondidos: number
+          cerrado_at: string | null
+          config_id: string
+          fotos_esperadas: number
+          fotos_presentes: number
+          herramientas_pct: number | null
+          items_checklist: number
+          items_cumplidos: number
+          mercaderista_id: string
+          nivel_bono_id: string | null
+          paradas_asistidas: number
+          paradas_con_hora: number
+          paradas_evaluables: number
+          paradas_puntuales: number
+          periodo_inicio: string
+          puntualidad_pct: number | null
+          tenant_id: string
+          tiempo_efectivo_pct: number | null
+          tipo: Database["public"]["Enums"]["periodo_puntaje"]
+          total_pct: number | null
+        }
+        Insert: {
+          asistencia_pct?: number | null
+          calculado_at?: string
+          calidad_pct?: number | null
+          campos_obligatorios?: number
+          campos_respondidos?: number
+          cerrado_at?: string | null
+          config_id: string
+          fotos_esperadas?: number
+          fotos_presentes?: number
+          herramientas_pct?: number | null
+          items_checklist?: number
+          items_cumplidos?: number
+          mercaderista_id: string
+          nivel_bono_id?: string | null
+          paradas_asistidas?: number
+          paradas_con_hora?: number
+          paradas_evaluables?: number
+          paradas_puntuales?: number
+          periodo_inicio: string
+          puntualidad_pct?: number | null
+          tenant_id: string
+          tiempo_efectivo_pct?: number | null
+          tipo: Database["public"]["Enums"]["periodo_puntaje"]
+          total_pct?: number | null
+        }
+        Update: {
+          asistencia_pct?: number | null
+          calculado_at?: string
+          calidad_pct?: number | null
+          campos_obligatorios?: number
+          campos_respondidos?: number
+          cerrado_at?: string | null
+          config_id?: string
+          fotos_esperadas?: number
+          fotos_presentes?: number
+          herramientas_pct?: number | null
+          items_checklist?: number
+          items_cumplidos?: number
+          mercaderista_id?: string
+          nivel_bono_id?: string | null
+          paradas_asistidas?: number
+          paradas_con_hora?: number
+          paradas_evaluables?: number
+          paradas_puntuales?: number
+          periodo_inicio?: string
+          puntualidad_pct?: number | null
+          tenant_id?: string
+          tiempo_efectivo_pct?: number | null
+          tipo?: Database["public"]["Enums"]["periodo_puntaje"]
+          total_pct?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "puntaje_merchandiser_config_id_fkey"
+            columns: ["config_id"]
+            isOneToOne: false
+            referencedRelation: "config_perfect_merchandiser"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "puntaje_merchandiser_mercaderista_id_fkey"
+            columns: ["mercaderista_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "puntaje_merchandiser_nivel_bono_id_fkey"
+            columns: ["nivel_bono_id"]
+            isOneToOne: false
+            referencedRelation: "nivel_bono_merchandiser"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "puntaje_merchandiser_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenant"
@@ -2282,6 +2503,14 @@ export type Database = {
           tienda_id: string
         }[]
       }
+      recalcular_puntaje_merchandiser: {
+        Args: {
+          p_inicio: string
+          p_mercaderista?: string
+          p_tipo: Database["public"]["Enums"]["periodo_puntaje"]
+        }
+        Returns: number
+      }
       reordenar_paradas: {
         Args: { p_paradas: string[]; p_rutero_id: string }
         Returns: undefined
@@ -2372,6 +2601,7 @@ export type Database = {
         | "foto_despues"
         | "checkout"
         | "campos_extra"
+      periodo_puntaje: "mensual" | "trimestral" | "anual"
       politica_pop: "dentro_del_tope" | "bonus_sobre_100"
       rol_usuario: "admin" | "supervisor" | "mercaderista" | "cliente"
       severidad_alerta: "info" | "alta" | "critica"
@@ -2572,6 +2802,7 @@ export const Constants = {
         "checkout",
         "campos_extra",
       ],
+      periodo_puntaje: ["mensual", "trimestral", "anual"],
       politica_pop: ["dentro_del_tope", "bonus_sobre_100"],
       rol_usuario: ["admin", "supervisor", "mercaderista", "cliente"],
       severidad_alerta: ["info", "alta", "critica"],

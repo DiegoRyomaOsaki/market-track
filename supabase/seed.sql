@@ -227,3 +227,29 @@ insert into public.mapeo_importacion (id, tenant_id, nombre, mapeo, creado_por) 
 insert into public.portal_modulo_habilitado (tenant_id, modulo, habilitado) values
   ('aaaaaaaa-0000-0000-0000-000000000001', 'reportes', false),
   ('bbbbbbbb-0000-0000-0000-000000000002', 'galeria', false);
+
+-- La configuración del plan de lealtad del mercaderista (MAR-100) y su escalera
+-- de bonos. Los DOS clientes la llevan: sin la del rival, el test de aislamiento
+-- contaría filas sobre una tabla que solo tiene datos de uno y pasaría en verde
+-- aunque la política se rompiera.
+--
+-- `vigente_desde` explícito y en el pasado, como el resto del seed: con el
+-- default (hoy en Lima) un periodo que empieza antes no encontraría configuración
+-- y el motor no calcularía nada.
+insert into public.config_perfect_merchandiser
+  (id, tenant_id, peso_puntualidad, peso_asistencia, peso_tiempo_efectivo,
+   peso_calidad, peso_herramientas, tolerancia_puntualidad_min,
+   minutos_tardanza_cero, dias_gracia_cierre, vigente_desde) values
+  ('a0000021-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001',
+   25, 30, 0, 25, 20, 15, 60, 7, '2026-01-01'),
+  ('b0000021-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0000-000000000002',
+   20, 40, 0, 30, 10, 10, 45, 7, '2026-01-01');
+
+-- La escalera: tres peldaños. El puntaje por debajo del más bajo no cobra bono,
+-- que es un estado que el motor tiene que saber representar.
+insert into public.nivel_bono_merchandiser
+  (id, tenant_id, vigente_desde, nombre, puntaje_min, monto) values
+  ('a0000022-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', '2026-01-01', 'Bronce', 60, 100.00),
+  ('a0000022-0000-0000-0000-000000000002', 'aaaaaaaa-0000-0000-0000-000000000001', '2026-01-01', 'Plata',  80, 250.00),
+  ('a0000022-0000-0000-0000-000000000003', 'aaaaaaaa-0000-0000-0000-000000000001', '2026-01-01', 'Oro',    95, 500.00),
+  ('b0000022-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0000-000000000002', '2026-01-01', 'Único',  70, 200.00);
