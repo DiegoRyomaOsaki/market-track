@@ -144,8 +144,7 @@ describe("bandeja_alertas — qué ve el cliente-marca", () => {
 describe("bandeja_alertas — la ventana de fechas", () => {
   it("es el día de LIMA, no el de UTC", async () => {
     // 21:00 en Lima del día 4 son las 02:00 UTC del día 5. Si la ventana se
-    // resolviera en UTC —como hace `dashboard_alertas`— esta alerta se
-    // contabilizaría en el día equivocado.
+    // resolviera en UTC, esta alerta se contabilizaría en el día equivocado.
     await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
       await sembrarAlerta(c, {
         id: "e0000016-0000-0000-0000-0000000000a1",
