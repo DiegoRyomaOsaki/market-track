@@ -17,10 +17,18 @@ happen.
 Read `CLAUDE.md` for project conventions. Key facts:
 - Next.js 15, App Router, TypeScript strict.
 - One app, three role-based route groups; role enforcement via Supabase Auth + RLS + middleware.
-- Data access via `supabase-js`; server logic in Supabase Edge Functions (not Next.js Route Handlers, unless the concern is web-only).
+- Data access via `supabase-js`; shared server logic in Supabase Edge Functions.
+- **Web writes go through Server Actions** — `"use server"` files named `acciones.ts` under `apps/web/src/lib/*/`. This is the dominant write path (Route Handlers are the rare exception, for web-only concerns like file downloads). Server Actions are where auth, Zod, and tenant checks live — review them with the same rigor as an API endpoint.
 - Validation with Zod schemas from `packages/shared`.
 
 ## Review Checklist
+
+### Server Actions (`acciones.ts`)
+- [ ] Every action re-validates auth and role server-side — an action is a public HTTP endpoint; the UI that calls it is not a guard
+- [ ] Every action input parsed with Zod before use (mass-assignment: never spread a client payload into an insert/update)
+- [ ] Every write scoped by `tenant_id` from the caller's profile, never from the payload
+- [ ] Array-column contents (`uuid[]`, `text[]`) validated against the caller's `tenant_id` — arrays carry no foreign key
+- [ ] No heavy server-only library imported into an action reachable from a client component without checking the bundle: the action's whole import graph gets bundled, and a lazy `require` that Node never evaluates still breaks `next build` (fix via `serverExternalPackages`, not by installing the phantom package). `tsc` and tests stay green — only `next build` catches it, and CI does not run it.
 
 ### Routes & API Endpoints
 - [ ] Route Handlers (`app/**/route.ts`) export properly named HTTP methods (`GET`, `POST`, …)

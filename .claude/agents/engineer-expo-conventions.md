@@ -17,7 +17,7 @@ data.
 Read `CLAUDE.md` for project conventions. Key facts:
 - Expo (managed workflow) + TypeScript strict; EAS Build + OTA updates.
 - **Offline-first is the product's #1 differentiator**: all field flows read/write the local SQLite replica via PowerSync; photos go to a disk-backed upload queue.
-- Native capabilities via Expo modules: `expo-camera` (live capture only, gallery blocked), `expo-location` + `expo-task-manager` (geofencing), `expo-notifications` (push), `expo-image-manipulator` (compression).
+- Native capabilities via Expo modules installed today: `expo-camera` (live capture only, gallery blocked), `expo-location` (geofence check at check-in/out), `expo-image-manipulator` (compression). Push (`expo-notifications`) and background geofencing (`expo-task-manager`) are **not yet installed** — verify `apps/mobile/package.json` before assuming a module exists.
 - Target hardware: mid-range Android. Keep the JS bundle and per-screen work light.
 
 ## Review Checklist

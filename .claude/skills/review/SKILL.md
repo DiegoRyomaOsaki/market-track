@@ -23,8 +23,9 @@ Run a comprehensive review of the current changes by spawning specialized review
    !`git diff --stat HEAD`
    ```
 
-3. Discover which reviewer agents actually exist — `/adapt` deletes the ones that
-   don't apply to this stack (e.g. `reviewer-ui` on a backend-only project):
+3. Discover which reviewer agents actually exist on disk (the kit this skill
+   comes from prunes reviewers that don't apply to a stack, so never assume the
+   full set):
    ```
    !`ls .claude/agents/reviewer-*.md 2>/dev/null`
    ```
@@ -39,7 +40,7 @@ Run a comprehensive review of the current changes by spawning specialized review
    Only spawn the ones present on disk. Never invoke a `subagent_type` whose file
    was deleted — skip its section in the report instead.
 
-4. Each agent receives the same scope (files/diff) and reviews independently. Pass a `name:` for each agent so it's addressable, and bake an investigation budget and required output format into each spawn prompt (e.g. "Spend at most N tool calls, then emit the structured report. Do not stop without it."). Tell them to **emit the report before the budget runs out** — a review that stops mid-investigation delivers nothing, so partial findings beat perfect ones never sent. If a final message lacks the structured report, resume that agent with `SendMessage` — it continues from its transcript with the investigation intact, so it can write the report it already had the material for; re-spawning throws that work away. Do not synthesize missing findings by hand.
+4. Each agent receives the same scope (files/diff) and reviews independently. Put the reviewer's role in each agent's `description` so it's identifiable, and bake an investigation budget and required output format into each spawn prompt (e.g. "Spend at most N tool calls, then emit the structured report. Do not stop without it."). Tell them to **emit the report before the budget runs out** — a review that stops mid-investigation delivers nothing, so partial findings beat perfect ones never sent. If a final message lacks the structured report, resume that agent with `SendMessage` — it continues from its transcript with the investigation intact, so it can write the report it already had the material for; re-spawning throws that work away. Do not synthesize missing findings by hand.
 
 4a. **Reviewers must not mutate shared state.** Every spawn prompt forbids schema changes to the local database (no loose DDL — the migrations are the only schema channel, and `test:db` runs against that same database) and forbids discarding uncommitted work (`git checkout`/`stash` over files the reviewer didn't write). To verify a finding, mutate *source* and restore it, or wrap the experiment in `BEGIN; … ROLLBACK;`. After the reviews, confirm the tree and the database are as you left them before trusting any report.
 

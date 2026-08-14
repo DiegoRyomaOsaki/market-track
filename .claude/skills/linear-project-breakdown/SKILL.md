@@ -8,10 +8,11 @@ user-invocable: true
 
 Break down a feature or project into well-structured Linear issues.
 
-> **Linear MCP prefix:** the Linear MCP tools (`list_teams`, `save_issue`, …) may
-> be registered under different full names in your environment (e.g.
-> `mcp__linear-server__save_issue` or `mcp__claude_ai_Linear__save_issue`). Use the
-> `Linear MCP prefix:` value from CLAUDE.md's Integrations section.
+> **Linear MCP:** this project uses the `linear-mt` server exclusively — the
+> Linear MCP tools (`list_teams`, `save_issue`, …) are `mcp__linear-mt__*`
+> (see CLAUDE.md → Integrations). Never use the `mcp__claude_ai_Linear__*`
+> connector registered on this machine: it points at a different account and
+> cannot see the Market-Track workspace.
 
 ## Steps
 

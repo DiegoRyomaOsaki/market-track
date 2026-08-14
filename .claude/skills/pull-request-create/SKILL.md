@@ -53,7 +53,7 @@ description
 - [ ] areas to review
 
 ---
-Generated with [Claude Code](https://claude.com/claude-code)
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
 EOF
 )"
 ```

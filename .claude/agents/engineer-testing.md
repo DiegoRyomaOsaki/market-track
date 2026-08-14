@@ -18,6 +18,7 @@ Read `CLAUDE.md` for project conventions. Key facts for this project:
 - **Mobile:** Jest with `jest-expo` + React Native Testing Library.
 - **Mocking:** Supabase and network calls mocked at the client boundary; PowerSync mocked with an in-memory SQLite where practical.
 - **Domain logic** (Zod schemas, KPI formulas, alert rules) lives in `packages/shared` — pure functions, the easiest and most valuable layer to test.
+- **Database layer:** `packages/db/test/` holds the `test:db` harness (`pnpm turbo run test:db`, requires `supabase start`) — it runs against a real seeded Postgres and is where RLS isolation and derived-value SQL are verified. The project rule is explicit: **a new view, trigger, or RPC that computes a derived field ships with a `test:db` test** — testing only the TS helper that shapes its output leaves the actual computation uncovered. Mock-based Vitest suites cannot substitute for this layer; a green mock suite over unverified SQL is the false-green CLAUDE.md warns about.
 
 ## Review Checklist
 
@@ -32,6 +33,7 @@ Read `CLAUDE.md` for project conventions. Key facts for this project:
 - [ ] When a handler delegates output shaping to a domain helper, at least one integration test exercises the real helper (no mock) — mock-only tests pin the call contract, integration tests pin the behavior contract; both are needed
 - [ ] Transaction rollback tested by failing mid-transaction after at least one write has executed, not before the first statement — a synchronous throw before any write makes "zero rows persisted" assertions vacuous
 - [ ] A fix touching a multi-branch handler (one that switches on a discriminator — alert `tipo`, foto `tipo`, merma `tipo`) tests every branch, not just the one that triggered the bug — the others walk the same code path and silently regress
+- [ ] New or changed SQL that computes a derived field (view, trigger, RPC) has a matching test in `packages/db/test/` — flag its absence as a missing test, not a style note
 
 ### Test Quality
 - [ ] Tests describe behavior ("blocks check-in beyond the store's geofence radius") not implementation ("calls validateGeofence")

@@ -14,7 +14,7 @@ integrity rules are enforced.
 ## Context
 
 Read `CLAUDE.md` for the full data architecture. Key facts for this project:
-- **Data source:** Supabase Postgres 16 + PostGIS, accessed via `supabase-js` (PostgREST). Server logic in Edge Functions (Deno/TS).
+- **Data source:** Supabase Postgres 17 + PostGIS, accessed via `supabase-js` (PostgREST). Server logic in Edge Functions (Deno/TS).
 - **Mobile reads/writes:** the PowerSync-synced local SQLite replica — never direct network calls in the field flow.
 - **Validation:** Zod schemas in `packages/shared`; DB types generated from the Supabase schema (`packages/db`).
 - **Multi-tenancy:** every business table carries `tenant_id`; isolation enforced by RLS policies per role (`admin`, `supervisor`, `mercaderista`, `cliente`).
@@ -55,8 +55,15 @@ Read `CLAUDE.md` for the full data architecture. Key facts for this project:
 - [ ] Elements of an array column that references another table are validated against the row's `tenant_id` on write — an `uuid[]` carries no foreign key, and the composite FK on the scalar columns does not reach inside it
 - [ ] Active/revoked flag re-checked on every access; permission state is not cached in a way that delays a revocation taking effect
 
+### Migrations (SQL)
+- [ ] Every new table gets **both** the `GRANT` and the RLS policies in the same migration — without the grant, queries die with `42501 permission denied` *before* any policy is evaluated, and the error looks like RLS without being it
+- [ ] The grant covers **every verb the policy allows** — a `for all` policy with a `select, insert, update` grant dies on `delete`
+- [ ] Functions inside RLS policies are always wrapped in `(select ...)` — without it Postgres evaluates them once per row instead of once per query (measured on 200k rows: 42,480 ms vs 12.9 ms)
+- [ ] No `col::date between ...` on an indexed `timestamptz` column — the per-row cast defeats the index; use a half-open range on the raw column
+
 ### Offline Sync (PowerSync)
-- [ ] **Sync rules never use client parameters for access control.** PowerSync replicates with a `BYPASSRLS` role, so the download path is governed *only* by sync rules — RLS cannot save you here. A rule filtered by `request.parameters()` is a tenant leak: the client can send any value. Scope only by `request.user_id()` (signed JWT) or by a table lookup keyed on it, e.g. `SELECT tenant_id FROM profile WHERE id = request.user_id()`. See `docs/adr/0001-motor-offline-dedicado.md`.
+- [ ] **Sync rules never use client parameters for access control.** PowerSync replicates with a `BYPASSRLS` role, so the download path is governed *only* by sync rules — RLS cannot save you here. A rule filtered by client-supplied parameters is a tenant leak: the client can send any value. Scope only by `auth.user_id()` (signed JWT) or by a table lookup keyed on it, e.g. `SELECT tenant_id FROM profile WHERE id = auth.user_id()`. See `docs/adr/0001-motor-offline-dedicado.md`.
+- [ ] **Sync config uses Sync Streams (edition 3)** — `packages/sync/config/streams.yaml`. The legacy `bucket_definitions` / `request.user_id()` syntax is rejected at startup (there is a test asserting this in `packages/sync/src/streams.test.ts`). Flag any legacy syntax as an error, not a style choice.
 - [ ] Sync rules scope each mercaderista to their own rutero/tiendas/SKUs of the day — no full-table downloads
 - [ ] Writes are idempotent under retry (sync may deliver the same upload twice)
 - [ ] Conflict strategy is last-write-wins per field with an audit trail, as documented — no custom conflict logic without justification

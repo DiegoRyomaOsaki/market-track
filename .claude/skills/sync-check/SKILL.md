@@ -84,7 +84,8 @@ and PR in the kit repo.
 ## Phase 3 — Classify Settings
 
 8. If `.claude/settings.json` exists, compare against the kit's settings
-   template (in the adapt skill, Phase 6). Classify each permission:
+   template (found in the kit checkout's adapt skill, Phase 6 — the adapt skill
+   is not installed in this project). Classify each permission:
 
    **Backportable (add to kit template):**
    - Git, gh CLI, shell utilities, core tool permissions

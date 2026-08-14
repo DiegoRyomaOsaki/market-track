@@ -9,29 +9,29 @@ user-invocable: true
 
 End-to-end workflow: fetch a Linear ticket, implement it scoped to the card, open a draft PR, run multi-agent review and comment findings on the PR, apply fixes and comment them on the PR, finalize the PR, and close the loop on Linear.
 
-> **Linear MCP prefix:** the tool names below use `mcp__linear-server__*`. Your
-> environment may register the Linear MCP under a different prefix (e.g.
-> `mcp__claude_ai_Linear__*`). Use the `Linear MCP prefix:` value from CLAUDE.md's
-> Integrations section; substitute it for `mcp__linear-server__` throughout.
+> **Linear MCP:** this project uses the `linear-mt` server exclusively — tool
+> prefix `mcp__linear-mt__*` (see CLAUDE.md → Integrations). Never use the
+> `mcp__claude_ai_Linear__*` connector registered on this machine: it points at
+> a different account and cannot see the Market-Track workspace.
 
 ## Phase 0 — Fetch & Understand the Ticket
 
 1. Parse the ticket identifier from `$ARGUMENTS`.
-   - Accept formats: a ticket ID (e.g., `SCR-123`), a full Linear URL, or a raw UUID.
+   - Accept formats: a ticket ID (e.g., `MAR-123`), a full Linear URL, or a raw UUID.
    - **No argument:** list `Todo` tickets filtered to the project's Linear team (from `CLAUDE.md`), verify each result's `team` field matches, skip any that don't, then ask the user to pick one.
    - **ID provided:** confirm the ticket prefix matches the project's Linear team — if not, stop and tell the user this skill is scoped to that team.
 
-2. **Fetch the ticket** using the `mcp__linear-server__get_issue` MCP tool with `includeRelations: true`.
+2. **Fetch the ticket** using the `mcp__linear-mt__get_issue` MCP tool with `includeRelations: true`.
    - Extract: title, description, acceptance criteria, labels, priority, parent issue, blocking/blocked-by relations, and the suggested git branch name.
 
 3. **Fetch sibling tickets for scope boundaries**:
-   - If the ticket has a parent issue, use `mcp__linear-server__list_issues` with `parentId` set to the parent's ID to get all sibling sub-issues.
-   - If no parent, use `mcp__linear-server__list_issues` with the same `project` to see neighboring work.
+   - If the ticket has a parent issue, use `mcp__linear-mt__list_issues` with `parentId` set to the parent's ID to get all sibling sub-issues.
+   - If no parent, use `mcp__linear-mt__list_issues` with the same `project` to see neighboring work.
    - Summarize the sibling tickets into a **scope boundary list** — a short description of what each sibling covers, so you know what is OUT of scope for this ticket.
 
-4. **Fetch existing comments** using `mcp__linear-server__list_comments` to check for additional context, discussion, or decisions made on the ticket.
+4. **Fetch existing comments** using `mcp__linear-mt__list_comments` to check for additional context, discussion, or decisions made on the ticket.
 
-5. **Update ticket status** to "In Progress" using `mcp__linear-server__save_issue` with the ticket's ID and `state: "In Progress"`.
+5. **Update ticket status** to "In Progress" using `mcp__linear-mt__save_issue` with the ticket's ID and `state: "In Progress"`.
 
 ## Phase 1 — Clarify Requirements
 
@@ -89,7 +89,7 @@ End-to-end workflow: fetch a Linear ticket, implement it scoped to the card, ope
     For complex tickets, spawn specialized agents as needed:
     - `engineer-data-access` — for data layer design, field mapping, pagination
     - `engineer-frontend` — for UI components, state management, styling
-    - `engineer-framework-conventions` — for framework-specific patterns
+    - `engineer-nextjs-conventions` (apps/web) or `engineer-expo-conventions` (apps/mobile) — for framework-specific patterns
 
     Keep implementation strictly scoped. If you notice something that SHOULD be done but belongs to a sibling ticket, note it but do NOT implement it.
 
@@ -107,7 +107,7 @@ End-to-end workflow: fetch a Linear ticket, implement it scoped to the card, ope
 
 ## Phase 5 — Draft PR
 
-15. **Push the branch** and **create a draft pull request**:
+16. **Push the branch** and **create a draft pull request**:
     ```bash
     git push -u origin <branch-name>
     gh pr create --draft --title "[TICKET-ID]: [Title]" --body "$(cat <<'EOF'
@@ -131,40 +131,42 @@ End-to-end workflow: fetch a Linear ticket, implement it scoped to the card, ope
 
 ## Phase 6 — Review
 
-16. **Run the `/review` skill** on the current changes to get a comprehensive multi-agent code review.
+17. **Run the `/review` skill** on the current changes to get a comprehensive multi-agent code review.
 
-17. **Triage the review findings**:
+18. **Triage the review findings** (per the project's Review Discipline in
+    `.claude/rules/coding_practices.md`):
     - **Critical / High** items — MUST be fixed before proceeding.
-    - **Medium** items — Fix if they are practical and within scope of this ticket.
-    - **Low / Informational** items — Note but skip unless trivial to fix.
+    - **Medium / Low** items — do NOT fix in this PR; record them in the PR
+      comment as tracked for the next PR.
     - Items that belong to sibling tickets or are unrelated — explicitly skip with a note.
 
-18. **Comment the review findings on the PR** using `gh pr comment`. Structure: Critical/High, Medium, Skipped (with reasoning for skips).
+19. **Comment the review findings on the PR** using `gh pr comment`. Structure: Critical/High (fixed), Medium/Low (tracked for next PR), Skipped (with reasoning for skips).
 
 ## Phase 7 — Apply Review Feedback
 
-19. For each Critical/High/Medium item, apply the fix using the relevant specialist agent:
+20. For each Critical/High item, apply the fix yourself. For non-trivial fixes,
+    spawn the relevant specialist **as a read-only consultant** (they have no
+    Edit/Write tools — you apply what they recommend):
     - Security → `reviewer-security`, UI → `reviewer-ui`, Tests → `engineer-testing`
-    - Performance → `reviewer-performance`, Conventions → framework conventions agent
+    - Performance → `reviewer-performance`, Conventions → `engineer-nextjs-conventions` / `engineer-expo-conventions`
     - Clarity → `engineer-clarity`, Complexity → `engineer-simplifier`
-    Spawn the specialist as a consultant for non-trivial fixes.
 
-20. **Commit the review fixes** as a separate commit (e.g., "Apply review feedback for [TICKET-ID]").
+21. **Commit the review fixes** as a separate commit (e.g., "Apply review feedback for [TICKET-ID]").
 
 ## Phase 8 — Test & Lint (Round 2)
 
-21. Run tests, linters, and type checks again. Fix any regressions.
-22. Push the review fixes.
-23. **Comment the applied fixes on the PR** — list each fix referencing the original finding.
+22. Run tests, linters, and type checks again. Fix any regressions.
+23. Push the review fixes.
+24. **Comment the applied fixes on the PR** — list each fix referencing the original finding.
 
 ## Phase 9 — Finalize PR & Close the Loop
 
-24. **Mark the PR as ready for review**: `gh pr ready`
-25. **Update the PR body** with the full implementation summary (changes, files, tests, review findings addressed, out-of-scope items).
-26. **Present the summary to the user** with the PR URL.
-27. **Comment the summary on the Linear ticket** using Linear MCP tools. If the comment tool is permission-denied, the auto-attached PR on the ticket is an acceptable fallback — record the denial in the final report and continue.
-28. **Update ticket status** to "In Review".
-29. **Suggest retrospective**: Output "Run `/retrospective` to review this session's work." so the user can run it in the main conversation where findings are actionable.
+25. **Mark the PR as ready for review**: `gh pr ready`
+26. **Update the PR body** with the full implementation summary (changes, files, tests, review findings addressed, out-of-scope items).
+27. **Present the summary to the user** with the PR URL.
+28. **Comment the summary on the Linear ticket** using Linear MCP tools. If the comment tool is permission-denied, the auto-attached PR on the ticket is an acceptable fallback — record the denial in the final report and continue.
+29. **Update ticket status** to "In Review".
+30. **Suggest retrospective**: Output "Run `/retrospective` to review this session's work." so the user can run it in the main conversation where findings are actionable.
 
 ## Guardrails
 

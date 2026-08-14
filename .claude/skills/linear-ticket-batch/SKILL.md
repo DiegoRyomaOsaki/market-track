@@ -9,10 +9,10 @@ user-invocable: true
 
 Select multiple tickets intelligently, then implement them in parallel — each via `/linear-ticket-start` in its own worktree.
 
-> **Linear MCP prefix:** the `mcp__linear-server__*` tool names below may be
-> registered under a different prefix in your environment (e.g.
-> `mcp__claude_ai_Linear__*`). Use the `Linear MCP prefix:` value from CLAUDE.md's
-> Integrations section and substitute it throughout.
+> **Linear MCP:** this project uses the `linear-mt` server exclusively — tool
+> prefix `mcp__linear-mt__*` (see CLAUDE.md → Integrations). Never use the
+> `mcp__claude_ai_Linear__*` connector registered on this machine: it points at
+> a different account and cannot see the Market-Track workspace.
 
 ## Phase 1 — Parse Intent
 
@@ -23,12 +23,12 @@ Select multiple tickets intelligently, then implement them in parallel — each 
 
 2. Extract signals from the input:
    - **Topic keywords**: words that match against ticket titles, descriptions, labels, or project names.
-   - **Count hint**: if the user mentioned a number (`"3 tickets"`, `"a few"`), use it as the target batch size. Default: up to 5.
-   - **Priority filter**: if the user mentioned priority (`"high-priority"`, `"urgent"`), map to Linear priority values (1=Urgent, 2=High, 3=Normal, 4=Low).
+   - **Count hint**: if the user mentioned a number (`"3 tickets"`, `"a few"`), use it as the target batch size. Default: up to 3 (see Guardrails).
+   - **Priority filter**: if the user mentioned priority (`"high-priority"`, `"urgent"`), map to Linear priority values (1=Urgent, 2=High, 3=Medium, 4=Low).
 
 ## Phase 2 — Smart Selection
 
-3. **Query Linear** using `mcp__linear-server__list_issues`:
+3. **Query Linear** using `mcp__linear-mt__list_issues`:
    - `team`: the project's Linear team (from `CLAUDE.md`)
    - `state: "Todo"`
    - If topic keywords exist, use the `query` parameter to search titles/descriptions.
@@ -40,7 +40,7 @@ Select multiple tickets intelligently, then implement them in parallel — each 
    - Priority 1 (Urgent) first, then 2 (High), then 3 (Normal), then 4 (Low).
    - Within the same priority, prefer tickets updated more recently.
 
-5. **Check for blockers** — for each candidate in rank order, fetch full details with `mcp__linear-server__get_issue` using `includeRelations: true`:
+5. **Check for blockers** — for each candidate in rank order, fetch full details with `mcp__linear-mt__get_issue` using `includeRelations: true`:
    - If a ticket is **blocked by** an unresolved ticket, exclude it and note why.
    - If a ticket **blocks** other candidates in the batch, keep it but note the dependency.
    - Stop checking once you have enough unblocked candidates to fill the batch size.
@@ -60,7 +60,6 @@ Select multiple tickets intelligently, then implement them in parallel — each 
 
 8. For each confirmed ticket, **spawn a subagent** using the `Agent` tool:
    - `isolation: "worktree"` — each agent gets its own git worktree
-   - `mode: "bypassPermissions"` — worktree agents stall without this
    - `run_in_background: true` — all agents launch in parallel
 
    The prompt for each agent must be self-contained:
@@ -81,7 +80,7 @@ Select multiple tickets intelligently, then implement them in parallel — each 
    - Follow the full /linear-ticket-start workflow including review and PR finalization.
    ```
 
-   Name each agent after its ticket ID so progress can be tracked.
+   Put the ticket ID in each agent's `description` so progress can be tracked.
 
 9. **Wait for all agents to complete.** As each agent finishes, note its result.
 

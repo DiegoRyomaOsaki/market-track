@@ -73,7 +73,9 @@
       "Skill(docs-update)",
       "Skill(linear-ticket-start)",
       "Skill(linear-ticket-batch)",
-      "Skill(linear-project-breakdown)"
+      "Skill(linear-project-breakdown)",
+      "Skill(reconcile-linear)",
+      "Skill(sync-check)"
     ],
     "deny": [
       "Bash(rm:*)",

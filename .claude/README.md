@@ -48,8 +48,8 @@
 | reconcile-linear | `/reconcile-linear` | Close stale Linear tickets whose PRs merged |
 | sync-check | `/sync-check` | Backport generalizable improvements to claude-kit |
 
-> Linear skills require the team key in `CLAUDE.md` → `## Integrations`
-> (pending: create the "Market Track" team in Linear first).
+> Linear skills read the team key from `CLAUDE.md` → `## Integrations`
+> (workspace `market-track`, team key `Market-Track`, MCP server `linear-mt`).
 
 ## Commands
 

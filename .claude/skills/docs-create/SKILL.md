@@ -15,10 +15,12 @@ Write a new `docs/` file for a specific domain by researching the codebase and a
 
 1. Parse the domain from `$ARGUMENTS`. If no argument, ask the user what domain to document.
 
-2. Determine the output file path:
-   - Domain-specific architecture: `docs/architecture/<domain>.md`
-   - Operational runbooks: `docs/runbooks/<name>.md` — follow the runbook template in `.claude/rules/runbooks.md` instead of the generic structure below.
-   - Non-architecture docs: `docs/<DOMAIN>.md`
+2. Determine the output file path. In this project `docs/` is flat: the
+   numbered files (`02 - Arquitectura Técnica.md`, …) are the contractual
+   source of truth and ADRs live in `docs/adr/`. Follow that layout:
+   - Architecture decisions: `docs/adr/NNNN-<slug>.md` (next number in sequence)
+   - Everything else: `docs/<descriptive-name>.md` — never renumber or rewrite
+     the contractual numbered docs; link to them instead.
    - If the file already exists, abort and suggest using `/docs-update` instead.
 
 ## Phase 2 — Research

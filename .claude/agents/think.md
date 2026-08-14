@@ -4,7 +4,7 @@ description: |
   Founder-mode product thinking. Use when the user is deciding WHAT to build,
   not HOW to build it. Challenges premises, finds the 10x version, identifies
   scope traps, and pressure-tests whether the right problem is being solved.
-  Delegates here when the user describes a feature/product idea says or asks "think about", "should I build", "what's the right approach", "is this worth doing".
+  Delegates here when the user describes a feature/product idea, or says or asks "think about", "should I build", "what's the right approach", "is this worth doing".
 tools: Read, Grep, Glob, Bash
 model: opus
 ---
