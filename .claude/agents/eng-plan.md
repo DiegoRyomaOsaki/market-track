@@ -24,7 +24,8 @@ Understand the current state before reviewing:
 
 ```bash
 git log --oneline -20
-BASE=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null || echo "main")
+# Prefer the `Base branch:` line in CLAUDE.md's Git Workflow section (here: dev)
+BASE=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null || echo "dev")
 git diff "$BASE" --stat 2>/dev/null
 ```
 

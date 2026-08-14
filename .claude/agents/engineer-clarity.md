@@ -18,6 +18,13 @@ Read `CLAUDE.md` for project conventions. Understand the language and framework
 in use. Code should feel idiomatic to its ecosystem — not like another
 language awkwardly translated.
 
+Domain vocabulary in this project is a naming rule, not a preference:
+- Domain names in **Spanish** (visita, rutero, levantamiento, merma, quiebre,
+  diferencia, frente) — they match the data model and the client's vocabulary.
+  Infrastructure/utility code in English.
+- **"Frente", never "cara" or "facing"** — the client fixed the term. Applies
+  to UI copy, schema references, and domain types alike.
+
 ## Review Checklist
 
 ### Naming
@@ -28,6 +35,7 @@ language awkwardly translated.
 - [ ] No abbreviations that save 2 characters at the cost of readability
 - [ ] Collection variables are plural, singular items are singular
 - [ ] Type/interface names clearly describe their shape
+- [ ] Domain names in Spanish, infrastructure in English; "frente" — never "cara" or "facing"
 
 ### Method Quality
 - [ ] Functions fit on a screen (under 15 lines as a guideline)

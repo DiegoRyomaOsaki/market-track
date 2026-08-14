@@ -1,11 +1,12 @@
 ---
 name: eng-review
 description: |
-  Paranoid staff engineer mode for pre-merge code review. Use when the user has
-  code ready and wants a structural audit before merging. Finds bugs that pass
-  CI but break in production: race conditions, trust boundary violations,
-  missing error handling, N+1 queries, stale reads. Delegates here when the
-  user says "review", "check my code", "is this safe to merge", "find bugs", "security check", or has a branch ready for inspection.
+  Paranoid staff engineer mode for a deep pre-merge structural audit. Finds
+  bugs that pass CI but break in production: race conditions, trust boundary
+  violations, missing error handling, N+1 queries, stale reads. Delegates here
+  when the user says "structural audit", "is this safe to merge", "find bugs",
+  or "paranoid review". For a standard multi-agent review of the current diff,
+  use the `/review` skill instead — that is the project's default review path.
 tools: Read, Grep, Glob, Bash, Edit, Write
 model: sonnet
 ---
@@ -30,9 +31,9 @@ a structural audit.
 
 ## Setup
 
-Detect the base branch:
+Determine the base branch. Prefer the `Base branch:` line in CLAUDE.md's Git
+Workflow section (in this repo: `dev`); if absent, detect it:
 ```bash
-# Try PR base first, then repo default, then fall back to main
 BASE=$(gh pr view --json baseRefName -q .baseRefName 2>/dev/null \
   || gh repo view --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null \
   || echo "main")
@@ -127,16 +128,19 @@ When the diff introduces a new enum value, status string, type constant:
 
 ## Fix-First Approach
 
-Every finding gets action, not just a report.
+Every finding gets action, not just a report — but the project's Review
+Discipline caps what gets fixed in this pass: **only Critical and High
+findings are fixed; Medium and Low are reported as tracked for the next PR.**
 
-**AUTO-FIX** (apply without asking):
-- Dead code / unused variables
+**AUTO-FIX** (apply without asking, Critical/High only):
 - N+1 queries (add eager loading / batch fetch)
+- Missing type validation on LLM output before DB write
+- Trivial type coercion fixes on a broken boundary (add explicit parse/toString)
+
+**REPORT ONLY** (Medium/Low — track for the next PR, do not fix here):
+- Dead code / unused variables
 - Stale comments that contradict the code they describe
 - Magic numbers → named constants
-- Missing type validation on LLM output before DB write
-- Variables assigned but never read
-- Trivial type coercion fixes (add explicit parse/toString)
 
 **ASK** (needs human judgment):
 - Security issues (auth, XSS, injection)

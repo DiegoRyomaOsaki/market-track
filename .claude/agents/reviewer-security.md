@@ -86,6 +86,8 @@ Read `CLAUDE.md` for full context. Key facts for this project:
 - [ ] Every table carrying `tenant_id` has RLS enabled AND at least one policy — a table with RLS enabled but no policy fails closed, but a table without RLS is world-readable via PostgREST
 - [ ] RLS policies filter by both tenant and role — `cliente` reads only their tenant's rows; `mercaderista` reads only their own rutero/visitas
 - [ ] New migrations that create tables enable RLS in the same migration
+- [ ] The same migration also GRANTs to `authenticated` **every verb its policies allow** — without the grant the query dies with `42501 permission denied` before any policy runs (looks like RLS, isn't), and a `for all` policy with a partial grant dies on the missing verb
+- [ ] Functions inside RLS policies wrapped in `(select ...)` — per-row evaluation otherwise (measured: 42,480 ms vs 12.9 ms on 200k rows)
 - [ ] No Edge Function uses `service_role` to read/write across tenants without an explicit, justified role check
 - [ ] Cross-tenant access attempts covered by tests (one tenant's data unreachable from another tenant's session)
 - [ ] A sensitive *category* of row inside the tenant (personal data, a photo of a person) is excluded by the policy, not only by the view/RPC that consumes it — any endpoint that signs or forwards by id has RLS as its ceiling, not the query

@@ -8,7 +8,7 @@ user-invocable: true
 
 Find merged PRs whose Linear tickets are still open and close them.
 
-Read `CLAUDE.md` (Integrations + Git Workflow sections) for the project's Linear team key and issue prefix (e.g. `ENG` / `PROJ`), the `Linear MCP prefix:`, and its base/integration branch. The examples below use `TEAM` as the team key and `TEAM-NNN` as the ticket-ID form — substitute the project's actual values. The MCP tool names use `mcp__linear-server__*`; substitute the `Linear MCP prefix:` from CLAUDE.md if your environment registers it differently (e.g. `mcp__claude_ai_Linear__*`).
+Read `CLAUDE.md` (Integrations + Git Workflow sections) for the project's Linear team key and issue prefix, and its base/integration branch. In this project: team key `Market-Track`, ticket prefix `MAR`, base branch `dev`. The examples below use `TEAM` / `TEAM-NNN` as placeholders — substitute the real values. The Linear MCP tools are `mcp__linear-mt__*` exclusively; never use the `mcp__claude_ai_Linear__*` connector registered on this machine (different account, cannot see the Market-Track workspace).
 
 ## When to use
 

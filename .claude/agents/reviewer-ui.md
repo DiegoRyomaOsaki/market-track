@@ -14,7 +14,7 @@ You are a senior frontend engineer reviewing UI code for this application.
 Read `CLAUDE.md` for full context. Key facts for this project:
 - **Web (`apps/web`):** Tailwind CSS + shadcn/ui; design tokens as CSS variables in the global stylesheet / Tailwind theme. Dashboards use Tremor/Recharts; maps use MapLibre GL.
 - **Mobile (`apps/mobile`):** React Native + Expo. The mercaderista app runs on mid-range Android phones, often used one-handed, standing, in poor lighting — prioritize large touch targets, high contrast, and obvious state feedback.
-- Status colors (pin verde/rojo, semáforo verde/ámbar/rojo) must come from shared tokens so web and mobile agree.
+- Status colors (pin verde/rojo, semáforo verde/ámbar/rojo) come from design tokens. Today the tokens live in `apps/web` (`globals.css` / Tailwind theme) — there is no shared web+mobile token package yet, so check consistency by value across apps, not by import.
 
 Read the project's design tokens (global CSS / Tailwind config / shared theme
 constants) to understand the available token palette.
