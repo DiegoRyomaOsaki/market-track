@@ -197,7 +197,14 @@ describe("gate de módulos — las RPC de sección con el módulo apagado", () =
     const delEnum = r.rows.map((x) => x.modulo).sort();
     const conRpc = [...new Set(RPCS.map((x) => x.modulo))].sort();
     expect(delEnum).toEqual(
-      ["dashboard", "mapa", "galeria", "alertas", "reportes", "perfect_store"].sort(),
+      [
+        "dashboard",
+        "mapa",
+        "galeria",
+        "alertas",
+        "reportes",
+        "perfect_store",
+      ].sort(),
     );
     expect(conRpc).toEqual(delEnum.filter((m) => m !== "reportes"));
   });
