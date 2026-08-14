@@ -1108,6 +1108,22 @@ describe("formulario_version_id — el ancla no cruza clientes", () => {
     });
   });
 
+  it("el levantamiento también se ancla a una versión del PROPIO cliente", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await sembrarVersion(
+        c,
+        TENANTS.maracumango,
+        IDS.formularioPropio,
+        IDS.versionFormPropia,
+      );
+      const r = await c.query(
+        `update public.levantamiento set formulario_version_id = $2 where id = $1`,
+        [IDS.levantamientoMrc, IDS.versionFormPropia],
+      );
+      expect(r.rowCount).toBe(1);
+    });
+  });
+
   it("una visita SIN formulario anclado sigue siendo válida (el ancla es opcional)", async () => {
     // El guardián contra un MATCH FULL por error: con él, todo par (null,
     // tenant_id) sería rechazado y el check-in sin checklist —el caso normal—
@@ -1116,6 +1132,16 @@ describe("formulario_version_id — el ancla no cruza clientes", () => {
       const r = await c.query(
         `update public.visita set formulario_version_id = null where id = $1`,
         [IDS.visitaMrc],
+      );
+      expect(r.rowCount).toBe(1);
+    });
+  });
+
+  it("y un levantamiento SIN formulario también", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const r = await c.query(
+        `update public.levantamiento set formulario_version_id = null where id = $1`,
+        [IDS.levantamientoMrc],
       );
       expect(r.rowCount).toBe(1);
     });
