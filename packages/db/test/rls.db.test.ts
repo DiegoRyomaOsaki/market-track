@@ -170,6 +170,107 @@ describe("los cuatro roles", () => {
   });
 });
 
+describe("el mercaderista lee su PROPIO trabajo, no el de sus compañeros", () => {
+  // La sync ya acota la bajada al teléfono (visita y visita_respuesta filtran
+  // por las visitas propias); esto cierra la otra superficie: PostgREST directo,
+  // por el que cualquier usuario del tenant leía la operación entera de sus
+  // compañeros. El staff y el cliente-marca no cambian.
+  const VISITA_COMPANERO = "e0000010-0000-0000-0000-000000000096";
+  const RESPUESTA_COMPANERO = "e0000046-0000-0000-0000-000000000096";
+  const VISITA_PROPIA = "a0000010-0000-0000-0000-000000000001";
+
+  async function sembrarTrabajoDeCompanero(c: Client): Promise<void> {
+    await c.query("set local role postgres");
+    await c.query(
+      `insert into public.visita
+         (id, tenant_id, rutero_parada_id, mercaderista_id, tienda_id, estado)
+       values ($1, $2, $3, $4, $5, 'en_curso')`,
+      [
+        VISITA_COMPANERO,
+        TENANTS.maracumango,
+        "a0000009-0000-0000-0000-000000000001",
+        USUARIOS.desvinculado,
+        "a0000002-0000-0000-0000-000000000001",
+      ],
+    );
+    await c.query(
+      `insert into public.visita_respuesta (id, tenant_id, visita_id, campo_id, valor)
+       values ($1, $2, $3, 'botas', 'true'::jsonb)`,
+      [RESPUESTA_COMPANERO, TENANTS.maracumango, VISITA_COMPANERO],
+    );
+    await c.query("set local role authenticated");
+  }
+
+  it("NO lee la visita de un compañero del mismo cliente, pero SÍ la suya", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await sembrarTrabajoDeCompanero(c);
+      const r = await c.query<{ id: string }>(
+        `select id from public.visita where id = any($1::uuid[])`,
+        [[VISITA_COMPANERO, VISITA_PROPIA]],
+      );
+      expect(r.rows.map((x) => x.id)).toEqual([VISITA_PROPIA]);
+    });
+  });
+
+  it("NO lee las respuestas del checklist de un compañero, pero SÍ las suyas", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await sembrarTrabajoDeCompanero(c);
+      await c.query(
+        `insert into public.visita_respuesta (id, tenant_id, visita_id, campo_id, valor)
+         values ($1, $2, $3, 'botas', 'true'::jsonb)`,
+        ["e0000046-0000-0000-0000-000000000095", TENANTS.maracumango, VISITA_PROPIA],
+      );
+      const ajena = await c.query(
+        `select id from public.visita_respuesta where id = $1`,
+        [RESPUESTA_COMPANERO],
+      );
+      expect(ajena.rowCount).toBe(0);
+
+      const propia = await c.query(
+        `select id from public.visita_respuesta where visita_id = $1`,
+        [VISITA_PROPIA],
+      );
+      expect(propia.rowCount).toBe(1);
+    });
+  });
+
+  it("el supervisor sigue leyendo el trabajo de todos: es su tablero", async () => {
+    await comoUsuario(db, USUARIOS.supervisor, async (c) => {
+      await sembrarTrabajoDeCompanero(c);
+      const r = await c.query(
+        `select id from public.visita_respuesta where id = $1`,
+        [RESPUESTA_COMPANERO],
+      );
+      expect(r.rowCount).toBe(1);
+    });
+  });
+
+  it("el cliente-marca sigue viendo TODAS las visitas de su operación", async () => {
+    // Su dashboard y su mapa agregan la operación completa: si la acotación por
+    // dueño se colara en su rama, el portal se vaciaría en silencio.
+    await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
+      await sembrarTrabajoDeCompanero(c);
+      const r = await c.query(`select id from public.visita where id = $1`, [
+        VISITA_COMPANERO,
+      ]);
+      expect(r.rowCount).toBe(1);
+    });
+  });
+
+  it("el checklist del compañero sigue FUERA del alcance del cliente-marca", async () => {
+    // Ya estaba excluido (dato laboral); la reescritura de la política no puede
+    // reabrirlo.
+    await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
+      await sembrarTrabajoDeCompanero(c);
+      const r = await c.query(
+        `select id from public.visita_respuesta where id = $1`,
+        [RESPUESTA_COMPANERO],
+      );
+      expect(r.rowCount).toBe(0);
+    });
+  });
+});
+
 describe("revocación: el acceso es derivado, no una copia", () => {
   it("el mercaderista DESVINCULADO no ve nada, pero sí su propia fila", async () => {
     await comoUsuario(db, USUARIOS.desvinculado, async (c) => {

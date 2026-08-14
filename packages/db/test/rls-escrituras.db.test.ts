@@ -36,6 +36,10 @@ const IDS = {
   visitaDeCompanero: "e0000010-0000-0000-0000-000000000098",
   nuevaRespuestaVisita: "e0000046-0000-0000-0000-000000000099",
   nuevoFormularioCheckIn: "e0000047-0000-0000-0000-000000000099",
+  formularioRival: "e0000048-0000-0000-0000-000000000099",
+  versionFormRival: "e0000049-0000-0000-0000-000000000099",
+  formularioPropio: "e0000050-0000-0000-0000-000000000099",
+  versionFormPropia: "e0000051-0000-0000-0000-000000000099",
 } as const;
 
 // Los tests de "no puede escribir en el tenant ajeno" y "revocación en la
@@ -1018,6 +1022,99 @@ describe("foto — la metadata sube por el sync, el binario por su propia cola",
           ],
         ),
       ).rejects.toMatchObject({ code: "23503" });
+    });
+  });
+});
+
+describe("formulario_version_id — el ancla no cruza clientes", () => {
+  // Las FK simples solo miran el id: un cliente hostil podía anclar su visita o
+  // su levantamiento a la versión de OTRO cliente por PostgREST, y el motor de
+  // puntaje (SECURITY DEFINER, salta RLS) sacaría el denominador de "calidad" y
+  // "herramientas" de un formulario ajeno — y de esas variables sale un bono.
+  // La verja es la FK compuesta (id, tenant_id); la RLS no interviene ahí.
+
+  /** Un formulario con su versión publicada, en el tenant que se pida. */
+  async function sembrarVersion(
+    c: Client,
+    tenantId: string,
+    formularioId: string,
+    versionId: string,
+  ): Promise<void> {
+    await c.query("set local role postgres");
+    await c.query(
+      `insert into public.formulario_levantamiento (id, tenant_id, nombre)
+       values ($1, $2, 'Para el ancla')`,
+      [formularioId, tenantId],
+    );
+    await c.query(
+      `insert into public.formulario_version
+         (id, tenant_id, formulario_id, version, definicion, publicada)
+       values ($1, $2, $3, 1, '{"pasos":[]}'::jsonb, true)`,
+      [versionId, tenantId, formularioId],
+    );
+    await c.query("set local role authenticated");
+  }
+
+  it("la visita NO se puede anclar a la versión de OTRO cliente", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await sembrarVersion(
+        c,
+        TENANTS.rival,
+        IDS.formularioRival,
+        IDS.versionFormRival,
+      );
+      await expect(
+        c.query(
+          `update public.visita set formulario_version_id = $2 where id = $1`,
+          [IDS.visitaMrc, IDS.versionFormRival],
+        ),
+      ).rejects.toMatchObject({ code: "23503", constraint: "visita_formver_fk" });
+    });
+  });
+
+  it("el levantamiento tampoco", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await sembrarVersion(
+        c,
+        TENANTS.rival,
+        IDS.formularioRival,
+        IDS.versionFormRival,
+      );
+      await expect(
+        c.query(
+          `update public.levantamiento set formulario_version_id = $2 where id = $1`,
+          [IDS.levantamientoMrc, IDS.versionFormRival],
+        ),
+      ).rejects.toMatchObject({ code: "23503", constraint: "lev_formver_fk" });
+    });
+  });
+
+  it("a una versión del PROPIO cliente sí se ancla", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await sembrarVersion(
+        c,
+        TENANTS.maracumango,
+        IDS.formularioPropio,
+        IDS.versionFormPropia,
+      );
+      const r = await c.query(
+        `update public.visita set formulario_version_id = $2 where id = $1`,
+        [IDS.visitaMrc, IDS.versionFormPropia],
+      );
+      expect(r.rowCount).toBe(1);
+    });
+  });
+
+  it("una visita SIN formulario anclado sigue siendo válida (el ancla es opcional)", async () => {
+    // El guardián contra un MATCH FULL por error: con él, todo par (null,
+    // tenant_id) sería rechazado y el check-in sin checklist —el caso normal—
+    // dejaría de sincronizar, descartando datos de campo.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const r = await c.query(
+        `update public.visita set formulario_version_id = null where id = $1`,
+        [IDS.visitaMrc],
+      );
+      expect(r.rowCount).toBe(1);
     });
   });
 });

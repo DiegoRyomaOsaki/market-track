@@ -367,6 +367,14 @@ cliente* a nuestros campos, guardado para no repetir el trabajo en cada carga.
 > su `foto_id`, pero sin este valor la imagen se colaría como `antes` y
 > contaminaría la galería filtrable del portal.
 
+> **Quién lee `foto`** (política por rol): el staff, todo; el cliente-marca, la
+> evidencia de su operación menos la selfie y la foto de herramientas del
+> check-in (datos del personal de la outsourcing); el mercaderista, **solo la de
+> sus propias visitas** — igual que la sync acota la bajada a su teléfono, la
+> política acota PostgREST. La misma acotación por dueño rige la lectura del
+> mercaderista sobre `visita` y `visita_respuesta`. (`levantamiento_respuesta`
+> sigue tenant-wide en ambas superficies: se acota junto con su stream.)
+
 **`alerta`** — disparada por las Edge Functions.
 | Campo | Tipo | Nota |
 |---|---|---|
@@ -503,7 +511,12 @@ Reparto sin doble conteo entre las dos variables que leen formularios: los de
 ámbito `levantamiento` puntúan **calidad de registro**, los de ámbito `check_in`
 puntúan **herramientas de trabajo**. Las dos cuentan **filas `foto`**, nunca el
 uuid guardado dentro del `valor` de una respuesta: esa referencia no tiene verja
-de autenticidad.
+de autenticidad (sin FK ni trigger — un rechazo del servidor haría que el
+conector de PowerSync descartara el paso entero). Si alguna pantalla resuelve
+ese uuid algún día, lo hace con un join que exija `foto.levantamiento_id =
+levantamiento_respuesta.levantamiento_id` (o `foto.visita_id =
+visita_respuesta.visita_id`) y el mismo tenant, tratando el desajuste como "sin
+foto" — la regla vive también en el comentario de ambas columnas `valor`.
 
 **Checklist de herramientas del check-in** — implementado (MAR-98). El
 formulario configurable llegó al check-in con
