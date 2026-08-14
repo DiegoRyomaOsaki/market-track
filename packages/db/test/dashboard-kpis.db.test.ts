@@ -230,7 +230,13 @@ describe("dashboard — la ventana es el día de LIMA, no el de UTC", () => {
         `insert into public.alerta
            (id, tenant_id, tipo, severidad, estado, marca_id, visita_id, payload, creado_at)
          values ($1, $2, 'quiebre', 'info', 'nueva', $3, $4, '{}', $5)`,
-        [ALERTA, TENANTS.maracumango, MARCA, VISITA_SEED, VEINTE_HORAS_LIMA_DEL_20],
+        [
+          ALERTA,
+          TENANTS.maracumango,
+          MARCA,
+          VISITA_SEED,
+          VEINTE_HORAS_LIMA_DEL_20,
+        ],
       );
       await c.query("set local role authenticated");
 
