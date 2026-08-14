@@ -46,17 +46,21 @@ export default async function DashboardPortalPage({
   };
 
   const supabase = await createServerSupabaseClient();
-  const [estado, kpisRes, pinesRes, alertasRes] = await Promise.all([
-    modulosDelCliente(),
+  // Ya está resuelto (y cacheado por request) desde `requerirModulo` arriba,
+  // así que esperarlo aquí no añade viaje — y permite no pedir los pines de un
+  // mapa que la página no va a pintar: con el módulo apagado la RPC devolvería
+  // vacío igual (la verja vive en la base), pero pedirlo sería un viaje muerto.
+  const estado = await modulosDelCliente();
+  const [kpisRes, pinesRes, alertasRes] = await Promise.all([
     supabase.rpc("dashboard_kpis", args),
-    supabase.rpc("dashboard_pines", args),
+    estado.mapa ? supabase.rpc("dashboard_pines", args) : Promise.resolve(null),
     supabase.rpc("dashboard_alertas", args),
   ]);
 
   const fila = kpisRes.data?.[0] ?? null;
   const kpis = fila ? armarKpis(fila) : [];
 
-  const pines = (pinesRes.data ?? []).map((p) => {
+  const pines = (pinesRes?.data ?? []).map((p) => {
     const color = colorDePin(
       p.ultima_visita_estado,
       p.tiene_alerta,
