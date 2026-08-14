@@ -10,6 +10,7 @@ const VISITA_MRC = "a0000010-0000-0000-0000-000000000001";
 const LEVANTAMIENTO_MRC = "a0000011-0000-0000-0000-000000000001";
 const TIENDA_MRC = "a0000002-0000-0000-0000-000000000001";
 const CADENA_MRC = "a0000001-0000-0000-0000-000000000001";
+const RUTERO_PARADA_MRC = "a0000009-0000-0000-0000-000000000001";
 
 // Los del cliente RIVAL. Existen de verdad: un id inventado prueba "no existe",
 // no "es de otro cliente", que es la superficie que importa.
@@ -473,6 +474,107 @@ describe("la selfie de check-in — el dato personal del mercaderista", () => {
         `select id from public.foto where tipo <> 'selfie'`,
       );
       expect(r.rows.length).toBeGreaterThan(0);
+    });
+  });
+});
+
+describe("la evidencia del mercaderista — solo la de SUS visitas", () => {
+  // La bajada al teléfono ya estaba acotada (la sync filtra `foto` por las
+  // visitas propias); esto cubre la OTRA superficie: PostgREST directo, por el
+  // que un mercaderista podía llevarse la selfie y la foto de herramientas de
+  // cualquier compañero — y con el id en la mano, `fotos-url-firmada` devuelve
+  // la imagen: firma lo que la RLS deje leer.
+  const VISITA_COMPANERO = "e0000010-0000-0000-0000-000000000097";
+  const FOTO_COMPANERO = "e0000015-0000-0000-0000-000000000094";
+
+  async function sembrarFotoDeCompanero(c: Client): Promise<void> {
+    await c.query("set local role postgres");
+    await c.query(
+      `insert into public.visita
+         (id, tenant_id, rutero_parada_id, mercaderista_id, tienda_id, estado)
+       values ($1, $2, $3, $4, $5, 'en_curso')`,
+      [
+        VISITA_COMPANERO,
+        TENANTS.maracumango,
+        RUTERO_PARADA_MRC,
+        USUARIOS.desvinculado,
+        TIENDA_MRC,
+      ],
+    );
+    await c.query(
+      `insert into public.foto (id, tenant_id, visita_id, tipo, capturada_at)
+       values ($1, $2, $3, 'antes', now())`,
+      [FOTO_COMPANERO, TENANTS.maracumango, VISITA_COMPANERO],
+    );
+    await c.query("set local role authenticated");
+  }
+
+  it("NO lee la foto de la visita de un COMPAÑERO del mismo cliente", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await sembrarFotoDeCompanero(c);
+      const r = await c.query(`select id from public.foto where id = $1`, [
+        FOTO_COMPANERO,
+      ]);
+      expect(r.rowCount).toBe(0);
+    });
+  });
+
+  it("pero sigue leyendo las de las SUYAS: el cierre no es un apagón", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await sembrarFotoDeCompanero(c);
+      const r = await c.query(`select id from public.foto where id = $1`, [
+        "a0000015-0000-0000-0000-000000000001",
+      ]);
+      expect(r.rowCount).toBe(1);
+    });
+  });
+
+  it("el mercaderista del cliente RIVAL sigue sin alcanzar ninguna", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaRival, async (c) => {
+      await sembrarFotoDeCompanero(c);
+      const r = await c.query(
+        `select id from public.foto where id = any($1::uuid[])`,
+        [[FOTO_COMPANERO, "a0000015-0000-0000-0000-000000000001"]],
+      );
+      expect(r.rowCount).toBe(0);
+    });
+  });
+
+  it("el staff SÍ lee la del compañero: es evidencia de cumplimiento", async () => {
+    for (const staff of [USUARIOS.supervisor, USUARIOS.admin]) {
+      await comoUsuario(db, staff, async (c) => {
+        await sembrarFotoDeCompanero(c);
+        const r = await c.query(`select id from public.foto where id = $1`, [
+          FOTO_COMPANERO,
+        ]);
+        expect(r.rowCount).toBe(1);
+      });
+    }
+  });
+
+  it("el cliente-marca lee la evidencia de TODAS las visitas, no solo las de un mercaderista", async () => {
+    // El control crítico: si la acotación por dueño se colara en la rama del
+    // cliente, su galería se vaciaría en silencio — la RLS no tiene canal de
+    // error, solo cero filas.
+    await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
+      await sembrarFotoDeCompanero(c);
+      const r = await c.query(`select id from public.foto where id = $1`, [
+        FOTO_COMPANERO,
+      ]);
+      expect(r.rowCount).toBe(1);
+    });
+  });
+
+  it("la galería del mercaderista solo trae SUS visitas", async () => {
+    // `galeria_evidencia()` es SECURITY INVOKER: hereda la política sola, sin
+    // filtro propio.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await sembrarFotoDeCompanero(c);
+      const visitas = (await galeria(c)).tiendas
+        .flatMap((t) => t.visitas)
+        .map((v) => v.id);
+      expect(visitas).toContain(VISITA_MRC);
+      expect(visitas).not.toContain(VISITA_COMPANERO);
     });
   });
 });
