@@ -830,6 +830,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "lev_formver_fk"
+            columns: ["formulario_version_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "formulario_version"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
             foreignKeyName: "lev_foto_antes_fk"
             columns: ["foto_antes_id", "tenant_id"]
             isOneToOne: false
@@ -863,13 +870,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "visita"
             referencedColumns: ["id", "tenant_id"]
-          },
-          {
-            foreignKeyName: "levantamiento_formulario_version_id_fkey"
-            columns: ["formulario_version_id"]
-            isOneToOne: false
-            referencedRelation: "formulario_version"
-            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "levantamiento_tenant_id_fkey"
@@ -2134,11 +2134,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "visita_formulario_version_id_fkey"
-            columns: ["formulario_version_id"]
+            foreignKeyName: "visita_formver_fk"
+            columns: ["formulario_version_id", "tenant_id"]
             isOneToOne: false
             referencedRelation: "formulario_version"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "tenant_id"]
           },
           {
             foreignKeyName: "visita_mercaderista_id_fkey"
