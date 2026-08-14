@@ -218,7 +218,11 @@ describe("el mercaderista lee su PROPIO trabajo, no el de sus compañeros", () =
       await c.query(
         `insert into public.visita_respuesta (id, tenant_id, visita_id, campo_id, valor)
          values ($1, $2, $3, 'botas', 'true'::jsonb)`,
-        ["e0000046-0000-0000-0000-000000000095", TENANTS.maracumango, VISITA_PROPIA],
+        [
+          "e0000046-0000-0000-0000-000000000095",
+          TENANTS.maracumango,
+          VISITA_PROPIA,
+        ],
       );
       const ajena = await c.query(
         `select id from public.visita_respuesta where id = $1`,

@@ -1068,7 +1068,10 @@ describe("formulario_version_id — el ancla no cruza clientes", () => {
           `update public.visita set formulario_version_id = $2 where id = $1`,
           [IDS.visitaMrc, IDS.versionFormRival],
         ),
-      ).rejects.toMatchObject({ code: "23503", constraint: "visita_formver_fk" });
+      ).rejects.toMatchObject({
+        code: "23503",
+        constraint: "visita_formver_fk",
+      });
     });
   });
 
