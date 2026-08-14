@@ -19,7 +19,10 @@ import { comoUsuario, conectar, TENANTS, USUARIOS } from "./ayudas";
 
 const DESDE = "2000-01-01";
 const HASTA = "2099-12-31";
-const UUID_CUALQUIERA = "a0000002-0000-0000-0000-000000000001";
+// Una alerta que EXISTE de verdad en el seed (de Maracumango, con visita). Un id
+// inventado demostraría "no existe", no "el módulo está apagado" — el mismo
+// principio que el harness de alertas aplica al aislamiento entre tenants.
+const ALERTA_MARACUMANGO = "a0000016-0000-0000-0000-000000000001";
 
 let db: Client;
 
@@ -51,16 +54,29 @@ async function apagarModulo(
   await c.query("set local role authenticated");
 }
 
-/** Una RPC de sección: a qué módulo pertenece y qué es "vacío" para su forma. */
+/**
+ * Una RPC de sección: a qué módulo pertenece, qué es "vacío" para su forma y
+ * qué señal DETERMINISTA (independiente de cuántos datos haya) demuestra que
+ * sigue viva. Sin `esperaVivo`, el caso "vacío" podría pasar por casualidad —
+ * una verja atada al módulo equivocado también daría vacío.
+ */
 type RpcDeSeccion = {
   modulo: string;
   nombre: string;
   esperaVacio: (c: Client) => Promise<void>;
+  /** Ausente solo cuando el vacío es también el resultado normal sin datos
+   * (perfect_store_desglose): ahí la familia la cubren sus hermanas. */
+  esperaVivo?: (c: Client) => Promise<void>;
 };
 
 async function esperaCeroFilas(c: Client, sql: string): Promise<void> {
   const r = await c.query(sql);
   expect(r.rowCount).toBe(0);
+}
+
+async function esperaFilas(c: Client, sql: string): Promise<void> {
+  const r = await c.query(sql);
+  expect(r.rowCount).toBeGreaterThan(0);
 }
 
 const RPCS: RpcDeSeccion[] = [
@@ -74,12 +90,23 @@ const RPCS: RpcDeSeccion[] = [
         c,
         `select * from public.dashboard_kpis('${DESDE}', '${HASTA}')`,
       ),
+    esperaVivo: (c) =>
+      esperaFilas(
+        c,
+        `select * from public.dashboard_kpis('${DESDE}', '${HASTA}')`,
+      ),
   },
   {
     modulo: "mapa",
     nombre: "dashboard_pines",
     esperaVacio: (c) =>
       esperaCeroFilas(
+        c,
+        `select * from public.dashboard_pines('${DESDE}', '${HASTA}')`,
+      ),
+    // El seed tiene una tienda de Maracumango con ubicación (lat/lon generadas).
+    esperaVivo: (c) =>
+      esperaFilas(
         c,
         `select * from public.dashboard_pines('${DESDE}', '${HASTA}')`,
       ),
@@ -92,6 +119,13 @@ const RPCS: RpcDeSeccion[] = [
         c,
         `select * from public.dashboard_alertas('${DESDE}', '${HASTA}')`,
       ),
+    // El seed tiene una alerta de Maracumango con creado_at = now(), dentro de
+    // la ventana ancha.
+    esperaVivo: (c) =>
+      esperaFilas(
+        c,
+        `select * from public.dashboard_alertas('${DESDE}', '${HASTA}')`,
+      ),
   },
   {
     modulo: "alertas",
@@ -101,18 +135,30 @@ const RPCS: RpcDeSeccion[] = [
         c,
         `select * from public.bandeja_alertas('${DESDE}', '${HASTA}')`,
       ),
+    esperaVivo: (c) =>
+      esperaFilas(
+        c,
+        `select * from public.bandeja_alertas('${DESDE}', '${HASTA}')`,
+      ),
   },
   {
     modulo: "alertas",
     nombre: "detalle_alerta",
     esperaVacio: async (c) => {
-      // El mismo null indistinguible de "no existe o no es del tenant": la
-      // verja no confirma que la alerta exista.
+      // Sobre una alerta que EXISTE: el mismo null indistinguible de "no
+      // existe o no es del tenant" — la verja no confirma que la alerta exista.
       const r = await c.query<{ d: unknown }>(
         `select public.detalle_alerta($1) as d`,
-        [UUID_CUALQUIERA],
+        [ALERTA_MARACUMANGO],
       );
       expect(r.rows[0]?.d).toBeNull();
+    },
+    esperaVivo: async (c) => {
+      const r = await c.query<{ d: unknown }>(
+        `select public.detalle_alerta($1) as d`,
+        [ALERTA_MARACUMANGO],
+      );
+      expect(r.rows[0]?.d).not.toBeNull();
     },
   },
   {
@@ -130,6 +176,13 @@ const RPCS: RpcDeSeccion[] = [
         tiendas: [],
       });
     },
+    // El seed tiene una visita de Maracumango con check_in_at = now().
+    esperaVivo: async (c) => {
+      const r = await c.query<{ g: { visitas_totales: number } }>(
+        `select public.galeria_evidencia('${DESDE}', '${HASTA}') as g`,
+      );
+      expect(r.rows[0]?.g.visitas_totales).toBeGreaterThan(0);
+    },
   },
   {
     modulo: "perfect_store",
@@ -138,6 +191,11 @@ const RPCS: RpcDeSeccion[] = [
     // count=0 y nulos si la verja fuera un WHERE. Cero filas lo pinna.
     esperaVacio: (c) =>
       esperaCeroFilas(
+        c,
+        `select * from public.perfect_store_agregado('${DESDE}', '${HASTA}')`,
+      ),
+    esperaVivo: (c) =>
+      esperaFilas(
         c,
         `select * from public.perfect_store_agregado('${DESDE}', '${HASTA}')`,
       ),
@@ -151,6 +209,12 @@ const RPCS: RpcDeSeccion[] = [
         c,
         `select * from public.perfect_store_serie('${DESDE}', '${HASTA}', 'mes')`,
       ),
+    // La serie devuelve sus buckets haya o no datos: señal viva sin seed.
+    esperaVivo: (c) =>
+      esperaFilas(
+        c,
+        `select * from public.perfect_store_serie('${DESDE}', '${HASTA}', 'mes')`,
+      ),
   },
   {
     modulo: "perfect_store",
@@ -160,6 +224,10 @@ const RPCS: RpcDeSeccion[] = [
         c,
         `select * from public.perfect_store_desglose('${DESDE}', '${HASTA}', 'tienda')`,
       ),
+    // Sin `esperaVivo`: sin filas de puntaje sembradas, el desglose devuelve
+    // cero grupos también con el módulo encendido — un "vivo" aquí sería
+    // indistinguible del vacío. Su verja usa el mismo literal que sus hermanas
+    // agregado y serie, que sí tienen señal viva determinista.
   },
 ];
 
@@ -173,18 +241,21 @@ describe("gate de módulos — las RPC de sección con el módulo apagado", () =
     });
   }
 
-  it("apagar OTRO módulo no corta la RPC: la verja está atada a su propio módulo", async () => {
-    // Si dashboard_kpis comprobara el módulo equivocado, el caso de arriba
-    // podría pasar por casualidad; este lo descarta. El agregado devuelve
-    // siempre su fila cuando la verja no corta.
-    await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
-      await apagarModulo(c, "galeria");
-      const r = await c.query(
-        `select * from public.dashboard_kpis('${DESDE}', '${HASTA}')`,
-      );
-      expect(r.rowCount).toBe(1);
+  // Si una RPC comprobara el módulo equivocado (o "cualquier módulo apagado"),
+  // su caso de vacío de arriba podría pasar por casualidad; esto lo descarta
+  // RPC por RPC: con OTRO módulo apagado, cada una sigue devolviendo su señal
+  // viva determinista.
+  for (const rpc of RPCS) {
+    if (!rpc.esperaVivo) continue;
+    const vivo = rpc.esperaVivo;
+    const otro = rpc.modulo === "galeria" ? "mapa" : "galeria";
+    it(`${rpc.nombre} sigue vivo con el módulo ${otro} apagado: su verja es la de ${rpc.modulo}`, async () => {
+      await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
+        await apagarModulo(c, otro);
+        await vivo(c);
+      });
     });
-  });
+  }
 
   it("cada módulo del enum tiene sus RPC en esta tabla — salvo reportes, que no tiene RPC", async () => {
     // `reportes` es hoy una página placeholder sin función que gatear. Este
