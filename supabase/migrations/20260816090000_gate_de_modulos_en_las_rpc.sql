@@ -92,8 +92,8 @@ comment on function public.portal_modulos() is
 
 -- --- Las RPC del dashboard ------------------------------------------------------
 --
--- Cuerpos idénticos a los vigentes salvo la línea de la verja (las ventanas de
--- fecha NO se tocan aquí). Ojo: `create or replace` borra el `set search_path`
+-- Cuerpos idénticos a los que dejó `20260814120000` (ventanas ancladas en
+-- Lima) salvo la línea de la verja. Ojo: `create or replace` borra el `set search_path`
 -- que `20260804190000` les bolteó con `alter function`, así que las tres lo
 -- llevan ahora en su propio texto. El grant sobrevive al replace; no se repite.
 
@@ -123,12 +123,21 @@ language sql
 stable
 set search_path = ''
 as $$
+  -- `d1/d2` y `p1/p2` son los días (inclusive) del período filtrado y del
+  -- anterior; los consumen las columnas `date`. Los `*t` son los mismos bordes
+  -- como instantes de Lima, medio-abiertos: actual = [d1t, d2t), anterior =
+  -- [p1t, p2t). `p2t` coincide con `d1t` porque el período anterior termina
+  -- justo donde empieza el actual.
   with rango as (
     select
       p_desde as d1,
       p_hasta as d2,
       (p_desde - 1 - (p_hasta - p_desde)) as p1,
-      (p_desde - 1) as p2
+      (p_desde - 1) as p2,
+      (p_desde::timestamp at time zone 'America/Lima') as d1t,
+      ((p_hasta + 1)::timestamp at time zone 'America/Lima') as d2t,
+      ((p_desde - 1 - (p_hasta - p_desde))::timestamp at time zone 'America/Lima') as p1t,
+      (p_desde::timestamp at time zone 'America/Lima') as p2t
   ),
   cumplimiento as (
     select
@@ -146,16 +155,16 @@ as $$
   ),
   sku as (
     select
-      count(*) filter (where ls.quiebre and v.check_in_at >= rg.d1 and v.check_in_at < rg.d2 + 1) as quiebres,
-      count(*) filter (where ls.quiebre and v.check_in_at >= rg.p1 and v.check_in_at < rg.p2 + 1) as quiebres_prev,
-      count(*) filter (where ls.diferencia and v.check_in_at >= rg.d1 and v.check_in_at < rg.d2 + 1) as diferencias,
-      count(*) filter (where ls.diferencia and v.check_in_at >= rg.p1 and v.check_in_at < rg.p2 + 1) as diferencias_prev
+      count(*) filter (where ls.quiebre and v.check_in_at >= rg.d1t and v.check_in_at < rg.d2t) as quiebres,
+      count(*) filter (where ls.quiebre and v.check_in_at >= rg.p1t and v.check_in_at < rg.p2t) as quiebres_prev,
+      count(*) filter (where ls.diferencia and v.check_in_at >= rg.d1t and v.check_in_at < rg.d2t) as diferencias,
+      count(*) filter (where ls.diferencia and v.check_in_at >= rg.p1t and v.check_in_at < rg.p2t) as diferencias_prev
     from public.levantamiento_sku ls
     join public.levantamiento l on l.id = ls.levantamiento_id
     join public.visita v on v.id = l.visita_id
     join public.tienda t on t.id = v.tienda_id
     cross join rango rg
-    where v.check_in_at >= rg.p1 and v.check_in_at < rg.d2 + 1
+    where v.check_in_at >= rg.p1t and v.check_in_at < rg.d2t
       and (p_cadena is null or t.cadena_id = p_cadena)
       and (p_tienda is null or t.id = p_tienda)
   ),
@@ -163,10 +172,10 @@ as $$
   -- competencia es un jsonb array [{competidor, frentes}]; se suma su `frentes`.
   sos as (
     select
-      round(100.0 * sum(l.sos_frentes_propios) filter (where v.check_in_at >= rg.d1 and v.check_in_at < rg.d2 + 1)
-            / nullif(sum(l.sos_frentes_propios + coalesce(comp.total, 0)) filter (where v.check_in_at >= rg.d1 and v.check_in_at < rg.d2 + 1), 0), 1) as actual,
-      round(100.0 * sum(l.sos_frentes_propios) filter (where v.check_in_at >= rg.p1 and v.check_in_at < rg.p2 + 1)
-            / nullif(sum(l.sos_frentes_propios + coalesce(comp.total, 0)) filter (where v.check_in_at >= rg.p1 and v.check_in_at < rg.p2 + 1), 0), 1) as prev
+      round(100.0 * sum(l.sos_frentes_propios) filter (where v.check_in_at >= rg.d1t and v.check_in_at < rg.d2t)
+            / nullif(sum(l.sos_frentes_propios + coalesce(comp.total, 0)) filter (where v.check_in_at >= rg.d1t and v.check_in_at < rg.d2t), 0), 1) as actual,
+      round(100.0 * sum(l.sos_frentes_propios) filter (where v.check_in_at >= rg.p1t and v.check_in_at < rg.p2t)
+            / nullif(sum(l.sos_frentes_propios + coalesce(comp.total, 0)) filter (where v.check_in_at >= rg.p1t and v.check_in_at < rg.p2t), 0), 1) as prev
     from public.levantamiento l
     join public.visita v on v.id = l.visita_id
     join public.tienda t on t.id = v.tienda_id
@@ -175,7 +184,7 @@ as $$
       select sum((e->>'frentes')::numeric) as total
       from jsonb_array_elements(l.sos_frentes_competencia) e
     ) comp
-    where v.check_in_at >= rg.p1 and v.check_in_at < rg.d2 + 1
+    where v.check_in_at >= rg.p1t and v.check_in_at < rg.d2t
       and l.sos_frentes_propios is not null
       and (p_cadena is null or t.cadena_id = p_cadena)
       and (p_tienda is null or t.id = p_tienda)
@@ -197,14 +206,14 @@ as $$
   ),
   exhib_cum as (
     select
-      count(distinct e.exhibicion_negociada_id) filter (where e.instalada and e.completa and e.exhibicion_negociada_id is not null and v.check_in_at >= rg.d1 and v.check_in_at < rg.d2 + 1) as actual,
-      count(distinct e.exhibicion_negociada_id) filter (where e.instalada and e.completa and e.exhibicion_negociada_id is not null and v.check_in_at >= rg.p1 and v.check_in_at < rg.p2 + 1) as prev
+      count(distinct e.exhibicion_negociada_id) filter (where e.instalada and e.completa and e.exhibicion_negociada_id is not null and v.check_in_at >= rg.d1t and v.check_in_at < rg.d2t) as actual,
+      count(distinct e.exhibicion_negociada_id) filter (where e.instalada and e.completa and e.exhibicion_negociada_id is not null and v.check_in_at >= rg.p1t and v.check_in_at < rg.p2t) as prev
     from public.exhibicion e
     join public.levantamiento l on l.id = e.levantamiento_id
     join public.visita v on v.id = l.visita_id
     join public.tienda t on t.id = v.tienda_id
     cross join rango rg
-    where v.check_in_at >= rg.p1 and v.check_in_at < rg.d2 + 1
+    where v.check_in_at >= rg.p1t and v.check_in_at < rg.d2t
       and (p_cadena is null or t.cadena_id = p_cadena)
       and (p_tienda is null or t.id = p_tienda)
   ),
@@ -212,14 +221,14 @@ as $$
   -- llega a la tienda por su visita; se acota por cadena/tienda igual.
   precio as (
     select
-      count(*) filter (where a.creado_at >= rg.d1 and a.creado_at < rg.d2 + 1) as actual,
-      count(*) filter (where a.creado_at >= rg.p1 and a.creado_at < rg.p2 + 1) as prev
+      count(*) filter (where a.creado_at >= rg.d1t and a.creado_at < rg.d2t) as actual,
+      count(*) filter (where a.creado_at >= rg.p1t and a.creado_at < rg.p2t) as prev
     from public.alerta a
     join public.visita v on v.id = a.visita_id
     join public.tienda t on t.id = v.tienda_id
     cross join rango rg
     where a.tipo in ('desviacion_precio', 'promo_no_activa')
-      and a.creado_at >= rg.p1 and a.creado_at < rg.d2 + 1
+      and a.creado_at >= rg.p1t and a.creado_at < rg.d2t
       and (p_cadena is null or t.cadena_id = p_cadena)
       and (p_tienda is null or t.id = p_tienda)
   )
@@ -267,18 +276,24 @@ as $$
     (
       select v.estado::text
       from public.visita v
-      where v.tienda_id = t.id and v.check_in_at >= p_desde and v.check_in_at < p_hasta + 1
+      where v.tienda_id = t.id
+        and v.check_in_at >= (p_desde::timestamp at time zone 'America/Lima')
+        and v.check_in_at < ((p_hasta + 1)::timestamp at time zone 'America/Lima')
       order by v.check_in_at desc
       limit 1
     ) as ultima_visita_estado,
     exists (
       select 1 from public.alerta a
       join public.visita v on v.id = a.visita_id
-      where v.tienda_id = t.id and a.creado_at >= p_desde and a.creado_at < p_hasta + 1
+      where v.tienda_id = t.id
+        and a.creado_at >= (p_desde::timestamp at time zone 'America/Lima')
+        and a.creado_at < ((p_hasta + 1)::timestamp at time zone 'America/Lima')
     ) as tiene_alerta,
     exists (
       select 1 from public.visita v
-      where v.tienda_id = t.id and v.check_in_at >= p_desde and v.check_in_at < p_hasta + 1
+      where v.tienda_id = t.id
+        and v.check_in_at >= (p_desde::timestamp at time zone 'America/Lima')
+        and v.check_in_at < ((p_hasta + 1)::timestamp at time zone 'America/Lima')
     ) as visitada
   from public.tienda t
   where t.activo = true
@@ -315,7 +330,8 @@ as $$
   from public.alerta a
   join public.visita v on v.id = a.visita_id
   join public.tienda t on t.id = v.tienda_id
-  where a.creado_at >= p_desde and a.creado_at < p_hasta + 1
+  where a.creado_at >= (p_desde::timestamp at time zone 'America/Lima')
+    and a.creado_at < ((p_hasta + 1)::timestamp at time zone 'America/Lima')
     and (p_cadena is null or t.cadena_id = p_cadena)
     and (p_tienda is null or t.id = p_tienda)
     -- La verja: el feed se pinta como parte del DASHBOARD (incondicionalmente),
