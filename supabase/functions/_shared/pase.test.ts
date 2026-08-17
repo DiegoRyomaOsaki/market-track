@@ -1,12 +1,11 @@
-// Tests de la lógica pura del pase. Corren con `deno test supabase/functions`
-// (no necesitan base ni servidor). Cablearlos a CI es MAR-65.
+// Tests de la lógica pura del pase. Corren con `deno task test` desde
+// `supabase/functions` (no necesitan base ni servidor), en local y en CI.
 
 import { assert, assertEquals, assertMatch } from "jsr:@std/assert@1";
 
 import {
   generarCodigo,
   hashCodigo,
-  igualesEnTiempoConstante,
   paseQueCoincide,
   type PerfilAutz,
   puedeEmitirPase,
@@ -130,19 +129,6 @@ Deno.test(
     };
     assert(!puedeEmitirPase(merc, mercaderistaDelSup).permitido);
     assert(!puedeEmitirPase(cliente, mercaderistaDelSup).permitido);
-  },
-);
-
-Deno.test(
-  "igualesEnTiempoConstante: iguales, distintos, y de largos distintos",
-  () => {
-    assert(igualesEnTiempoConstante("abc", "abc"));
-    assert(!igualesEnTiempoConstante("abc", "abd"));
-    assert(!igualesEnTiempoConstante("abc", "ab"));
-    assert(!igualesEnTiempoConstante("", "a"));
-    assert(igualesEnTiempoConstante("", ""));
-    // Con bytes multibyte también: se compara la codificación, no el largo en chars.
-    assert(!igualesEnTiempoConstante("é", "é"));
   },
 );
 

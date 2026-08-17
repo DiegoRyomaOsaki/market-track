@@ -44,6 +44,14 @@ no está" de "no se pudo comprobar".
 Ninguna foto se sirve con URL pública. Una URL de R2 sin firmar es una fuga de
 evidencia de un cliente, accesible por cualquiera que la tenga.
 
-**Cómo lo sabríamos si nos equivocamos.** Si aparecen filas de `foto` cuya imagen
-nunca llegó a R2 y no hay forma de reconciliarlas, o si el coste de R2 crece por
+**La reconciliación existe** (agosto 2026): un barrido de pg_cron cada 5 min
+invoca la Edge Function `fotos-verificar`, que hace un HEAD contra R2 por cada
+foto subida y sin verificar y sella `foto.verificada_at` (columna que solo el
+servidor escribe) cuando el objeto existe. Las dos ramas se distinguen a
+propósito: 404 = "confirmado que no está" (no se sella, queda visible en la cola);
+5xx / timeout = "no se pudo comprobar" (no se sella, se reintenta). Ninguna borra
+ni desactiva nada. El sello certifica existencia del binario, no su contenido.
+
+**Cómo lo sabríamos si nos equivocamos.** Si la cola de fotos subidas y sin
+verificar no baja con el barrido en marcha, o si el coste de R2 crece por
 encima de lo previsto al activarse la foto opcional por SKU del Share of Shelf.

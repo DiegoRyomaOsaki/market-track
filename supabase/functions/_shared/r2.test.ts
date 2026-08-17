@@ -1,19 +1,22 @@
-// Tests de la lógica pura del firmado de R2. Corren con `deno test supabase/functions`
-// (sin base, sin servidor, sin credenciales reales de Cloudflare — el firmado de
-// aws4fetch es cripto local). La prueba de invocación end-to-end (401 / 403 /
-// omisión) necesita un stack de Supabase levantado, así que espera al arnés de CI
-// de Edge Functions.
+// Tests de la lógica pura del firmado de R2. Corren con `deno task test` desde
+// `supabase/functions` (sin base, sin servidor, sin credenciales reales de
+// Cloudflare — el firmado de aws4fetch es cripto local), en local y en CI. La
+// prueba de invocación end-to-end (401 / 403 / omisión) necesita un stack de
+// Supabase levantado, así que espera al arnés de invocación de Edge Functions.
 
 import { assert, assertEquals, assertMatch } from "jsr:@std/assert@1";
 
 import {
+  bytesDeContentLength,
   clienteR2,
   type ConfigR2,
   construirKeyFoto,
   endpointR2,
+  EXPIRACION_HEAD_SEGUNDOS,
   EXPIRACION_LECTURA_SEGUNDOS,
   EXPIRACION_SUBIDA_SEGUNDOS,
   firmarGet,
+  firmarHead,
   firmarPut,
   lecturaFirmadaSchema,
   leerConfigR2,
@@ -159,6 +162,53 @@ Deno.test(
     const firmaGet = get.searchParams.get("X-Amz-Signature");
     const firmaPut = put.searchParams.get("X-Amz-Signature");
     assert(firmaGet !== null && firmaGet !== firmaPut);
+  },
+);
+
+Deno.test(
+  "firmarHead: misma ruta, expiración corta, sin overrides de servido y firma distinta de GET/PUT",
+  async () => {
+    const cliente = clienteR2(CFG_PRUEBA);
+    const key = construirKeyFoto({
+      tenantId: TENANT,
+      visitaId: VISITA,
+      fotoId: FOTO,
+    });
+
+    const head = new URL(await firmarHead(cliente, CFG_PRUEBA, key));
+    assertEquals(head.pathname, `/${CFG_PRUEBA.bucket}/${key}`);
+    assertEquals(
+      head.searchParams.get("X-Amz-Expires"),
+      String(EXPIRACION_HEAD_SEGUNDOS),
+    );
+    // No se sirve nada: no lleva los parámetros de tipo/disposición.
+    assertEquals(head.searchParams.get("response-content-type"), null);
+    assertEquals(head.searchParams.get("response-content-disposition"), null);
+
+    // El verbo va firmado: reutilizar la firma de GET o PUT daría 403 en R2.
+    const firmaHead = head.searchParams.get("X-Amz-Signature");
+    const get = new URL(await firmarGet(cliente, CFG_PRUEBA, key));
+    const put = new URL(await firmarPut(cliente, CFG_PRUEBA, key));
+    assert(firmaHead !== null);
+    assert(firmaHead !== get.searchParams.get("X-Amz-Signature"));
+    assert(firmaHead !== put.searchParams.get("X-Amz-Signature"));
+  },
+);
+
+Deno.test("la expiración del HEAD es la más corta de las tres", () => {
+  assert(EXPIRACION_HEAD_SEGUNDOS > 0);
+  assert(EXPIRACION_HEAD_SEGUNDOS < EXPIRACION_LECTURA_SEGUNDOS);
+});
+
+Deno.test(
+  "bytesDeContentLength: entero no negativo o null, nunca inventa",
+  () => {
+    assertEquals(bytesDeContentLength("123"), 123);
+    assertEquals(bytesDeContentLength("0"), 0);
+    assertEquals(bytesDeContentLength(null), null);
+    assertEquals(bytesDeContentLength("abc"), null);
+    assertEquals(bytesDeContentLength("-5"), null);
+    assertEquals(bytesDeContentLength(""), null);
   },
 );
 

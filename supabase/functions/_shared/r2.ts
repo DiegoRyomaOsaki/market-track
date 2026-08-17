@@ -28,6 +28,8 @@ export type ConfigR2 = {
 // del móvil y puede reintentar sobre una red mala → ventana más amplia, pero acotada.
 export const EXPIRACION_LECTURA_SEGUNDOS = 300; // 5 min
 export const EXPIRACION_SUBIDA_SEGUNDOS = 900; // 15 min
+// El HEAD lo hace el propio servidor y al instante: la ventana más corta de todas.
+export const EXPIRACION_HEAD_SEGUNDOS = 60;
 
 // Tope del lote de lectura: la galería pide muchas miniaturas de una; se acota el
 // fan-out para no firmar sin límite en una sola llamada.
@@ -120,7 +122,7 @@ async function firmar(
   cliente: AwsClient,
   cfg: ConfigR2,
   key: string,
-  metodo: "GET" | "PUT",
+  metodo: "GET" | "PUT" | "HEAD",
   expiraSegundos: number,
   overrides?: Record<string, string>,
 ): Promise<string> {
@@ -164,4 +166,48 @@ export function firmarGet(
     EXPIRACION_LECTURA_SEGUNDOS,
     SERVIR_COMO_IMAGEN,
   );
+}
+
+/** URL HEAD prefirmada: pregunta si el objeto EXISTE sin descargar el binario.
+ * Sin los overrides de servido: aquí no se sirve nada. El verbo va dentro de la
+ * firma (SigV4), así que no vale reutilizar la de GET. */
+export function firmarHead(
+  cliente: AwsClient,
+  cfg: ConfigR2,
+  key: string,
+): Promise<string> {
+  return firmar(cliente, cfg, key, "HEAD", EXPIRACION_HEAD_SEGUNDOS);
+}
+
+export type CabezaDeObjeto = { estado: number; bytes: number | null };
+
+/** `Content-Length` como entero no negativo, o null si R2 no lo informó o no es
+ * un número. Nunca se inventa un tamaño. */
+export function bytesDeContentLength(valor: string | null): number | null {
+  if (valor === null) return null;
+  if (!/^\d+$/.test(valor.trim())) return null;
+  const n = Number(valor);
+  return Number.isSafeInteger(n) ? n : null;
+}
+
+/**
+ * El HEAD real contra R2, con plazo. Devuelve el estado HTTP y el tamaño; lanza
+ * ante red caída o plazo agotado — el llamante lo mapea a "reintentar", nunca a
+ * "no existe" (una caída de R2 no es evidencia de nada).
+ */
+export async function cabezaDeObjeto(
+  cliente: AwsClient,
+  cfg: ConfigR2,
+  key: string,
+  plazoMs: number,
+): Promise<CabezaDeObjeto> {
+  const url = await firmarHead(cliente, cfg, key);
+  const respuesta = await fetch(url, {
+    method: "HEAD",
+    signal: AbortSignal.timeout(plazoMs),
+  });
+  return {
+    estado: respuesta.status,
+    bytes: bytesDeContentLength(respuesta.headers.get("content-length")),
+  };
 }
