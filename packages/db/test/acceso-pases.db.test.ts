@@ -57,17 +57,22 @@ async function sembrarPase(
     expiraAt?: string;
     usadoAt?: string | null;
     revocadoAt?: string | null;
+    codigoHash?: string;
+    /** La sesión que lo canjeó. Un pase usado siempre la lleva (CHECK). */
+    usadoPorSesion?: string;
   },
 ): Promise<void> {
   await c.query("set local role postgres");
   await c.query(
     `insert into public.pase_acceso_temporal
        (id, profile_id, codigo_hash, motivo, generado_por,
-        generado_at, expira_at, usado_at, revocado_at)
-     values ($1, $2, 'hash-de-prueba', $3, $4,
+        generado_at, expira_at, usado_at, revocado_at, usado_por_sesion)
+     values ($1, $2, $9, $3, $4,
              coalesce($5::timestamptz, now()),
              coalesce($6::timestamptz, now() + interval '15 minutes'),
-             $7::timestamptz, $8::timestamptz)`,
+             $7::timestamptz, $8::timestamptz,
+             case when $7::timestamptz is null then null
+                  else coalesce($10::uuid, gen_random_uuid()) end)`,
     [
       p.id,
       p.profileId ?? JOSE,
@@ -77,6 +82,8 @@ async function sembrarPase(
       p.expiraAt ?? null,
       p.usadoAt ?? null,
       p.revocadoAt ?? null,
+      p.codigoHash ?? "hash-de-prueba",
+      p.usadoPorSesion ?? null,
     ],
   );
   await c.query("set local role authenticated");
@@ -536,6 +543,316 @@ describe("los canales de OTP son una política global", () => {
         `update public.configuracion_plataforma set otp_canales_habilitados = '{correo,sms}'`,
       );
       expect(r.rowCount).toBe(0);
+    });
+  });
+});
+
+// --- El canje y la elevación a aal2 -------------------------------------------
+//
+// La Edge Function `canjear-pase` compara el código en tiempo constante y luego
+// llama a estas RPC con service_role. Aquí se prueba lo que la base garantiza sola:
+// un solo uso bajo concurrencia, el rechazo de usado/revocado/vencido, la cuenta
+// de fallos, y que el hook de GoTrue solo sube `aal` a la sesión que canjeó.
+
+const SESION_A = "5e510000-0000-0000-0000-00000000000a";
+const SESION_B = "5e510000-0000-0000-0000-00000000000b";
+
+/** Corre algo como la Edge Function: con service_role, en una transacción que se revierte. */
+async function comoServicio<T>(
+  c: Client,
+  fn: (c: Client) => Promise<T>,
+): Promise<T> {
+  await c.query("begin");
+  try {
+    await c.query("set local role service_role");
+    return await fn(c);
+  } finally {
+    await c.query("rollback");
+  }
+}
+
+async function canjear(c: Client, paseId: string, sesion: string) {
+  const r = await c.query<{ ok: boolean }>(
+    "select public.canjear_pase($1, $2) as ok",
+    [paseId, sesion],
+  );
+  return r.rows[0]?.ok;
+}
+
+async function estadoDe(c: Client, paseId: string) {
+  const r = await c.query<{ estado: string; sesion: string | null }>(
+    `select app.estado_pase(usado_at, revocado_at, expira_at)::text as estado,
+            usado_por_sesion::text as sesion
+     from public.pase_acceso_temporal where id = $1`,
+    [paseId],
+  );
+  return r.rows[0];
+}
+
+/** El evento que GoTrue le pasa al hook, con las claims mínimas que importan aquí. */
+function eventoDeToken(sesion: string | null, aal = "aal1") {
+  return {
+    user_id: JOSE,
+    authentication_method: "password",
+    claims: {
+      sub: JOSE,
+      role: "authenticated",
+      aal,
+      session_id: sesion,
+      amr: [{ method: "password", timestamp: 1_700_000_000 }],
+    },
+  };
+}
+
+/**
+ * Invoca el hook con el evento que le pasaría GoTrue. Corre como `postgres`
+ * porque el rol de la conexión no es miembro de `supabase_auth_admin`; que ese
+ * rol —y solo ese— tenga el `execute` se comprueba aparte, por privilegio.
+ */
+async function hook(c: Client, evento: unknown) {
+  await c.query("reset role");
+  const r = await c.query<{
+    salida: { claims: { aal: string; amr: { method: string }[] } };
+  }>("select public.custom_access_token_hook($1::jsonb) as salida", [
+    JSON.stringify(evento),
+  ]);
+  return r.rows[0]!.salida;
+}
+
+describe("canjear_pase — un solo uso", () => {
+  it("marca un pase vigente como usado por la sesión, y solo la primera vez", async () => {
+    await comoServicio(db, async (c) => {
+      await sembrarPase(c, { id: "e0000019-0000-0000-0000-00000000f001" });
+      await c.query("set local role service_role");
+
+      expect(
+        await canjear(c, "e0000019-0000-0000-0000-00000000f001", SESION_A),
+      ).toBe(true);
+      expect(await estadoDe(c, "e0000019-0000-0000-0000-00000000f001")).toEqual(
+        { estado: "usado", sesion: SESION_A },
+      );
+
+      // Segundo canje del mismo pase, aunque sea desde otra sesión: nada.
+      expect(
+        await canjear(c, "e0000019-0000-0000-0000-00000000f001", SESION_B),
+      ).toBe(false);
+      expect(
+        (await estadoDe(c, "e0000019-0000-0000-0000-00000000f001"))?.sesion,
+      ).toBe(SESION_A);
+    });
+  });
+
+  it("rechaza un pase usado, uno revocado y uno vencido", async () => {
+    await comoServicio(db, async (c) => {
+      await sembrarPase(c, {
+        id: "e0000019-0000-0000-0000-00000000f002",
+        usadoAt: "now()",
+      });
+      await sembrarPase(c, {
+        id: "e0000019-0000-0000-0000-00000000f003",
+        revocadoAt: "now()",
+      });
+      await sembrarPase(c, {
+        id: "e0000019-0000-0000-0000-00000000f004",
+        generadoAt: "2026-01-01T10:00:00Z",
+        expiraAt: "2026-01-01T10:15:00Z",
+      });
+      await c.query("set local role service_role");
+
+      for (const id of [
+        "e0000019-0000-0000-0000-00000000f002",
+        "e0000019-0000-0000-0000-00000000f003",
+        "e0000019-0000-0000-0000-00000000f004",
+      ]) {
+        expect(await canjear(c, id, SESION_A)).toBe(false);
+      }
+      // El vencido sigue sin sesión: no se le pegó ninguna marca de uso.
+      expect(
+        (await estadoDe(c, "e0000019-0000-0000-0000-00000000f004"))?.sesion,
+      ).toBeNull();
+    });
+  });
+
+  it("un pase que no existe devuelve false, no error", async () => {
+    await comoServicio(db, async (c) => {
+      expect(
+        await canjear(c, "e0000019-0000-0000-0000-00000000f0ff", SESION_A),
+      ).toBe(false);
+    });
+  });
+
+  it("bajo concurrencia, de dos canjes del mismo pase solo uno gana", async () => {
+    // Dos conexiones de verdad sobre una fila COMMITEADA: la única forma de que
+    // el segundo UPDATE espere el candado del primero y re-evalúe el predicado.
+    // Por eso este test limpia a mano en vez de apoyarse en el rollback.
+    const paseId = "e0000019-0000-0000-0000-00000000f005";
+    const otra = await conectar();
+    try {
+      await db.query(
+        `insert into public.pase_acceso_temporal
+           (id, profile_id, codigo_hash, motivo, generado_por)
+         values ($1, $2, 'hash-de-prueba', 'concurrencia', $3)`,
+        [paseId, JOSE, USUARIOS.supervisor],
+      );
+
+      const [a, b] = await Promise.all([
+        canjear(db, paseId, SESION_A),
+        canjear(otra, paseId, SESION_B),
+      ]);
+      expect([a, b].filter(Boolean)).toHaveLength(1);
+
+      const fila = await estadoDe(db, paseId);
+      expect(fila?.estado).toBe("usado");
+      expect(fila?.sesion).toBe(a ? SESION_A : SESION_B);
+    } finally {
+      await db.query("delete from public.pase_acceso_temporal where id = $1", [
+        paseId,
+      ]);
+      await otra.end();
+    }
+  });
+
+  it("un pase usado siempre dice qué sesión lo usó", async () => {
+    // Es lo que consulta el hook y lo que la auditoría necesita: la base no deja
+    // marcar `usado_at` a secas.
+    await comoServicio(db, async (c) => {
+      await sembrarPase(c, { id: "e0000019-0000-0000-0000-00000000f006" });
+      // Ni siquiera el dueño de la base se lo salta: es un CHECK, no un grant.
+      await c.query("set local role postgres");
+      expect(
+        await alIntentar(
+          c,
+          `update public.pase_acceso_temporal set usado_at = now() where id = $1`,
+          ["e0000019-0000-0000-0000-00000000f006"],
+        ),
+      ).toMatch(/pase_uso_con_sesion/i);
+    });
+  });
+});
+
+describe("pase_intento_fallido — la fuerza bruta se agota", () => {
+  it("cuenta el fallo sobre los pases vigentes del usuario y al quinto los revoca", async () => {
+    await comoServicio(db, async (c) => {
+      await sembrarPase(c, { id: "e0000019-0000-0000-0000-00000000f101" });
+      await sembrarPase(c, { id: "e0000019-0000-0000-0000-00000000f102" });
+      // Uno de OTRO mercaderista: los fallos de José no lo tocan.
+      await sembrarPase(c, {
+        id: "e0000019-0000-0000-0000-00000000f103",
+        profileId: USUARIOS.mercaderistaRival,
+      });
+      await c.query("set local role service_role");
+
+      for (let i = 1; i <= 4; i++) {
+        const r = await c.query<{ quemados: number }>(
+          "select public.pase_intento_fallido($1) as quemados",
+          [JOSE],
+        );
+        expect(r.rows[0]?.quemados).toBe(0);
+      }
+      expect(
+        (await estadoDe(c, "e0000019-0000-0000-0000-00000000f101"))?.estado,
+      ).toBe("vigente");
+
+      const quinto = await c.query<{ quemados: number }>(
+        "select public.pase_intento_fallido($1) as quemados",
+        [JOSE],
+      );
+      expect(quinto.rows[0]?.quemados).toBe(2);
+      expect(
+        (await estadoDe(c, "e0000019-0000-0000-0000-00000000f101"))?.estado,
+      ).toBe("revocado");
+      expect(
+        (await estadoDe(c, "e0000019-0000-0000-0000-00000000f102"))?.estado,
+      ).toBe("revocado");
+      expect(
+        (await estadoDe(c, "e0000019-0000-0000-0000-00000000f103"))?.estado,
+      ).toBe("vigente");
+
+      // Quemado, ya no se canjea aunque el código fuera el bueno.
+      expect(
+        await canjear(c, "e0000019-0000-0000-0000-00000000f101", SESION_A),
+      ).toBe(false);
+    });
+  });
+});
+
+describe("custom_access_token_hook — la única autoridad de aal fuera del OTP", () => {
+  it("sube a aal2 la sesión que canjeó un pase y lo deja dicho en amr", async () => {
+    await comoServicio(db, async (c) => {
+      await sembrarPase(c, {
+        id: "e0000019-0000-0000-0000-00000000f201",
+        usadoAt: "now()",
+        usadoPorSesion: SESION_A,
+      });
+      const salida = await hook(c, eventoDeToken(SESION_A));
+      expect(salida.claims.aal).toBe("aal2");
+      expect(salida.claims.amr.map((m) => m.method)).toEqual([
+        "password",
+        "pase_acceso",
+      ]);
+    });
+  });
+
+  it("otra sesión del mismo usuario se queda en aal1: la elevación es de la sesión", async () => {
+    await comoServicio(db, async (c) => {
+      await sembrarPase(c, {
+        id: "e0000019-0000-0000-0000-00000000f202",
+        usadoAt: "now()",
+        usadoPorSesion: SESION_A,
+      });
+      const evento = eventoDeToken(SESION_B);
+      expect(await hook(c, evento)).toEqual(evento);
+    });
+  });
+
+  it("nunca degrada un aal2 nativo ni toca un evento sin sesión legible", async () => {
+    await comoServicio(db, async (c) => {
+      const nativo = eventoDeToken(SESION_B, "aal2");
+      expect(await hook(c, nativo)).toEqual(nativo);
+
+      const sinSesion = eventoDeToken(null);
+      expect(await hook(c, sinSesion)).toEqual(sinSesion);
+
+      const rota = eventoDeToken("esto-no-es-un-uuid");
+      expect(await hook(c, rota)).toEqual(rota);
+    });
+  });
+
+  it("solo GoTrue ejecuta el hook y solo el servidor canjea", async () => {
+    const r = await db.query<{
+      hook_auth: boolean;
+      hook_gotrue: boolean;
+      canje_auth: boolean;
+      canje_anon: boolean;
+      fallo_auth: boolean;
+      canje_servicio: boolean;
+    }>(`
+      select
+        has_function_privilege('authenticated', 'public.custom_access_token_hook(jsonb)', 'execute') as hook_auth,
+        has_function_privilege('supabase_auth_admin', 'public.custom_access_token_hook(jsonb)', 'execute') as hook_gotrue,
+        has_function_privilege('authenticated', 'public.canjear_pase(uuid, uuid)', 'execute') as canje_auth,
+        has_function_privilege('anon', 'public.canjear_pase(uuid, uuid)', 'execute') as canje_anon,
+        has_function_privilege('authenticated', 'public.pase_intento_fallido(uuid)', 'execute') as fallo_auth,
+        has_function_privilege('service_role', 'public.canjear_pase(uuid, uuid)', 'execute') as canje_servicio
+    `);
+    expect(r.rows[0]).toEqual({
+      hook_auth: false,
+      hook_gotrue: true,
+      canje_auth: false,
+      canje_anon: false,
+      fallo_auth: false,
+      canje_servicio: true,
+    });
+  });
+
+  it("un mercaderista no se canjea un pase por PostgREST", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      expect(
+        await alIntentar(c, "select public.canjear_pase($1, $2)", [
+          "e0000019-0000-0000-0000-00000000f001",
+          SESION_A,
+        ]),
+      ).toMatch(/permission denied/i);
     });
   });
 });

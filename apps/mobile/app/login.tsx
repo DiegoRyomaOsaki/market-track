@@ -12,6 +12,7 @@ import {
   View,
 } from "react-native";
 
+import { esAal2 } from "@/lib/aal";
 import { supabase } from "@/lib/supabase";
 import { calcularVentana, guardarVentana } from "@/lib/recordar-dispositivo";
 import { factorUsable, type PasoLogin } from "@/lib/segundo-factor";
@@ -26,8 +27,10 @@ import { colores, espacio, radio } from "@/tema";
  * El login es el ÚNICO flujo que hace red a propósito: sin conexión no se puede
  * autenticar. Los flujos de campo (Mi día, check-in…) leen de la réplica local.
  *
- * El canje del pase de acceso temporal ("no me llegó el código") es MAR-66: exige
- * llegar a `aal2` sin OTP, que es su incógnita abierta. Aquí no está.
+ * "No me llegó el código" → el pase de acceso temporal, en el mismo campo: lo
+ * canjea la Edge Function `canjear-pase` y la sesión sube a `aal2` al refrescarse
+ * (el hook de GoTrue eleva el claim; ADR-0008). Sin OTP, pero sin abrir otra
+ * puerta: la app sigue entrando solo con `aal2`.
  */
 export default function Login() {
   const [paso, setPaso] = useState<PasoLogin>("credenciales");
@@ -105,6 +108,14 @@ export default function Login() {
     setOcupado(false);
   }
 
+  /** Con la sesión ya en aal2: recordar el dispositivo y entrar. */
+  async function entrarConSegundoFactor() {
+    // La sesión aal2 se retiene al refrescarse: recordar el dispositivo es no
+    // volver a pedir el 2FA mientras la ventana siga viva.
+    await guardarVentana(calcularVentana(Date.now(), recordar));
+    router.replace("/");
+  }
+
   async function verificar() {
     if (!factorId || !challengeId) return;
     setOcupado(true);
@@ -119,10 +130,42 @@ export default function Login() {
       setOcupado(false);
       return;
     }
-    // La sesión ya es aal2 y la retiene al refrescarse: recordar el dispositivo
-    // es no volver a pedir el 2FA mientras la ventana siga viva.
-    await guardarVentana(calcularVentana(Date.now(), recordar));
-    router.replace("/");
+    await entrarConSegundoFactor();
+  }
+
+  /**
+   * Canjea el pase que dictó el supervisor. La función marca el pase como usado
+   * por ESTA sesión; el token que la app tiene sigue siendo aal1 hasta que se
+   * refresca — de ahí el `refreshSession` antes de mirar el claim.
+   */
+  async function canjearPase() {
+    setOcupado(true);
+    setError(null);
+    const respuesta = await supabase.functions.invoke<{ pase_id: string }>(
+      "canjear-pase",
+      { body: { codigo: codigo.trim() } },
+    );
+    // El SDK tipa `error` como `any`: anotarlo `unknown` corta el contagio.
+    const fallo: unknown = respuesta.error;
+    if (fallo) {
+      setError("El pase no es válido o ya no está vigente.");
+      setOcupado(false);
+      return;
+    }
+    const { data, error: errRefresco } = await supabase.auth.refreshSession();
+    if (errRefresco || !esAal2(data.session?.access_token)) {
+      setError("No pudimos activar el pase. Inténtalo de nuevo.");
+      setOcupado(false);
+      return;
+    }
+    await entrarConSegundoFactor();
+  }
+
+  /** Cambia entre el código por correo y el pase: mismo campo, se vacía. */
+  function cambiarPaso(siguiente: PasoLogin) {
+    setCodigo("");
+    setError(null);
+    setPaso(siguiente);
   }
 
   const accion =
@@ -130,7 +173,9 @@ export default function Login() {
       ? entrar
       : paso === "telefono"
         ? enrolar
-        : verificar;
+        : paso === "pase"
+          ? canjearPase
+          : verificar;
 
   return (
     <KeyboardAvoidingView
@@ -193,9 +238,9 @@ export default function Login() {
         </Campo>
       )}
 
-      {paso === "codigo" && (
+      {(paso === "codigo" || paso === "pase") && (
         <>
-          <Campo etiqueta="Código">
+          <Campo etiqueta={paso === "pase" ? "Pase de acceso" : "Código"}>
             <TextInput
               value={codigo}
               onChangeText={setCodigo}
@@ -203,7 +248,11 @@ export default function Login() {
               autoComplete="one-time-code"
               maxLength={6}
               style={[e.input, e.inputCodigo]}
-              accessibilityLabel="Código de 6 dígitos"
+              accessibilityLabel={
+                paso === "pase"
+                  ? "Pase de acceso de 6 dígitos"
+                  : "Código de 6 dígitos"
+              }
             />
           </Campo>
           <View style={e.recordar}>
@@ -216,12 +265,31 @@ export default function Login() {
               Recordar este dispositivo 30 días
             </Text>
           </View>
-          <Pressable
-            onPress={() => void (factorId && pedirCodigo(factorId))}
-            accessibilityRole="button"
-          >
-            <Text style={e.reenviar}>Reenviar código</Text>
-          </Pressable>
+          {paso === "codigo" ? (
+            <>
+              <Pressable
+                onPress={() => void (factorId && pedirCodigo(factorId))}
+                accessibilityRole="button"
+              >
+                <Text style={e.reenviar}>Reenviar código</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => cambiarPaso("pase")}
+                accessibilityRole="button"
+              >
+                <Text style={e.reenviar}>
+                  No me llegó el código: usar un pase de acceso
+                </Text>
+              </Pressable>
+            </>
+          ) : (
+            <Pressable
+              onPress={() => cambiarPaso("codigo")}
+              accessibilityRole="button"
+            >
+              <Text style={e.reenviar}>Volver al código por correo</Text>
+            </Pressable>
+          )}
         </>
       )}
 
@@ -268,12 +336,16 @@ function Campo({
 function subtituloDe(paso: PasoLogin): string {
   if (paso === "credenciales") return "Ingresa para ver tu rutero de hoy";
   if (paso === "telefono") return "Activa tu segundo factor";
+  if (paso === "pase") {
+    return "Ingresa el pase de acceso que te dictó tu supervisor";
+  }
   return "Te enviamos un código de 6 dígitos por correo";
 }
 
 function botonDe(paso: PasoLogin): string {
   if (paso === "credenciales") return "Continuar";
   if (paso === "telefono") return "Enviarme el código";
+  if (paso === "pase") return "Entrar con el pase";
   return "Entrar";
 }
 

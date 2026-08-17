@@ -25,7 +25,12 @@ export function factorUsable(factores: readonly FactorMfa[]): FactorMfa | null {
   );
 }
 
-export type PasoLogin = "credenciales" | "telefono" | "codigo";
+/**
+ * `pase` es el rescate del que no recibe su código: en el mismo campo teclea el
+ * pase de acceso que le dictó su supervisor; lo canjea la Edge Function
+ * `canjear-pase` y la sesión sube a aal2 al refrescarse (ADR-0008).
+ */
+export type PasoLogin = "credenciales" | "telefono" | "codigo" | "pase";
 
 /** Con los factores del usuario, ¿toca enrolar teléfono o ya pedir el código? */
 export function pasoTras2fa(factores: readonly FactorMfa[]): PasoLogin {

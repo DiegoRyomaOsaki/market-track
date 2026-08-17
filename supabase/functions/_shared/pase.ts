@@ -1,8 +1,8 @@
 // Lógica pura del pase de acceso temporal, COMPARTIDA por las Edge Functions que
 // lo operan. Vive aquí —y no dentro de una función— por dos razones: fija en un
 // solo sitio el FORMATO del `codigo_hash` que se guarda (`emitir-pase` lo
-// escribe; `canjear-pase`, cuando aterrice, lo tiene que reproducir byte a byte),
-// y así la lógica se testea sin levantar el servidor de la función.
+// escribe; `canjear-pase` lo reproduce byte a byte para comparar), y así la
+// lógica se testea sin levantar el servidor de la función.
 //
 // El código NUNCA se guarda en claro. Se guarda su HMAC-SHA256 con un secreto de
 // servidor (PASE_HASH_SECRET): un volcado de la base, por sí solo, no permite
@@ -116,4 +116,44 @@ export async function hashCodigo(
   return [...new Uint8Array(firma)]
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
+}
+
+// --- El canje: comparar en tiempo constante -----------------------------------
+//
+// Un `===` entre strings corta en el primer byte distinto, y ese tiempo se mide.
+// Aquí se recorren SIEMPRE todos los bytes y se acumula la diferencia con XOR: el
+// tiempo depende del largo, nunca de en qué posición divergen.
+
+/** ¿Son iguales, sin que el tiempo de la respuesta revele en qué byte difieren? */
+export function igualesEnTiempoConstante(a: string, b: string): boolean {
+  const bytesA = new TextEncoder().encode(a);
+  const bytesB = new TextEncoder().encode(b);
+  // Largos distintos = distintos, pero se recorre igual el más largo para no
+  // devolver antes; el resultado ya está decidido por la diferencia de largo.
+  let diferencia = bytesA.length ^ bytesB.length;
+  const largo = Math.max(bytesA.length, bytesB.length);
+  for (let i = 0; i < largo; i++) {
+    diferencia |= (bytesA[i] ?? 0) ^ (bytesB[i] ?? 0);
+  }
+  return diferencia === 0;
+}
+
+export type PaseCandidato = { id: string; codigo_hash: string };
+
+/**
+ * El pase cuyo hash coincide con el del código dictado, o null si ninguno. Se
+ * comparan TODOS los candidatos (no se corta al encontrarlo): así el tiempo
+ * tampoco revela en qué posición de la lista estaba el bueno.
+ */
+export function paseQueCoincide(
+  hashDado: string,
+  candidatos: readonly PaseCandidato[],
+): PaseCandidato | null {
+  let coincidencia: PaseCandidato | null = null;
+  for (const pase of candidatos) {
+    if (igualesEnTiempoConstante(hashDado, pase.codigo_hash)) {
+      coincidencia = pase;
+    }
+  }
+  return coincidencia;
 }

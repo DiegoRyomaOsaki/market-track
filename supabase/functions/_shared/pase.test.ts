@@ -6,6 +6,8 @@ import { assert, assertEquals, assertMatch } from "jsr:@std/assert@1";
 import {
   generarCodigo,
   hashCodigo,
+  igualesEnTiempoConstante,
+  paseQueCoincide,
   type PerfilAutz,
   puedeEmitirPase,
 } from "./pase.ts";
@@ -128,5 +130,41 @@ Deno.test(
     };
     assert(!puedeEmitirPase(merc, mercaderistaDelSup).permitido);
     assert(!puedeEmitirPase(cliente, mercaderistaDelSup).permitido);
+  },
+);
+
+Deno.test(
+  "igualesEnTiempoConstante: iguales, distintos, y de largos distintos",
+  () => {
+    assert(igualesEnTiempoConstante("abc", "abc"));
+    assert(!igualesEnTiempoConstante("abc", "abd"));
+    assert(!igualesEnTiempoConstante("abc", "ab"));
+    assert(!igualesEnTiempoConstante("", "a"));
+    assert(igualesEnTiempoConstante("", ""));
+    // Con bytes multibyte también: se compara la codificación, no el largo en chars.
+    assert(!igualesEnTiempoConstante("é", "é"));
+  },
+);
+
+Deno.test(
+  "paseQueCoincide: devuelve el que coincide y null si ninguno",
+  async () => {
+    const secreto = "secreto-de-prueba";
+    const candidatos = [
+      { id: "p1", codigo_hash: await hashCodigo("111111", secreto) },
+      { id: "p2", codigo_hash: await hashCodigo("222222", secreto) },
+    ];
+    assertEquals(
+      paseQueCoincide(await hashCodigo("222222", secreto), candidatos)?.id,
+      "p2",
+    );
+    assertEquals(
+      paseQueCoincide(await hashCodigo("333333", secreto), candidatos),
+      null,
+    );
+    assertEquals(
+      paseQueCoincide(await hashCodigo("111111", secreto), []),
+      null,
+    );
   },
 );

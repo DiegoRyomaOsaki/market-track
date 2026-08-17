@@ -2,9 +2,9 @@
 
 - **Estado:** **aceptado** (2026-07-16) — la implementación validó la Opción A de
   punta a punta: el hook entrega el OTP en un challenge de MFA real y GoTrue lo
-  acepta. Quedan dos cabos, ambos con dueño: el canje del pase → `aal2` (MAR-66,
-  sin API nativa para elevar) y encender el gate `aal2` en la RLS (va con el login
-  del panel). Ver "Lo que la implementación todavía debe probar".
+  acepta. Los dos cabos que quedaban ya se cerraron: el gate `aal2` en la RLS
+  (con el login del panel) y el canje del pase → `aal2` (2026-08-17, por Custom
+  Access Token Hook). Ver "Lo que la implementación todavía debe probar".
 - **Fecha:** 2026-07-14
 - **Reemplaza a:** —
 
@@ -115,11 +115,35 @@ que la implementación debe probar, antes de construir ninguna pantalla.
    `enviar-otp`: `POST /auth/v1/factors/{id}/challenge` → el hook se invoca con
    `sms.sms_type = "mfa"`, la función resuelve el canal y entrega, y GoTrue acepta
    el `{}` devolviendo **200** con el challenge. La cadena completa funciona.
-2. **El canje del pase de acceso temporal elevando a `aal2`** desde una Edge
-   Function con `service_role`, sin abrir un segundo camino de enforcement.
-   **SIGUE ABIERTO** — y se agravó: se verificó (2026-07-15) que **no existe API
-   admin/`service_role` que emita o eleve una sesión a `aal2`** (solo se alcanza
-   con `challenge`+`verify`). Se decide en MAR-66.
+2. ~~**El canje del pase de acceso temporal elevando a `aal2`** desde una Edge
+   Function con `service_role`, sin abrir un segundo camino de enforcement.~~ —
+   **RESUELTO (2026-08-17): el Custom Access Token Hook es la única autoridad
+   del claim `aal` fuera del OTP nativo.** Se confirmó que no existe API
+   admin/`service_role` que eleve una sesión (solo `challenge`+`verify`), así que
+   la Edge Function `canjear-pase` no emite ningún token: valida el código
+   (HMAC en tiempo constante), marca el pase como usado **por una sesión**
+   (`pase_acceso_temporal.usado_por_sesion` = el `session_id` del JWT aal1, en
+   un solo UPDATE atómico), y le pide al cliente que refresque. El hook
+   `public.custom_access_token_hook` —que GoTrue invoca antes de firmar cada
+   access token— ve la marca y sube `aal` a `aal2`; nunca degrada un aal2 nativo.
+
+   Por qué esta opción y no "aal1 + marca de pase que el gate acepte": TODO lo
+   que exige el segundo factor lee el claim `aal` del JWT — `app.perfil_efectivo()`
+   (RLS), el middleware del panel, las reglas de sincronización del móvil
+   (`auth.parameter('aal')`) y el guard de la app. Enseñarle la excepción a cada
+   uno sería exactamente el segundo camino de enforcement que este ADR evita; que
+   el pase termine escribiendo el mismo claim no toca a ningún consumidor.
+
+   Verificado, no supuesto: en el código de GoTrue (`internal/tokens/service.go`)
+   las claims que devuelve el hook se firman **tal cual** (`gotrueClaims =
+   jwt.MapClaims(output.Claims)`), y el esquema de validación solo exige que
+   `aal` sea un string. El harness `test:db` cubre el hook (sube la sesión que
+   canjeó, no otra del mismo usuario, no degrada), el canje atómico bajo
+   concurrencia real y el tope de intentos fallidos. La elevación es una
+   propiedad de la SESIÓN, igual que el aal2 nativo: sobrevive al refresco y no se
+   filtra a otro dispositivo. Coste aceptado: el hook corre en cada emisión de
+   token (un index lookup por `session_id`), y en la nube hay que activarlo a
+   mano en Authentication → Hooks (config.toml solo manda en local).
 3. ~~**La persistencia de la sesión**~~ — **RESUELTO (2026-07-16).** No hace falta
    un "recordado de dispositivo" propio: `aal2` es una propiedad de la SESIÓN, y
    sobrevive a los refrescos del token. Basta con no forzar el cierre: por eso
