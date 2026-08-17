@@ -673,6 +673,40 @@ describe("canjear_pase — un solo uso", () => {
     });
   });
 
+  it("los candidatos al canje son SOLO los pases vigentes del propio llamante", async () => {
+    // Es la consulta que emite la Edge Function antes de comparar el hash: si un
+    // día perdiera el filtro por `profile_id`, un mercaderista podría canjear el
+    // pase de otro cuyo código coincidiera. Se siembra un pase de un rival con el
+    // MISMO hash y se comprueba que no entra en la lista.
+    await comoServicio(db, async (c) => {
+      await sembrarPase(c, {
+        id: "e0000019-0000-0000-0000-00000000f007",
+        codigoHash: "mismo-hash",
+      });
+      await sembrarPase(c, {
+        id: "e0000019-0000-0000-0000-00000000f008",
+        profileId: USUARIOS.mercaderistaRival,
+        codigoHash: "mismo-hash",
+      });
+      await sembrarPase(c, {
+        id: "e0000019-0000-0000-0000-00000000f009",
+        codigoHash: "mismo-hash",
+        usadoAt: "now()",
+      });
+      await c.query("set local role service_role");
+
+      const r = await c.query<{ id: string }>(
+        `select id from public.pase_acceso_temporal
+         where profile_id = $1 and usado_at is null and revocado_at is null
+           and expira_at > now() and codigo_hash = 'mismo-hash'`,
+        [JOSE],
+      );
+      expect(r.rows.map((f) => f.id)).toEqual([
+        "e0000019-0000-0000-0000-00000000f007",
+      ]);
+    });
+  });
+
   it("un pase que no existe devuelve false, no error", async () => {
     await comoServicio(db, async (c) => {
       expect(
@@ -821,27 +855,39 @@ describe("custom_access_token_hook — la única autoridad de aal fuera del OTP"
   it("solo GoTrue ejecuta el hook y solo el servidor canjea", async () => {
     const r = await db.query<{
       hook_auth: boolean;
+      hook_anon: boolean;
+      hook_servicio: boolean;
       hook_gotrue: boolean;
       canje_auth: boolean;
       canje_anon: boolean;
-      fallo_auth: boolean;
       canje_servicio: boolean;
+      fallo_auth: boolean;
+      fallo_anon: boolean;
+      fallo_servicio: boolean;
     }>(`
       select
         has_function_privilege('authenticated', 'public.custom_access_token_hook(jsonb)', 'execute') as hook_auth,
+        has_function_privilege('anon', 'public.custom_access_token_hook(jsonb)', 'execute') as hook_anon,
+        has_function_privilege('service_role', 'public.custom_access_token_hook(jsonb)', 'execute') as hook_servicio,
         has_function_privilege('supabase_auth_admin', 'public.custom_access_token_hook(jsonb)', 'execute') as hook_gotrue,
         has_function_privilege('authenticated', 'public.canjear_pase(uuid, uuid)', 'execute') as canje_auth,
         has_function_privilege('anon', 'public.canjear_pase(uuid, uuid)', 'execute') as canje_anon,
+        has_function_privilege('service_role', 'public.canjear_pase(uuid, uuid)', 'execute') as canje_servicio,
         has_function_privilege('authenticated', 'public.pase_intento_fallido(uuid)', 'execute') as fallo_auth,
-        has_function_privilege('service_role', 'public.canjear_pase(uuid, uuid)', 'execute') as canje_servicio
+        has_function_privilege('anon', 'public.pase_intento_fallido(uuid)', 'execute') as fallo_anon,
+        has_function_privilege('service_role', 'public.pase_intento_fallido(uuid)', 'execute') as fallo_servicio
     `);
     expect(r.rows[0]).toEqual({
       hook_auth: false,
+      hook_anon: false,
+      hook_servicio: false,
       hook_gotrue: true,
       canje_auth: false,
       canje_anon: false,
-      fallo_auth: false,
       canje_servicio: true,
+      fallo_auth: false,
+      fallo_anon: false,
+      fallo_servicio: true,
     });
   });
 

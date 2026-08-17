@@ -391,7 +391,7 @@ const e = StyleSheet.create({
   recordar: { flexDirection: "row", alignItems: "center", gap: espacio.s },
   recordarTexto: { color: colores.textoSuave, fontSize: 13 },
   reenviar: { color: colores.textoSuave, fontSize: 13, fontWeight: "600" },
-  error: { color: colores.alerta, fontSize: 13, fontWeight: "600" },
+  error: { color: colores.alertaTexto, fontSize: 13, fontWeight: "600" },
   boton: {
     height: 52,
     borderRadius: radio.m,

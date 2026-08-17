@@ -43,9 +43,19 @@ if (!PASE_HASH_SECRET) {
   );
 }
 
-// Deadline de las consultas: una llamada colgada a Postgres no debe bloquear la
-// respuesta ni consumir el presupuesto de la función.
+// Deadline de las consultas: una llamada colgada a Postgres —o al servidor de
+// Auth— no debe bloquear la respuesta ni consumir el presupuesto de la función.
 const DB_TIMEOUT_MS = 8_000;
+
+/** Carrera contra un deadline: para las llamadas que no aceptan `abortSignal`. */
+function conDeadline<T>(promesa: PromiseLike<T>, ms: number): Promise<T> {
+  return Promise.race([
+    Promise.resolve(promesa),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`timeout tras ${ms}ms`)), ms),
+    ),
+  ]);
+}
 
 const canjearPaseSchema = z.object({
   codigo: z.string().regex(/^\d{6}$/),
@@ -82,9 +92,19 @@ Deno.serve(async (req) => {
   const token = req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "");
   if (!token) return json(401, { error: "no autenticado" });
   const llamante = clienteDelLlamante(req);
-  const { data: verificado, error: errClaims } =
-    await llamante.auth.getClaims(token);
-  if (errClaims || !verificado) return json(401, { error: "no autenticado" });
+  let verificado: Awaited<ReturnType<typeof llamante.auth.getClaims>>["data"];
+  try {
+    const respuesta = await conDeadline(
+      llamante.auth.getClaims(token),
+      DB_TIMEOUT_MS,
+    );
+    if (respuesta.error) return json(401, { error: "no autenticado" });
+    verificado = respuesta.data;
+  } catch {
+    // Auth colgado: no se puede saber quién llama, así que no se canjea nada.
+    return json(504, { error: "no se pudo verificar la sesión" });
+  }
+  if (!verificado) return json(401, { error: "no autenticado" });
   const { sub: profileId, session_id: sesionId, aal } = verificado.claims;
   if (!sesionId) return json(401, { error: "la sesión no es canjeable" });
   // Una sesión que ya completó el segundo factor no necesita el pase: no se
