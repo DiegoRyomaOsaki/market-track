@@ -50,8 +50,11 @@ type FotoPendiente = { id: string; tenant_id: string; visita_id: string };
 type Sello = { foto_id: string; bytes: number | null };
 type Resultado = { decision: Decision; bytes: number | null };
 
+/** Mensaje de error acotado y SIN query strings: un fallo de `fetch` puede
+ * arrastrar la URL firmada (que es la credencial) dentro del mensaje. */
 function mensajeDe(e: unknown): string {
-  return (e instanceof Error ? e.message : String(e)).slice(0, 200);
+  const crudo = e instanceof Error ? e.message : String(e);
+  return crudo.replace(/\?[^\s'")]*/g, "?…").slice(0, 200);
 }
 
 /** Un HEAD contra R2 y su veredicto. Lanza solo por bugs; red/timeout → reintentar. */

@@ -263,6 +263,55 @@ describe("foto — la identidad se congela", () => {
       }
     });
   });
+
+  it("tampoco puede renombrar el id, cambiar el tenant ni mover la foto a otra visita", async () => {
+    // El trigger es BEFORE UPDATE: su rechazo llega antes que la FK y que el
+    // WITH CHECK de la política, por eso el mensaje esperado es el suyo.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await c.query(
+        `insert into public.foto (id, visita_id, levantamiento_id, tipo, hash, capturada_at)
+         values ($1, $2, $3, 'antes', 'sha', now())`,
+        [IDS.fotoNueva, IDS.visitaMrc, IDS.levantamientoMrc],
+      );
+      const casos: Array<[string, RegExp]> = [
+        [`id = '${IDS.fotoNueva2}'`, /id no se puede cambiar/],
+        [`tenant_id = '${TENANTS.rival}'`, /tenant_id no se puede cambiar/],
+        [
+          `visita_id = '${IDS.fotoNueva3}'`,
+          /no se mueve de visita ni de levantamiento/,
+        ],
+      ];
+      for (const [set, patron] of casos) {
+        await debeFallar(
+          c,
+          `update public.foto set ${set} where id = $1`,
+          [IDS.fotoNueva],
+          patron,
+        );
+      }
+    });
+  });
+});
+
+describe("el servidor sí escribe la autenticidad", () => {
+  it("service_role inserta con verificada_at y la actualiza directamente (backfill, soporte)", async () => {
+    await comoServicio(db, async (c) => {
+      // INSERT ya sellado: la rama `tg_op = 'INSERT'` deja pasar al servidor.
+      await sembrarFoto(c, IDS.fotoNueva, {
+        subidaAt: "2026-08-01T10:00:00Z",
+        verificadaAt: "2026-08-01T10:05:00Z",
+      });
+      expect((await leerFoto(c, IDS.fotoNueva))?.verificada_at).not.toBeNull();
+
+      // UPDATE directo, sin pasar por la RPC.
+      const r = await c.query(
+        `update public.foto set verificada_at = now(), bytes_r2 = 77 where id = $1`,
+        [IDS.fotoNueva],
+      );
+      expect(r.rowCount).toBe(1);
+      expect((await leerFoto(c, IDS.fotoNueva))?.bytes_r2).toBe(77);
+    });
+  });
 });
 
 describe("las RPC del barrido (service_role)", () => {
@@ -299,8 +348,14 @@ describe("las RPC del barrido (service_role)", () => {
     });
   });
 
-  it("sellar_fotos_verificadas rechaza lo que no es un array y un lote por encima del tope", async () => {
+  it("sellar_fotos_verificadas rechaza null, lo que no es un array y un lote por encima del tope", async () => {
     await comoServicio(db, async (c) => {
+      await debeFallar(
+        c,
+        `select public.sellar_fotos_verificadas(null::jsonb)`,
+        [],
+        /se espera un array/,
+      );
       await debeFallar(
         c,
         `select public.sellar_fotos_verificadas('{"a":1}'::jsonb)`,
@@ -362,6 +417,40 @@ describe("las RPC del barrido (service_role)", () => {
         `select count(*)::text as n from public.fotos_pendientes_de_verificacion(1)`,
       );
       expect(r.rows[0]?.n).toBe("1");
+    });
+  });
+
+  it("fotos_pendientes_de_verificacion: sin argumento reclama 100, y por encima de 500 se acota a 500", async () => {
+    await comoServicio(db, async (c) => {
+      // 520 fotos subidas y sin verificar, sembradas de una vez.
+      await c.query(
+        `insert into public.foto (id, tenant_id, visita_id, levantamiento_id, tipo, hash, capturada_at, subida_at)
+         select gen_random_uuid(), $1, $2, $3, 'campo_extra', 'sha-' || g, now(),
+                timestamptz '2026-08-01T00:00:00Z' + (g || ' minutes')::interval
+           from generate_series(1, 520) g`,
+        [TENANTS.maracumango, IDS.visitaMrc, IDS.levantamientoMrc],
+      );
+      const porDefecto = await c.query<{ n: string }>(
+        `select count(*)::text as n from public.fotos_pendientes_de_verificacion()`,
+      );
+      expect(porDefecto.rows[0]?.n).toBe("100");
+      // Las 100 ya reclamadas no vuelven a salir; quedan 420 y se pide 600.
+      const acotado = await c.query<{ n: string }>(
+        `select count(*)::text as n from public.fotos_pendientes_de_verificacion(600)`,
+      );
+      expect(acotado.rows[0]?.n).toBe("420");
+    });
+    await comoServicio(db, async (c) => {
+      await c.query(
+        `insert into public.foto (id, tenant_id, visita_id, levantamiento_id, tipo, hash, capturada_at, subida_at)
+         select gen_random_uuid(), $1, $2, $3, 'campo_extra', 'sha-' || g, now(), now()
+           from generate_series(1, 520) g`,
+        [TENANTS.maracumango, IDS.visitaMrc, IDS.levantamientoMrc],
+      );
+      const acotado = await c.query<{ n: string }>(
+        `select count(*)::text as n from public.fotos_pendientes_de_verificacion(600)`,
+      );
+      expect(acotado.rows[0]?.n).toBe("500");
     });
   });
 

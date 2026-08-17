@@ -141,8 +141,8 @@ returns table (id uuid, tenant_id uuid, visita_id uuid)
 language sql
 set search_path = ''
 as $$
-  with candidatas as (
-    select f.id
+  with bloqueadas as (
+    select f.id, f.verificacion_intento_at, f.subida_at
     from public.foto f
     where f.subida_at is not null
       and f.verificada_at is null
@@ -151,12 +151,30 @@ as $$
     order by f.verificacion_intento_at nulls first, f.subida_at
     limit least(greatest(coalesce(p_limite, 100), 1), 500)
     for update skip locked
+  ),
+  -- Numeradas aparte: `for update` no admite funciones ventana en la misma consulta.
+  candidatas as (
+    select b.id,
+           row_number() over (
+             order by b.verificacion_intento_at nulls first, b.subida_at
+           ) as orden
+    from bloqueadas b
+  ),
+  reclamadas as (
+    update public.foto f
+       set verificacion_intento_at = now()
+      from candidatas c
+     where f.id = c.id
+    returning f.id, f.tenant_id, f.visita_id
   )
-  update public.foto f
-     set verificacion_intento_at = now()
-    from candidatas c
-   where f.id = c.id
-  returning f.id, f.tenant_id, f.visita_id;
+  -- El ORDER BY del CTE decide QUÉ filas entran, no en qué orden salen del
+  -- UPDATE ... RETURNING (el join de vuelta puede reordenarlas). El orden lo
+  -- garantiza este SELECT final: la Edge Function corta por plazo y tiene que
+  -- procesar primero lo más viejo.
+  select r.id, r.tenant_id, r.visita_id
+  from reclamadas r
+  join candidatas c on c.id = r.id
+  order by c.orden;
 $$;
 
 comment on function public.fotos_pendientes_de_verificacion(integer) is
