@@ -72,6 +72,20 @@ export const AppSchema = new Schema({
     visita_id: column.text,
     subida_at: column.text,
   }),
+  levantamiento: new Table({ tenant_id: column.text, visita_id: column.text }),
+  levantamiento_sku: new Table({
+    tenant_id: column.text,
+    levantamiento_id: column.text,
+  }),
+  levantamiento_respuesta: new Table({
+    tenant_id: column.text,
+    levantamiento_id: column.text,
+  }),
+  exhibicion: new Table({
+    tenant_id: column.text,
+    levantamiento_id: column.text,
+  }),
+  contingencia: new Table({ tenant_id: column.text, visita_id: column.text }),
 });
 
 function anonKey(): string {
@@ -273,6 +287,81 @@ export async function conTenantDesactivado<T>(
     await pg.query("update public.tenant set activo = true where id = $1", [
       tenantId,
     ]);
+    await pg.end();
+  }
+}
+
+/**
+ * El trabajo de campo de un COMPAÑERO del mismo cliente (una visita con su
+ * levantamiento, sku, respuesta, exhibición y contingencia), sembrado directo en
+ * Postgres para probar que NO baja al teléfono de José. Se borra al terminar: la
+ * visita arrastra el resto por cascade.
+ *
+ * El seed solo trae una visita por mercaderista, así que sin esto la afirmación
+ * "no baja lo ajeno" pasaría en verde con la regla rota.
+ */
+export const TRABAJO_COMPANERO = {
+  visita: "f0000010-0000-0000-0000-000000000096",
+  levantamiento: "f0000011-0000-0000-0000-000000000096",
+  levantamientoSku: "f0000012-0000-0000-0000-000000000096",
+  respuesta: "f0000047-0000-0000-0000-000000000096",
+  exhibicion: "f0000013-0000-0000-0000-000000000096",
+  contingencia: "f0000014-0000-0000-0000-000000000096",
+  /** Una respuesta PROPIA de José, en su levantamiento del seed: el control
+   * positivo de que la réplica ya asentó lo sembrado antes de afirmar nada. */
+  respuestaPropiaDeJose: "f0000047-0000-0000-0000-000000000095",
+} as const;
+
+export async function conTrabajoDeCompanero<T>(
+  fn: () => Promise<T>,
+): Promise<T> {
+  const tenant = USUARIOS.joseMaracumango.tenant;
+  const companero = "55555555-5555-5555-5555-555555555555";
+  const pg = new Client({ connectionString: PG });
+  await pg.connect();
+  const T = TRABAJO_COMPANERO;
+  try {
+    await pg.query(
+      `insert into public.visita (id, tenant_id, rutero_parada_id, mercaderista_id, tienda_id, estado)
+       values ($1, $2, 'a0000009-0000-0000-0000-000000000001', $3, 'a0000002-0000-0000-0000-000000000001', 'en_curso')`,
+      [T.visita, tenant, companero],
+    );
+    await pg.query(
+      `insert into public.levantamiento (id, tenant_id, visita_id, marca_id)
+       values ($1, $2, $3, 'cccccccc-0000-0000-0000-000000000001')`,
+      [T.levantamiento, tenant, T.visita],
+    );
+    await pg.query(
+      `insert into public.levantamiento_sku (id, tenant_id, levantamiento_id, sku_id, stock_sistema, stock_piso, precio_registrado)
+       values ($1, $2, $3, 'a0000003-0000-0000-0000-000000000001', 5, 1, 6.90)`,
+      [T.levantamientoSku, tenant, T.levantamiento],
+    );
+    await pg.query(
+      `insert into public.levantamiento_respuesta (id, tenant_id, levantamiento_id, campo_id, valor)
+       values ($1, $2, $3, 'observacion', '"góndola sucia"'::jsonb)`,
+      [T.respuesta, tenant, T.levantamiento],
+    );
+    await pg.query(
+      `insert into public.exhibicion (id, tenant_id, levantamiento_id, exhibicion_negociada_id, instalada)
+       values ($1, $2, $3, 'a0000007-0000-0000-0000-000000000001', false)`,
+      [T.exhibicion, tenant, T.levantamiento],
+    );
+    await pg.query(
+      `insert into public.contingencia (id, tenant_id, visita_id, paso, motivo, registrada_at)
+       values ($1, $2, $3, 'precios', 'harness: bypass del compañero', now())`,
+      [T.contingencia, tenant, T.visita],
+    );
+    await pg.query(
+      `insert into public.levantamiento_respuesta (id, tenant_id, levantamiento_id, campo_id, valor)
+       values ($1, $2, 'a0000011-0000-0000-0000-000000000001', 'harness', '"propia"'::jsonb)`,
+      [T.respuestaPropiaDeJose, tenant],
+    );
+    return await fn();
+  } finally {
+    await pg.query(`delete from public.levantamiento_respuesta where id = $1`, [
+      T.respuestaPropiaDeJose,
+    ]);
+    await pg.query(`delete from public.visita where id = $1`, [T.visita]);
     await pg.end();
   }
 }

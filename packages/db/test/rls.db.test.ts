@@ -177,7 +177,11 @@ describe("el mercaderista lee su PROPIO trabajo, no el de sus compañeros", () =
   // compañeros. El staff y el cliente-marca no cambian.
   const VISITA_COMPANERO = "e0000010-0000-0000-0000-000000000096";
   const RESPUESTA_COMPANERO = "e0000046-0000-0000-0000-000000000096";
+  const LEVANTAMIENTO_COMPANERO = "e0000011-0000-0000-0000-000000000096";
+  const RESPUESTA_LEV_COMPANERO = "e0000047-0000-0000-0000-000000000096";
   const VISITA_PROPIA = "a0000010-0000-0000-0000-000000000001";
+  const LEVANTAMIENTO_PROPIO = "a0000011-0000-0000-0000-000000000001";
+  const RESPUESTA_LEV_PROPIA = "e0000047-0000-0000-0000-000000000095";
 
   async function sembrarTrabajoDeCompanero(c: Client): Promise<void> {
     await c.query("set local role postgres");
@@ -197,6 +201,24 @@ describe("el mercaderista lee su PROPIO trabajo, no el de sus compañeros", () =
       `insert into public.visita_respuesta (id, tenant_id, visita_id, campo_id, valor)
        values ($1, $2, $3, 'botas', 'true'::jsonb)`,
       [RESPUESTA_COMPANERO, TENANTS.maracumango, VISITA_COMPANERO],
+    );
+    // El levantamiento del compañero y lo que contestó en el formulario.
+    await c.query(
+      `insert into public.levantamiento (id, tenant_id, visita_id, marca_id)
+       values ($1, $2, $3, 'cccccccc-0000-0000-0000-000000000001')`,
+      [LEVANTAMIENTO_COMPANERO, TENANTS.maracumango, VISITA_COMPANERO],
+    );
+    await c.query(
+      `insert into public.levantamiento_respuesta (id, tenant_id, levantamiento_id, campo_id, valor)
+       values ($1, $2, $3, 'observacion', '"góndola sucia"'::jsonb)`,
+      [RESPUESTA_LEV_COMPANERO, TENANTS.maracumango, LEVANTAMIENTO_COMPANERO],
+    );
+    // Y una respuesta PROPIA en el levantamiento del seed, para afirmar que la
+    // acotación deja pasar lo suyo y no vacía el wizard.
+    await c.query(
+      `insert into public.levantamiento_respuesta (id, tenant_id, levantamiento_id, campo_id, valor)
+       values ($1, $2, $3, 'observacion', '"ok"'::jsonb)`,
+      [RESPUESTA_LEV_PROPIA, TENANTS.maracumango, LEVANTAMIENTO_PROPIO],
     );
     await c.query("set local role authenticated");
   }
@@ -238,12 +260,54 @@ describe("el mercaderista lee su PROPIO trabajo, no el de sus compañeros", () =
     });
   });
 
+  it("NO lee las respuestas del formulario de un compañero, pero SÍ las suyas", async () => {
+    // El stream de sync ya no baja el tenant entero al teléfono; esta política
+    // cierra la otra superficie (PostgREST) al mismo alcance.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await sembrarTrabajoDeCompanero(c);
+      const r = await c.query<{ id: string }>(
+        `select id from public.levantamiento_respuesta where id = any($1::uuid[])`,
+        [[RESPUESTA_LEV_COMPANERO, RESPUESTA_LEV_PROPIA]],
+      );
+      expect(r.rows.map((x) => x.id)).toEqual([RESPUESTA_LEV_PROPIA]);
+    });
+  });
+
+  it("el mercaderista RIVAL no lee la respuesta del formulario de nadie de Maracumango", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaRival, async (c) => {
+      await sembrarTrabajoDeCompanero(c);
+      const r = await c.query(
+        `select id from public.levantamiento_respuesta where id = any($1::uuid[])`,
+        [[RESPUESTA_LEV_COMPANERO, RESPUESTA_LEV_PROPIA]],
+      );
+      expect(r.rowCount).toBe(0);
+    });
+  });
+
   it("el supervisor sigue leyendo el trabajo de todos: es su tablero", async () => {
     await comoUsuario(db, USUARIOS.supervisor, async (c) => {
       await sembrarTrabajoDeCompanero(c);
       const r = await c.query(
         `select id from public.visita_respuesta where id = $1`,
         [RESPUESTA_COMPANERO],
+      );
+      expect(r.rowCount).toBe(1);
+      const lev = await c.query(
+        `select id from public.levantamiento_respuesta where id = $1`,
+        [RESPUESTA_LEV_COMPANERO],
+      );
+      expect(lev.rowCount).toBe(1);
+    });
+  });
+
+  it("el cliente-marca sigue leyendo las respuestas del formulario de su operación", async () => {
+    // Son evidencia de tienda, no un dato laboral: la reescritura por rol no
+    // puede vaciarle el detalle del levantamiento.
+    await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
+      await sembrarTrabajoDeCompanero(c);
+      const r = await c.query(
+        `select id from public.levantamiento_respuesta where id = $1`,
+        [RESPUESTA_LEV_COMPANERO],
       );
       expect(r.rowCount).toBe(1);
     });
