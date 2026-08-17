@@ -1143,10 +1143,12 @@ export type Database = {
           generado_at: string
           generado_por: string
           id: string
+          intentos_fallidos: number
           motivo: string
           profile_id: string
           revocado_at: string | null
           usado_at: string | null
+          usado_por_sesion: string | null
         }
         Insert: {
           codigo_hash: string
@@ -1154,10 +1156,12 @@ export type Database = {
           generado_at?: string
           generado_por: string
           id?: string
+          intentos_fallidos?: number
           motivo: string
           profile_id: string
           revocado_at?: string | null
           usado_at?: string | null
+          usado_por_sesion?: string | null
         }
         Update: {
           codigo_hash?: string
@@ -1165,10 +1169,12 @@ export type Database = {
           generado_at?: string
           generado_por?: string
           id?: string
+          intentos_fallidos?: number
           motivo?: string
           profile_id?: string
           revocado_at?: string | null
           usado_at?: string | null
+          usado_por_sesion?: string | null
         }
         Relationships: [
           {
@@ -2292,6 +2298,10 @@ export type Database = {
           usuario_nombre: string
         }[]
       }
+      canjear_pase: {
+        Args: { p_pase_id: string; p_sesion_id: string }
+        Returns: boolean
+      }
       cola_revision: {
         Args: { p_desde: string; p_hasta: string }
         Returns: {
@@ -2323,6 +2333,7 @@ export type Database = {
           correo: string
         }[]
       }
+      custom_access_token_hook: { Args: { event: Json }; Returns: Json }
       dashboard_alertas: {
         Args: {
           p_cadena?: string
@@ -2414,6 +2425,7 @@ export type Database = {
         }
         Returns: Json
       }
+      pase_intento_fallido: { Args: { p_profile_id: string }; Returns: number }
       perfect_store_agregado: {
         Args: {
           p_cadena?: string

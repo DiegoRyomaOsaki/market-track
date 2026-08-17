@@ -284,10 +284,19 @@ max_frequency = "5s"
 # enabled = true
 # uri = "pg-functions://postgres/auth/before-user-created-hook"
 
-# This hook runs before a token is issued and allows you to add additional claims based on the authentication method used.
-# [auth.hook.custom_access_token]
-# enabled = true
-# uri = "pg-functions://<database>/<schema>/<hook_name>"
+# La elevación a aal2 del pase de acceso temporal (ADR-0008, punto 2). No existe
+# API de admin que suba una sesión a aal2, así que el pase deja una marca en la
+# base (`usado_por_sesion`) y este hook —que GoTrue llama antes de firmar cada
+# access token— sube el claim `aal` a `aal2` para la sesión que lo canjeó. Nunca
+# degrada un aal2 nativo. Todo el enforcement (RLS, middleware, sync del móvil)
+# sigue leyendo el mismo claim: no hay un segundo camino.
+#
+# En la nube este hook se activa en Authentication → Hooks (Custom Access Token
+# → Postgres function `public.custom_access_token_hook`); config.toml solo manda
+# en local.
+[auth.hook.custom_access_token]
+enabled = true
+uri = "pg-functions://postgres/public/custom_access_token_hook"
 
 # Entrega del OTP del segundo factor (ADR-0008). GoTrue llama a esta función con
 # el usuario y el código; ella elige el canal —correo por defecto vía Resend; SMS
