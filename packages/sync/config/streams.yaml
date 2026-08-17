@@ -55,37 +55,41 @@ streams:
       - SELECT * FROM rutero WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND mercaderista_id = auth.user_id() AND estado <> 'borrador'
       - SELECT * FROM rutero_parada WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND rutero_id IN (SELECT id FROM rutero WHERE mercaderista_id = auth.user_id() AND estado <> 'borrador')
 
-      # Su trabajo de campo. La visita y el rutero se acotan además al propio
-      # mercaderista (menos volumen y nada de ver visitas ajenas); el
-      # levantamiento cuelga de la visita y se acota por tenant.
+      # Su trabajo de campo: TODO acotado a las visitas PROPIAS, no solo al
+      # tenant. La RLS no interviene en la bajada: lo que aquí no se acote llega
+      # al teléfono de cada compañero y sobrevive al robo del dispositivo. Lo que
+      # cuelga del levantamiento (skus, respuestas, exhibiciones) se acota por el
+      # levantamiento de una visita propia; la contingencia, por su visita.
       - SELECT * FROM visita WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND mercaderista_id = auth.user_id()
       # El resultado de la revisión de SUS reportes: la app le enseña la decisión
       # y, si le rechazaron uno, el motivo. Sin esta regla el criterio "el
       # mercaderista lo ve" no se cumple — la RLS no interviene en la bajada.
       # Acotada por las visitas propias, igual que las paradas por su rutero.
       - SELECT * FROM revision_visita WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND visita_id IN (SELECT id FROM visita WHERE mercaderista_id = auth.user_id())
-      - SELECT * FROM levantamiento WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
-      - SELECT * FROM levantamiento_sku WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
+      - SELECT * FROM levantamiento WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND visita_id IN (SELECT id FROM visita WHERE mercaderista_id = auth.user_id())
+      - SELECT * FROM levantamiento_sku WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND levantamiento_id IN (SELECT id FROM levantamiento WHERE visita_id IN (SELECT id FROM visita WHERE mercaderista_id = auth.user_id()))
       # Respuestas de los campos libres del formulario configurable (ADR-0010): la
       # app las ESCRIBE y las relee para hidratar los pasos configurables al
-      # reanudar. Se acota por tenant como el resto del levantamiento.
-      - SELECT * FROM levantamiento_respuesta WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
+      # reanudar. Solo las de SUS levantamientos: es lo que cada compañero
+      # responde en el formulario, no un maestro compartido.
+      - SELECT * FROM levantamiento_respuesta WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND levantamiento_id IN (SELECT id FROM levantamiento WHERE visita_id IN (SELECT id FROM visita WHERE mercaderista_id = auth.user_id()))
       # Las respuestas del checklist de check-in (MAR-98): la app las ESCRIBE y
       # las relee. Acotadas a las visitas PROPIAS, igual que `foto`: sin ese IN,
       # cada teléfono bajaría el checklist de todos sus compañeros.
       - SELECT * FROM visita_respuesta WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND visita_id IN (SELECT id FROM visita WHERE mercaderista_id = auth.user_id())
-      # Exhibiciones negociadas: pre-carga que el mercaderista audita (solo lee).
-      # La exhibición cuelga del levantamiento; la app la ESCRIBE y la relee.
+      # Exhibiciones negociadas: pre-carga que el mercaderista audita (solo lee),
+      # maestro del cliente entero. La exhibición auditada cuelga del
+      # levantamiento (la app la ESCRIBE y la relee): solo las de los suyos.
       - SELECT * FROM exhibicion_negociada WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
-      - SELECT * FROM exhibicion WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
+      - SELECT * FROM exhibicion WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND levantamiento_id IN (SELECT id FROM levantamiento WHERE visita_id IN (SELECT id FROM visita WHERE mercaderista_id = auth.user_id()))
       # La metadata de SUS fotos. El binario va por la cola de disco a R2; aquí
       # solo viaja la fila. Se acota a las visitas propias, igual que la revisión:
       # sin ese IN, cada teléfono bajaría la evidencia de todos sus compañeros.
       - SELECT * FROM foto WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND visita_id IN (SELECT id FROM visita WHERE mercaderista_id = auth.user_id())
-      # La contingencia (bypass) cuelga de la visita/levantamiento; se acota por
-      # tenant como ellos. La app la ESCRIBE (el trigger de MAR-28 dispara la
-      # alerta al supervisor) y la relee para mostrar los pasos "⚠ Omitido".
-      - SELECT * FROM contingencia WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)
+      # La contingencia (bypass) cuelga de la visita: solo las de las PROPIAS. La
+      # app la ESCRIBE (el trigger de MAR-28 dispara la alerta al supervisor) y
+      # la relee para mostrar los pasos "⚠ Omitido".
+      - SELECT * FROM contingencia WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND visita_id IN (SELECT id FROM visita WHERE mercaderista_id = auth.user_id())
       # Solicitudes de cambio de ruta: la app las ESCRIBE y las relee para mostrar
       # su estado. Solo las PROPIAS (acotadas al usuario, no por parámetro del
       # cliente): la RLS deja al staff verlas todas, pero al teléfono solo bajan

@@ -2,10 +2,12 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import {
   conTenantDesactivado,
+  conTrabajoDeCompanero,
   filasReplicadas,
   replicarCon,
   sesionAal1,
   sesionAal2,
+  TRABAJO_COMPANERO,
   USUARIOS,
 } from "./ayudas";
 
@@ -135,6 +137,71 @@ describe("aislamiento de las sync rules", () => {
     const suyas = new Set(visitas.map((v) => v.id));
     expect(fotos.filter((f) => !suyas.has(f.visita_id))).toEqual([]);
   }, 60000);
+
+  it("el levantamiento y lo que cuelga de él bajan solo para SUS visitas", async () => {
+    // Estos cinco streams filtraban solo por tenant: cada teléfono replicaba el
+    // historial de levantamientos de TODOS sus compañeros —incluido lo que cada
+    // uno contesta en el formulario— y eso sobrevive al robo del dispositivo.
+    await conTrabajoDeCompanero(async () => {
+      const sesion = await sesionAal2(USUARIOS.joseMaracumango.email);
+      const T = TRABAJO_COMPANERO;
+      const [visitas, levs, skus, respuestas, exhibiciones, contingencias] =
+        await Promise.all([
+          filasReplicadas<{ id: string }>(sesion, "visita", "id"),
+          filasReplicadas<{ id: string; visita_id: string }>(
+            sesion,
+            "levantamiento",
+            "id, visita_id",
+          ),
+          filasReplicadas<{ id: string; levantamiento_id: string }>(
+            sesion,
+            "levantamiento_sku",
+            "id, levantamiento_id",
+          ),
+          filasReplicadas<{ id: string; levantamiento_id: string }>(
+            sesion,
+            "levantamiento_respuesta",
+            "id, levantamiento_id",
+          ),
+          filasReplicadas<{ id: string; levantamiento_id: string }>(
+            sesion,
+            "exhibicion",
+            "id, levantamiento_id",
+          ),
+          filasReplicadas<{ id: string; visita_id: string }>(
+            sesion,
+            "contingencia",
+            "id, visita_id",
+          ),
+        ]);
+
+      // Control positivo: lo sembrado YA llegó a la réplica (lo propio sí baja).
+      // Sin esto, un retraso de replicación daría el verde con la regla rota.
+      expect(respuestas.map((r) => r.id)).toContain(T.respuestaPropiaDeJose);
+      expect(levs.length).toBeGreaterThan(0);
+
+      // Nada del compañero, en ninguna de las cinco tablas.
+      expect(visitas.map((v) => v.id)).not.toContain(T.visita);
+      expect(levs.map((l) => l.id)).not.toContain(T.levantamiento);
+      expect(skus.map((s) => s.id)).not.toContain(T.levantamientoSku);
+      expect(respuestas.map((r) => r.id)).not.toContain(T.respuesta);
+      expect(exhibiciones.map((e) => e.id)).not.toContain(T.exhibicion);
+      expect(contingencias.map((c) => c.id)).not.toContain(T.contingencia);
+
+      // Y lo que sí baja cuelga, sin excepción, de una visita propia.
+      const suyas = new Set(visitas.map((v) => v.id));
+      expect(levs.filter((l) => !suyas.has(l.visita_id))).toEqual([]);
+      expect(contingencias.filter((c) => !suyas.has(c.visita_id))).toEqual([]);
+      const suyos = new Set(levs.map((l) => l.id));
+      expect(skus.filter((x) => !suyos.has(x.levantamiento_id))).toEqual([]);
+      expect(respuestas.filter((x) => !suyos.has(x.levantamiento_id))).toEqual(
+        [],
+      );
+      expect(
+        exhibiciones.filter((x) => !suyos.has(x.levantamiento_id)),
+      ).toEqual([]);
+    });
+  }, 180000);
 
   it("un excliente deja de replicar en cuanto se desactiva su cliente", async () => {
     // El acceso es DERIVADO: el CTE mi_tenant exige t.activo = true. Al apagar el

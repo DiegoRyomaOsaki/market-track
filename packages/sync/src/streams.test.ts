@@ -61,6 +61,58 @@ describe("streams.yaml — contrato de seguridad", () => {
     );
   });
 
+  it("el levantamiento y la contingencia se acotan a las visitas del propio usuario", () => {
+    // Filtrar solo por tenant hacía que cada teléfono replicara el historial de
+    // levantamientos y bypasses de TODOS sus compañeros.
+    for (const tabla of ["levantamiento", "contingencia"]) {
+      expect(streams).toMatch(
+        new RegExp(
+          String.raw`FROM ${tabla} WHERE .*visita_id IN \(SELECT id FROM visita WHERE mercaderista_id = auth\.user_id\(\)\)`,
+        ),
+      );
+    }
+  });
+
+  it("lo que cuelga del levantamiento se acota a los levantamientos de SUS visitas", () => {
+    // Skus, respuestas del formulario y exhibiciones auditadas no tienen
+    // visita_id: se acotan por el levantamiento, y este por la visita propia.
+    for (const tabla of [
+      "levantamiento_sku",
+      "levantamiento_respuesta",
+      "exhibicion",
+    ]) {
+      expect(streams).toMatch(
+        new RegExp(
+          String.raw`FROM ${tabla} WHERE .*levantamiento_id IN \(SELECT id FROM levantamiento WHERE visita_id IN \(SELECT id FROM visita WHERE mercaderista_id = auth\.user_id\(\)\)\)`,
+        ),
+      );
+    }
+  });
+
+  it("ningún stream de trabajo de campo se queda en el filtro por tenant", () => {
+    // Un `WHERE tenant_id IN (...)` a secas sobre estas tablas es la fuga: baja
+    // el tenant entero. Solo el maestro comercial puede bajar así.
+    for (const tabla of [
+      "visita",
+      "levantamiento",
+      "levantamiento_sku",
+      "levantamiento_respuesta",
+      "visita_respuesta",
+      "exhibicion",
+      "foto",
+      "contingencia",
+      "revision_visita",
+      "solicitud_cambio_ruta",
+    ]) {
+      expect(streams).not.toMatch(
+        new RegExp(
+          String.raw`FROM ${tabla} WHERE tenant_id IN \(SELECT tenant_id FROM mi_tenant\)\s*$`,
+          "m",
+        ),
+      );
+    }
+  });
+
   it("exige acceso efectivo: usuario activo y su cliente activo", () => {
     // Espeja app.perfil_efectivo(): si el cliente se cancela, deja de replicar.
     expect(streams).toMatch(/p\.activo\s*=\s*true/);
