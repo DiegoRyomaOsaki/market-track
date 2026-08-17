@@ -360,11 +360,12 @@ Aún no hay `.env`. Al scaffoldear, crear `.env.example` por app. Previstas:
   `foto.hash` y `foto.subida_at` los escribe el móvil, y un uuid dentro de
   `*_respuesta.valor` no tiene verja de autenticidad: cualquier lógica que pague
   o puntúe sobre ellos es falsificable. Acotar cuántas filas se acreditan
-  (`least`) limita el daño, no valida que cada una sea real. Una columna de
-  autenticidad sellada por el servidor (verificada contra R2) **todavía no
-  existe** — hasta que exista, el bono del merchandiser se apoya en esa cota y
-  en que el mercaderista solo lee (y solo referencia) fotos de sus propias
-  visitas.
+  (`least`) limita el daño, no valida que cada una sea real. La columna de
+  autenticidad sellada por el servidor **ya existe** (`foto.verificada_at`,
+  verificada contra R2 por el barrido de `fotos-verificar`), pero **el motor
+  todavía lee `hash`**: el cambio de lectura es un despliegue posterior, tras el
+  backfill en producción. Hasta entonces el bono se apoya en esa cota y en que
+  el mercaderista solo lee (y solo referencia) fotos de sus propias visitas.
 - **Una configuración que es un CONJUNTO se publica por RPC con guardia, no con
   un insert de varias filas.** Insertar sobre una `vigente_desde` que ya existe
   no falla: FUSIONA (la clave natural solo choca en el duplicado exacto) — y sin

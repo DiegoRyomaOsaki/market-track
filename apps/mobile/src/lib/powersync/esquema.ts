@@ -262,6 +262,14 @@ const revision_visita = new Table({
 // R2 (ADR-0003). `subida_at` es la única señal de "ya está en la nube" — la
 // escribe el subidor tras confirmar el PUT, y el panel la lee para saber qué
 // evidencia sigue en el teléfono.
+//
+// A propósito NO se declaran `verificada_at`, `bytes_r2` ni
+// `verificacion_intento_at`: las escribe solo el servidor y un trigger rechaza
+// cualquier valor que venga de la app. Si estuvieran aquí, el upsert de fila
+// entera con que el conector reintenta las mandaría, el servidor lo rechazaría
+// y `esRechazoPermanente()` descartaría la foto. El SDK descarta las columnas
+// que bajan y no están declaradas, así que el stream `SELECT * FROM foto` no
+// las trae a la réplica.
 const foto = new Table({
   tenant_id: column.text,
   visita_id: column.text,

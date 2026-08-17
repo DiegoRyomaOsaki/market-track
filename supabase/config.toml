@@ -420,6 +420,13 @@ deno_version = 2
 [functions.enviar-alerta-email]
 verify_jwt = false
 
+# La invoca pg_cron (`app.barrer_fotos_sin_verificar`, vía pg_net), que tampoco
+# manda un JWT: su puerta es el secreto compartido (x-webhook-secret), verificado
+# dentro de la función. Sin esto, la plataforma la 401-earía y ninguna foto se
+# sellaría jamás.
+[functions.fotos-verificar]
+verify_jwt = false
+
 # La invoca GoTrue como hook `send_sms`, no un cliente con JWT de Supabase: su
 # puerta es la firma del hook (Standard Webhooks), verificada dentro de la función.
 [functions.enviar-otp]

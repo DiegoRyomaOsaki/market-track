@@ -11,6 +11,7 @@
 
 import { z } from "npm:zod@4";
 
+import { igualesEnTiempoConstante } from "../_shared/secreto.ts";
 import { clienteServicio, json } from "../_shared/supabase.ts";
 
 const TIPOS_EMAIL = new Set(["quiebre", "desviacion_precio"]);
@@ -28,16 +29,6 @@ if (!WEBHOOK_SECRET) {
 
 // Del webhook solo se confía el id; el resto se re-lee de la base.
 const webhookSchema = z.object({ record: z.object({ id: z.guid() }) });
-
-/** Comparación en tiempo constante: el secreto no se filtra byte a byte. */
-function comparaSegura(a: string, b: string): boolean {
-  const ea = new TextEncoder().encode(a);
-  const eb = new TextEncoder().encode(b);
-  if (ea.length !== eb.length) return false;
-  let diff = 0;
-  for (let i = 0; i < ea.length; i++) diff |= ea[i] ^ eb[i];
-  return diff === 0;
-}
 
 /** Escapa lo que se interpola en el HTML del email. */
 function esc(v: unknown): string {
@@ -72,7 +63,10 @@ Deno.serve(async (req) => {
 
   // Secreto obligatorio, comparación en tiempo constante.
   if (
-    !comparaSegura(req.headers.get("x-webhook-secret") ?? "", WEBHOOK_SECRET)
+    !igualesEnTiempoConstante(
+      req.headers.get("x-webhook-secret") ?? "",
+      WEBHOOK_SECRET,
+    )
   ) {
     return json(401, { error: "secreto de webhook inválido" });
   }

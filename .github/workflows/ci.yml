@@ -75,6 +75,21 @@ jobs:
 
       - run: pnpm turbo run lint typecheck test --cache-dir=.turbo
 
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: v2.x
+
+      - name: Tests de las Edge Functions (Deno)
+        # La lógica pura de `supabase/functions/_shared/*.ts` (firmado de R2,
+        # hash del pase, decisión de verificación de fotos…) tiene tests Deno que
+        # hasta aquí solo corrían si alguien los lanzaba a mano — un test que
+        # nadie ejecuta aparenta cobertura y no protege nada. Son puros: sin
+        # base, sin red hacia fuera (los `--allow-*` son los que pide zod/aws4fetch
+        # al cargar). El arnés de INVOCACIÓN de las funciones (serve + llamada)
+        # sigue pendiente aparte.
+        working-directory: supabase/functions
+        run: deno task test
+
       - name: Build
         # El type checker NO enlaza el bundle: un módulo que resuelve para `tsc`
         # puede abortar el empaquetador igual. Pasó con una Server Action que

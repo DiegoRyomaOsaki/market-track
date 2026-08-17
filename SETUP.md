@@ -143,11 +143,38 @@ quedan ahí.
 ```bash
 supabase secrets set --project-ref <REF> \
   R2_ACCOUNT_ID=… R2_ACCESS_KEY_ID=… R2_SECRET_ACCESS_KEY=… R2_BUCKET=… \
-  RESEND_API_KEY=…
+  RESEND_API_KEY=… \
+  ALERTA_WEBHOOK_SECRET=… PASE_HASH_SECRET=… FOTO_VERIFICACION_SECRET=…
 ```
 
 > `SUPABASE_SERVICE_ROLE_KEY` **no se carga a mano**: Supabase ya lo inyecta en
 > las Edge Functions. Ponerlo otra vez sería una copia más que mantener.
+
+**En la base** (`alter database … set`) — las GUCs `app.settings.*` que leen los
+triggers y jobs de pg_cron para llamar a las Edge Functions con `pg_net`. **No
+son secretos de función ni migraciones**: viven en la configuración del
+`postgres` de cada proyecto, y sin ellas los webhooks son un **no-op silencioso**
+(en local, a propósito: no hay Resend ni R2 que consultar). Una sesión de pg_cron
+solo ve GUCs puestas a nivel de base o de rol.
+
+```sql
+alter database postgres set app.settings.functions_url = 'https://<REF>.supabase.co/functions/v1';
+alter database postgres set app.settings.alerta_webhook_secret = '<el mismo ALERTA_WEBHOOK_SECRET>';
+alter database postgres set app.settings.foto_verificacion_secret = '<el mismo FOTO_VERIFICACION_SECRET>';
+```
+
+Comprobar qué hay puesto: `select setconfig from pg_db_role_setting;`. Las
+sesiones nuevas las ven al reconectar. Quién las usa: `app.notificar_alerta_email`
+(email de alertas) y `app.barrer_fotos_sin_verificar` (sello de autenticidad de
+las fotos, cada 5 min). Para este último, además, verificar tras el despliegue
+que `pg_cron` quedó habilitada (`select * from cron.job`) y hacer un barrido de
+humo a mano:
+
+```bash
+curl -X POST https://<REF>.supabase.co/functions/v1/fotos-verificar \
+  -H 'x-webhook-secret: <FOTO_VERIFICACION_SECRET>' -H 'Content-Type: application/json' \
+  -d '{"modo":"barrer","limite":5}'      # esperar selladas > 0
+```
 
 ### Poner en marcha un entorno por primera vez
 

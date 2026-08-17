@@ -669,6 +669,7 @@ export type Database = {
       }
       foto: {
         Row: {
+          bytes_r2: number | null
           capturada_at: string
           creado_at: string
           geo: unknown
@@ -679,9 +680,12 @@ export type Database = {
           tenant_id: string
           tipo: Database["public"]["Enums"]["tipo_foto"]
           url_r2: string | null
+          verificacion_intento_at: string | null
+          verificada_at: string | null
           visita_id: string
         }
         Insert: {
+          bytes_r2?: number | null
           capturada_at: string
           creado_at?: string
           geo?: unknown
@@ -692,9 +696,12 @@ export type Database = {
           tenant_id?: string
           tipo: Database["public"]["Enums"]["tipo_foto"]
           url_r2?: string | null
+          verificacion_intento_at?: string | null
+          verificada_at?: string | null
           visita_id: string
         }
         Update: {
+          bytes_r2?: number | null
           capturada_at?: string
           creado_at?: string
           geo?: unknown
@@ -705,6 +712,8 @@ export type Database = {
           tenant_id?: string
           tipo?: Database["public"]["Enums"]["tipo_foto"]
           url_r2?: string | null
+          verificacion_intento_at?: string | null
+          verificada_at?: string | null
           visita_id?: string
         }
         Relationships: [
@@ -2414,6 +2423,14 @@ export type Database = {
         }
         Returns: Json
       }
+      fotos_pendientes_de_verificacion: {
+        Args: { p_limite?: number }
+        Returns: {
+          id: string
+          tenant_id: string
+          visita_id: string
+        }[]
+      }
       galeria_evidencia: {
         Args: {
           p_cadena?: string
@@ -2563,6 +2580,7 @@ export type Database = {
         }
         Returns: string
       }
+      sellar_fotos_verificadas: { Args: { p_sellos: Json }; Returns: number }
       tablero_contingencias: {
         Args: { p_fecha: string }
         Returns: {

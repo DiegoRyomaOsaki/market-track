@@ -352,7 +352,19 @@ cliente* a nuestros campos, guardado para no repetir el trabajo en cada carga.
 > siempre: el payload que llega a la Edge Function es entrada externa y se parsea
 > con Zod, como cualquier otra frontera.
 
-**`foto`** — toda imagen. `id, visita_id, levantamiento_id (null en la selfie de check-in y en las contingencias de visita), tenant_id, tipo, url_r2, hash, capturada_at, geo, subida_at`.
+**`foto`** — toda imagen. `id, visita_id, levantamiento_id (null en la selfie de check-in y en las contingencias de visita), tenant_id, tipo, url_r2, hash, capturada_at, geo, subida_at, verificada_at, bytes_r2, verificacion_intento_at`.
+
+> **`verificada_at` la escribe SOLO el servidor.** `hash` y `subida_at` los
+> escribe el móvil; `verificada_at` la sella la Edge Function `fotos-verificar`
+> (service_role) tras comprobar con un HEAD contra R2 que existe un objeto bajo
+> la key de la foto. Prueba que hay bytes subidos, **no** el contenido de la
+> imagen. Un trigger impide que la app la escriba o la cambie, y congela la
+> identidad de la fila (`id, tenant, visita, levantamiento, tipo, hash,
+> capturada_at`): un trigger y no un grant por columna, para que el upsert de
+> fila entera con que PowerSync reintenta siga pasando. La sella un barrido de
+> pg_cron cada 5 min (`app.barrer_fotos_sin_verificar`); 404 no sella, 5xx no
+> sella y se reintenta — nunca se borra nada. `verificacion_intento_at` ordena
+> la cola del barrido; `bytes_r2` es el tamaño que devolvió R2.
 
 | `tipo` | |
 |---|---|
@@ -512,7 +524,14 @@ Reparto sin doble conteo entre las dos variables que leen formularios: los de
 puntúan **herramientas de trabajo**. Las dos cuentan **filas `foto`**, nunca el
 uuid guardado dentro del `valor` de una respuesta: esa referencia no tiene verja
 de autenticidad (sin FK ni trigger — un rechazo del servidor haría que el
-conector de PowerSync descartara el paso entero). Si alguna pantalla resuelve
+conector de PowerSync descartara el paso entero). Hoy acreditan una foto por
+`foto.hash is not null`, que escribe el móvil: los `least()` acotan cuántas
+filas cuentan, no si son reales. La verja existe ya en `foto.verificada_at`
+(sello del servidor tras verificar contra R2), pero **el cambio de lectura del
+motor a esa columna todavía no está implementado**: va en un despliegue
+posterior, cuando el barrido haya sellado el histórico en producción — cambiar
+la lectura antes pondría a cero la calidad de registro y las herramientas del
+periodo abierto. Si alguna pantalla resuelve
 ese uuid algún día, lo hace con un join que exija `foto.levantamiento_id =
 levantamiento_respuesta.levantamiento_id` (o `foto.visita_id =
 visita_respuesta.visita_id`) y el mismo tenant, tratando el desajuste como "sin
