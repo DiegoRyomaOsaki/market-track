@@ -64,6 +64,25 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
+      - name: Migraciones sin duplicados ni desorden
+        # Lo primero y en un segundo: una migración mal numerada no rompe ningún
+        # test — rompe el DESPLIEGUE, y en silencio. `supabase db push` se planta
+        # ante una que ordene antes de la última ya aplicada y deja de aplicar
+        # TODAS las siguientes. Así estuvo staging seis migraciones por detrás
+        # desde el 14 ago 2026, con tres arreglos de seguridad sin desplegar.
+        #
+        # En un PR se compara contra la rama base. En un push a dev/main no hay
+        # base con la que comparar: solo se revisan nombres y duplicados.
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ -n "$BASE_REF" ]; then
+            git fetch --depth=1 origin "$BASE_REF"
+            node scripts/verificar-migraciones.mjs FETCH_HEAD
+          else
+            node scripts/verificar-migraciones.mjs
+          fi
+
       - run: pnpm install --frozen-lockfile
 
       - name: Caché de turbo
@@ -74,6 +93,12 @@ jobs:
           restore-keys: turbo-${{ runner.os }}-
 
       - run: pnpm turbo run lint typecheck test --cache-dir=.turbo
+
+      - name: Tests de los scripts de la raíz
+        # `scripts/` no es un workspace, así que `turbo run test` no lo ve. Aquí
+        # vive la lógica del guardarraíl de migraciones, que sin tests sería otra
+        # cosa que nadie sabe si funciona hasta que hace falta.
+        run: pnpm test:scripts
 
       - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:

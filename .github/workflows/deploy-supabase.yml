@@ -86,7 +86,20 @@ jobs:
 
       - name: Aplicar migraciones
         # `db push` nunca ejecuta seed.sql.
-        run: pnpm exec supabase db push --linked
+        #
+        # `--include-all` porque sin él este paso se PLANTA —y con él el
+        # despliegue entero— en cuanto una migración local ordena antes de la
+        # última aplicada en la nube: "Found local migration files to be inserted
+        # before the last migration on remote". No aplica ni esa ni ninguna de
+        # las siguientes. Pasó el 14 ago 2026 y nadie miró el rojo: staging se
+        # quedó seis migraciones por detrás, tres de ellas de seguridad.
+        #
+        # Lo que se acepta a cambio: una migración fuera de orden se aplica en
+        # silencio, y si toca lo mismo que una posterior ya aplicada, la revierte.
+        # Por eso el guardarraíl está en el CI de los PR (`verificar-migraciones`),
+        # que es donde renumerar todavía es gratis — aquí ya está mergeada, y
+        # renumerar algo que otro entorno ya aplicó es peor que aplicarlo tarde.
+        run: pnpm exec supabase db push --linked --include-all
 
       - name: Desplegar Edge Functions
         # Sin nombres: el CLI despliega todas las de `supabase/functions/`. La

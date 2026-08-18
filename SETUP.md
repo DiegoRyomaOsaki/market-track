@@ -207,6 +207,44 @@ supabase migration list --project-ref <REF>   # local y remoto deben coincidir
 supabase functions list --project-ref <REF>   # las de supabase/functions/
 ```
 
+### Migraciones que llegan fuera de orden
+
+`supabase migration new` numera con la hora **de tu reloj al crearla**, no con la
+de mergear. Con varias ramas abiertas a la vez, dos cosas pasan solas:
+
+- **dos ramas eligen el mismo timestamp** (pasó el 17 ago 2026), o
+- **una rama abierta el lunes se mergea el viernes**, detrás de otra numerada el
+  miércoles.
+
+La segunda es la cara: `supabase db push` **se planta** ante una migración local
+que ordena antes de la última aplicada en la nube y **deja de aplicar todas las
+siguientes**. El despliegue se pone rojo, pero como nada más falla, el rojo se
+puede quedar semanas sin mirar — así estuvo staging seis migraciones por detrás
+desde el 14 ago 2026, tres de ellas de seguridad.
+
+**El CI de cada PR lo caza antes de mergear** (`node scripts/verificar-migraciones.mjs`).
+Si se pone rojo, el arreglo es renumerar tu archivo por encima de la última de
+`dev` — mientras la migración siga en tu rama es gratis:
+
+```bash
+git mv supabase/migrations/2026MMDDHHMMSS_lo_tuyo.sql \
+       supabase/migrations/<mayor-que-la-última-de-dev>_lo_tuyo.sql
+pnpm exec supabase db reset            # comprobar que sigue aplicando limpio
+```
+
+Lo mismo a mano, cuando quieras comprobarlo antes de abrir el PR:
+
+```bash
+git fetch origin dev
+node scripts/verificar-migraciones.mjs origin/dev
+```
+
+**Nunca renumeres una migración ya mergeada**: puede estar aplicada en un entorno,
+y ahí el número es historia vivida, no un nombre. Para ese caso el despliegue usa
+`db push --include-all`, que la aplica fuera de orden. Es seguro **salvo** que la
+rezagada toque los mismos objetos que una posterior ya aplicada — entonces la
+revertiría. Antes de desatascar un despliegue así, comparar qué toca cada una.
+
 ---
 
 ## El flujo de ramas
