@@ -3,7 +3,11 @@
 
 import { describe, expect, it } from "vitest";
 
-import { revisarMigraciones, versionDe } from "./verificar-migraciones.mjs";
+import {
+  escaparAnotacion,
+  revisarMigraciones,
+  versionDe,
+} from "./verificar-migraciones.mjs";
 
 const BASE = ["20260814100000_motor.sql", "20260815100000_panel_metricas.sql"];
 
@@ -21,6 +25,29 @@ describe("versionDe", () => {
     expect(versionDe("2026081712000_corto.sql")).toBeNull();
     expect(versionDe("20260817120000-guion.sql")).toBeNull();
     expect(versionDe("20260817120000_sin_extension")).toBeNull();
+  });
+});
+
+describe("escaparAnotacion", () => {
+  it("neutraliza lo que cerraría el comando de workflow de GitHub", () => {
+    // El nombre del archivo lo elige quien abre el PR: si pudiera colar `::`,
+    // podría abrir otro comando (`::stop-commands::`) y silenciar el resto.
+    expect(escaparAnotacion("a::stop-commands::x")).toBe(
+      "a%3A%3Astop-commands%3A%3Ax",
+    );
+    expect(escaparAnotacion("una\nlínea\rnueva")).toBe("una%0Alínea%0Dnueva");
+  });
+
+  it("escapa el porcentaje primero, para no romper los escapes propios", () => {
+    // Si `%` se escapara al final, `%0A` acabaría como `%250A`.
+    expect(escaparAnotacion("100%")).toBe("100%25");
+    expect(escaparAnotacion("%0A")).toBe("%250A");
+  });
+
+  it("deja intacto un texto normal", () => {
+    expect(escaparAnotacion("20260817120000_lo_mio.sql sobra")).toBe(
+      "20260817120000_lo_mio.sql sobra",
+    );
   });
 });
 
@@ -65,6 +92,30 @@ describe("revisarMigraciones", () => {
     expect(problemas[0]).toContain("trabajo_de_campo");
   });
 
+  it("delata un .SQL en mayúscula, que el CLI tampoco aplicaría", () => {
+    // El filtro de extensión NO puede dejarlo fuera del análisis: sería el mismo
+    // silencio que este guardarraíl existe para romper.
+    const problemas = revisarMigraciones({
+      locales: [...BASE, "20260816100000_grito.SQL"],
+      enLaBase: BASE,
+    });
+    expect(problemas).toHaveLength(1);
+    expect(problemas[0]).toContain("20260816100000_grito.SQL");
+    expect(problemas[0]).toMatch(/SALTA/);
+  });
+
+  it("delata la colisión ENTRE RAMAS: mi versión ya la usa otra que está en la base", () => {
+    // El caso MAR-66/MAR-119 tal y como llega de verdad: la otra ya se mergeó,
+    // así que mi rama solo trae la mía. Aquí avisa la regla del orden, no la de
+    // duplicados — el veredicto es el mismo y la instrucción también.
+    const problemas = revisarMigraciones({
+      locales: [...BASE, "20260815100000_canje_de_pase.sql"],
+      enLaBase: BASE,
+    });
+    expect(problemas.join("\n")).toContain("20260815100000_canje_de_pase.sql");
+    expect(problemas.join("\n")).toMatch(/Renumérala por encima de/);
+  });
+
   it("delata una añadida que ordena antes de la última de la base", () => {
     // El caso real: 20260814120000 llegó cuando 20260815100000 ya estaba.
     const problemas = revisarMigraciones({
@@ -104,6 +155,30 @@ describe("revisarMigraciones", () => {
       revisarMigraciones({
         locales: [...BASE, "20260101000000_antiquisima.sql"],
         enLaBase: [],
+      }),
+    ).toEqual([]);
+  });
+
+  it("con la carpeta vacía no inventa problemas", () => {
+    expect(revisarMigraciones({ locales: [], enLaBase: BASE })).toEqual([]);
+  });
+
+  it("borrar una migración de la base no es asunto suyo", () => {
+    // Este guardarraíl mira la numeración de lo que la rama AÑADE. Que un
+    // borrado sea legítimo o no lo juzga la revisión, no un script.
+    expect(
+      revisarMigraciones({
+        locales: ["20260814100000_motor.sql"],
+        enLaBase: BASE,
+      }),
+    ).toEqual([]);
+  });
+
+  it("si la base no tiene ni una migración con nombre válido, no hay orden que juzgar", () => {
+    expect(
+      revisarMigraciones({
+        locales: ["20260101000000_mia.sql"],
+        enLaBase: ["a_mano.sql"],
       }),
     ).toEqual([]);
   });

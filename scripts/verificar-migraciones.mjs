@@ -13,6 +13,12 @@
 //      Por separado las dos están bien; al mergear la segunda, la base queda con
 //      dos migraciones que dicen ser la misma.
 //
+//      Ojo con quién lo delata: esta regla mira UN solo árbol, así que salta
+//      cuando los dos archivos aparecen juntos —el commit de merge que el CI de
+//      un PR revisa—. Si la primera ya está mergeada y la rama solo trae la
+//      suya, el que avisa es el punto 3: una versión repetida nunca ordena por
+//      encima de la base. Cambia el mensaje, no el veredicto.
+//
 //   3. FUERA DE ORDEN. Una rama añade una migración con timestamp ANTERIOR a la
 //      última que ya está en la rama base. `db push` se planta con "Found local
 //      migration files to be inserted before the last migration on remote" y
@@ -64,7 +70,12 @@ export function versionDe(archivo) {
 export function revisarMigraciones({ locales, enLaBase }) {
   const problemas = [];
 
-  const sqlLocales = locales.filter((a) => a.endsWith(".sql"));
+  // `.toLowerCase()` a propósito: el CLI de Supabase solo reconoce `.sql` en
+  // minúscula, así que un `.SQL` es una migración que no se aplica jamás. Si
+  // aquí se filtrara con la extensión exacta, ese archivo se caería del análisis
+  // entero —ni nombre, ni duplicados, ni orden— que es justo el silencio que
+  // este guardarraíl existe para romper. Entra, y la regla del nombre lo caza.
+  const sqlLocales = locales.filter((a) => a.toLowerCase().endsWith(".sql"));
 
   // 1. Nombres que el CLI saltaría en silencio.
   for (const archivo of sqlLocales
@@ -85,7 +96,13 @@ export function revisarMigraciones({ locales, enLaBase }) {
     if (version === null) continue;
     porVersion.set(version, [...(porVersion.get(version) ?? []), archivo]);
   }
-  for (const [version, archivos] of [...porVersion].sort()) {
+  // Comparador explícito: el orden por defecto de `sort()` compararía los pares
+  // convertidos a texto, y eso solo funciona por casualidad con versiones de
+  // ancho fijo.
+  const versionesRepetidas = [...porVersion].sort(([a], [b]) =>
+    a.localeCompare(b),
+  );
+  for (const [version, archivos] of versionesRepetidas) {
     if (archivos.length > 1) {
       problemas.push(
         `La versión ${version} la usan ${archivos.length} migraciones ` +
@@ -119,6 +136,24 @@ export function revisarMigraciones({ locales, enLaBase }) {
   }
 
   return problemas;
+}
+
+/**
+ * Escapa un texto para meterlo en un comando de workflow de GitHub (`::error::`).
+ * El nombre del archivo lo elige quien abre el PR: sin escapar, uno que llevase
+ * `::` o un salto de línea podría cerrar esta anotación y abrir otra —
+ * `::stop-commands::`, por ejemplo, silencia las de los pasos siguientes. Es el
+ * mismo escapado que hace `@actions/core`.
+ *
+ * @param {string} texto
+ * @returns {string}
+ */
+export function escaparAnotacion(texto) {
+  return texto
+    .replaceAll("%", "%25")
+    .replaceAll("\r", "%0D")
+    .replaceAll("\n", "%0A")
+    .replaceAll(":", "%3A");
 }
 
 /**
@@ -171,7 +206,9 @@ function main() {
   console.error(`\n  ${problemas.length} problema(s) en ${CARPETA}:\n`);
   for (const problema of problemas) {
     console.error(`  · ${problema}\n`);
-    if (anotar) console.error(`::error file=${CARPETA}::${problema}`);
+    if (anotar) {
+      console.error(`::error file=${CARPETA}::${escaparAnotacion(problema)}`);
+    }
   }
   console.error(`  Ver SETUP.md → "Migraciones que llegan fuera de orden".\n`);
   process.exit(1);
