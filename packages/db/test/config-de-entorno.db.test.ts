@@ -1,7 +1,7 @@
 import type { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { cargarConfig, conectar } from "./ayudas";
+import { cargarConfig, conectar, vaciarVault } from "./ayudas";
 
 // La configuración que leen los webhooks (`functions_url` y los dos secretos
 // compartidos) vive en `supabase_vault`, no en GUCs `app.settings.*`: en un
@@ -29,6 +29,17 @@ afterAll(async () => {
   await db.end();
 });
 
+/** Corre el test partiendo de un vault vacío, y lo revierte. */
+async function conVaultVacio<T>(fn: () => Promise<T>): Promise<T> {
+  await db.query("begin");
+  try {
+    await vaciarVault(db);
+    return await fn();
+  } finally {
+    await db.query("rollback");
+  }
+}
+
 async function config(clave: string): Promise<string | null> {
   const r = await db.query<{ valor: string | null }>(
     "select app.config($1) as valor",
@@ -46,60 +57,56 @@ async function faltante(): Promise<string[]> {
 
 describe("app.config", () => {
   it("devuelve el valor cargado en el vault", async () => {
-    await db.query("begin");
-    try {
+    await conVaultVacio(async () => {
       await cargarConfig(db, "functions_url", "http://localhost:9999/v1");
       expect(await config("functions_url")).toBe("http://localhost:9999/v1");
-    } finally {
-      await db.query("rollback");
-    }
+    });
   });
 
   it("devuelve NULL para una clave que no está cargada", async () => {
     // El caso de local, y el motivo de que el no-op de los webhooks exista.
-    expect(await config("functions_url")).toBeNull();
-    expect(await config("una_clave_que_nadie_ha_creado")).toBeNull();
+    await conVaultVacio(async () => {
+      expect(await config("functions_url")).toBeNull();
+      expect(await config("una_clave_que_nadie_ha_creado")).toBeNull();
+    });
   });
 });
 
 describe("app.config_faltante", () => {
   it("nombra las tres claves obligatorias cuando el vault está vacío", async () => {
-    expect(await faltante()).toEqual([...CLAVES].sort());
+    await conVaultVacio(async () => {
+      expect(await faltante()).toEqual([...CLAVES].sort());
+    });
   });
 
   it("deja de nombrar la clave en cuanto se carga", async () => {
-    await db.query("begin");
-    try {
+    await conVaultVacio(async () => {
+      const antes = await faltante();
       await cargarConfig(db, "functions_url", "http://localhost:9999/v1");
-      expect(await faltante()).not.toContain("functions_url");
-      expect(await faltante()).toHaveLength(CLAVES.length - 1);
-    } finally {
-      await db.query("rollback");
-    }
+
+      expect(antes).toContain("functions_url");
+      expect(await faltante()).toEqual(
+        antes.filter((clave) => clave !== "functions_url"),
+      );
+    });
   });
 
   it("sigue nombrando una clave cargada con el valor vacío", async () => {
     // Una clave presente pero vacía deja el webhook igual de mudo que una
     // ausente: un `is not null` a secas daría verde y no arreglaría nada.
-    await db.query("begin");
-    try {
+    await conVaultVacio(async () => {
       await cargarConfig(db, "alerta_webhook_secret", "");
       expect(await faltante()).toContain("alerta_webhook_secret");
-    } finally {
-      await db.query("rollback");
-    }
+    });
   });
 
   it("no devuelve ningún valor, solo nombres", async () => {
     // Su respuesta acaba en el log de un runner de CI: un secreto que saliera
     // por aquí quedaría escrito en claro para siempre.
-    await db.query("begin");
-    try {
+    await conVaultVacio(async () => {
       await cargarConfig(db, "alerta_webhook_secret", "un-secreto-de-verdad");
       expect(await faltante()).not.toContain("un-secreto-de-verdad");
-    } finally {
-      await db.query("rollback");
-    }
+    });
   });
 });
 

@@ -7,6 +7,7 @@ import {
   conectar,
   TENANTS,
   USUARIOS,
+  vaciarVault,
 } from "./ayudas";
 
 // La autenticidad de `foto` (`verificada_at`, `bytes_r2`,
@@ -528,6 +529,7 @@ describe("el barrido programado", () => {
     };
     await db.query("begin");
     try {
+      await vaciarVault(db);
       const antes = await encoladas();
       await db.query("select app.barrer_fotos_sin_verificar()");
       expect(await encoladas()).toBe(antes);
