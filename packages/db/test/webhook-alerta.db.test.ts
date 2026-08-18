@@ -1,7 +1,7 @@
 import type { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { conectar, TENANTS } from "./ayudas";
+import { cargarConfig, conectar, TENANTS, vaciarVault } from "./ayudas";
 
 // El trigger `notificar_alerta_email` encola una llamada HTTP (pg_net) a la Edge
 // Function SOLO para los tipos que van por email, y NUNCA debe romper el INSERT
@@ -30,9 +30,12 @@ describe("webhook de email de alertas (trigger pg_net)", () => {
   it("encola solo para los tipos relevantes (quiebre/desviacion_precio), no para el resto", async () => {
     await db.query("begin");
     try {
+      await vaciarVault(db);
       // Con la URL configurada, el trigger sí encola.
-      await db.query(
-        "select set_config('app.settings.functions_url', 'http://localhost:9999/functions/v1', true)",
+      await cargarConfig(
+        db,
+        "functions_url",
+        "http://localhost:9999/functions/v1",
       );
       const antes = await encoladas(db);
 
@@ -63,7 +66,8 @@ describe("webhook de email de alertas (trigger pg_net)", () => {
   it("sin la URL configurada, el trigger es no-op y el INSERT no se rompe", async () => {
     await db.query("begin");
     try {
-      // Sin set_config: functions_url es NULL → el trigger no encola nada.
+      // Sin nada en el vault: functions_url es NULL → no encola nada.
+      await vaciarVault(db);
       const antes = await encoladas(db);
       const r = await db.query<{ id: string }>(
         "insert into public.alerta (tenant_id, tipo, severidad) values ($1, 'quiebre', 'alta') returning id",

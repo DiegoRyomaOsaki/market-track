@@ -150,31 +150,55 @@ supabase secrets set --project-ref <REF> \
 > `SUPABASE_SERVICE_ROLE_KEY` **no se carga a mano**: Supabase ya lo inyecta en
 > las Edge Functions. Ponerlo otra vez sería una copia más que mantener.
 
-**En la base** (`alter database … set`) — las GUCs `app.settings.*` que leen los
-triggers y jobs de pg_cron para llamar a las Edge Functions con `pg_net`. **No
-son secretos de función ni migraciones**: viven en la configuración del
-`postgres` de cada proyecto, y sin ellas los webhooks son un **no-op silencioso**
-(en local, a propósito: no hay Resend ni R2 que consultar). Una sesión de pg_cron
-solo ve GUCs puestas a nivel de base o de rol.
+### La configuración que vive en el vault
+
+**En la base** (`vault.create_secret`) — los valores que leen los triggers y los
+jobs de pg_cron para llamar a las Edge Functions con `pg_net`. **No son secretos
+de función ni migraciones**: se cargan una vez por proyecto y sin ellos los
+webhooks son un **no-op silencioso** (en local, a propósito: no hay Resend ni R2
+que consultar).
 
 ```sql
-alter database postgres set app.settings.functions_url = 'https://<REF>.supabase.co/functions/v1';
-alter database postgres set app.settings.alerta_webhook_secret = '<el mismo ALERTA_WEBHOOK_SECRET>';
-alter database postgres set app.settings.foto_verificacion_secret = '<el mismo FOTO_VERIFICACION_SECRET>';
+select vault.create_secret('https://<REF>.supabase.co/functions/v1', 'functions_url',              'base de las Edge Functions de este proyecto');
+select vault.create_secret('<el mismo ALERTA_WEBHOOK_SECRET>',        'alerta_webhook_secret',      'compartido con enviar-alerta-email');
+select vault.create_secret('<el mismo FOTO_VERIFICACION_SECRET>',     'foto_verificacion_secret',   'compartido con fotos-verificar');
 ```
 
-Comprobar qué hay puesto: `select setconfig from pg_db_role_setting;`. Las
-sesiones nuevas las ven al reconectar. Quién las usa: `app.notificar_alerta_email`
-(email de alertas) y `app.barrer_fotos_sin_verificar` (sello de autenticidad de
-las fotos, cada 5 min). Para este último, además, verificar tras el despliegue
-que `pg_cron` quedó habilitada (`select * from cron.job`) y hacer un barrido de
-humo a mano:
+Para cambiar uno ya cargado, `create_secret` **falla** (el nombre es único):
+`select vault.update_secret(id, '<valor nuevo>') from vault.secrets where name = 'functions_url';`
+
+> **Por qué el vault y no `alter database … set app.settings.*`**, que es lo que
+> decía este runbook hasta el 18 ago 2026 — y que **nunca se pudo ejecutar**:
+> desde Postgres 15, fijar un parámetro *placeholder* a nivel de base o de rol
+> exige **superusuario**, y en Supabase gestionado `postgres` no lo es
+> (`rolsuper = false`). El intento muere con `42501: permission denied to set
+> parameter`. Tampoco hay salida por `grant set on parameter` ni por la API de
+> configuración del proyecto, que responde `400: Unrecognized key`. La que sí
+> está puesta, `app.settings.jwt_exp`, la pone `supabase_admin`, que es de ellos.
+>
+> Lo que costó creerlo: staging pasó **desde que existe** sin enviar un solo
+> correo de alerta y sin sellar una sola foto, las dos cosas en silencio.
+
+Comprobar qué falta: `select app.config_faltante();` — devuelve solo **nombres**,
+nunca valores, y es lo mismo que mira el despliegue. Quién los usa:
+`app.notificar_alerta_email` (email de alertas) y `app.barrer_fotos_sin_verificar`
+(sello de autenticidad de las fotos, cada 5 min). Para este último, además,
+verificar tras el despliegue que `pg_cron` quedó habilitada
+(`select * from cron.job`) y hacer un barrido de humo a mano:
 
 ```bash
 curl -X POST https://<REF>.supabase.co/functions/v1/fotos-verificar \
   -H 'x-webhook-secret: <FOTO_VERIFICACION_SECRET>' -H 'Content-Type: application/json' \
   -d '{"modo":"barrer","limite":5}'      # esperar selladas > 0
 ```
+
+**El despliegue lo comprueba solo.** El último paso de
+`.github/workflows/deploy-supabase.yml` consulta `app.config_faltante()` y pone
+el job **rojo** con el comando que falta por ejecutar. La primera vez que se
+despliega un entorno nuevo sale rojo, y así debe ser: es esta lista de deberes,
+no un fallo del pipeline. También caza la `functions_url` copiada de otro
+entorno — mandar los webhooks de producción a las funciones de staging responde
+`200` y no lo delata nada más.
 
 ### Poner en marcha un entorno por primera vez
 

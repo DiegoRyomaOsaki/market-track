@@ -67,6 +67,38 @@ export async function comoUsuario<T>(
   }
 }
 
+/**
+ * Deja el vault vacío. Va SIEMPRE dentro de una transacción que revierte.
+ *
+ * Todo test que dependa de qué configuración hay cargada empieza por aquí, en
+ * vez de dar por supuesto el estado de partida: `SETUP.md` dice que se carguen
+ * estas mismas claves en cada entorno, así que cualquiera puede tener una en su
+ * Postgres local para probar un webhook a mano. Un test que lo asumiera se
+ * pondría rojo por eso sin que nada estuviese mal — y taparía la fuga de otro
+ * test en vez de delatarla.
+ */
+export async function vaciarVault(client: Client): Promise<void> {
+  await client.query("delete from vault.secrets");
+}
+
+/**
+ * Carga una clave de configuración de entorno en el vault local, igual que
+ * `SETUP.md` la carga en la nube. Va SIEMPRE dentro de una transacción que
+ * revierte: `vault.secrets` es una tabla normal y su nombre es único, así que
+ * una fila que sobreviva al test rompe al siguiente que cargue la misma clave.
+ */
+export async function cargarConfig(
+  client: Client,
+  clave: string,
+  valor: string,
+): Promise<void> {
+  await client.query("select vault.create_secret($1, $2, $3)", [
+    valor,
+    clave,
+    "seed de test",
+  ]);
+}
+
 /** Cuántas filas ve este usuario en esta tabla. La pregunta central del harness. */
 export async function contarFilas(
   client: Client,
