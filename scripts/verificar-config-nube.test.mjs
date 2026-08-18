@@ -4,7 +4,11 @@
 
 import { describe, expect, it } from "vitest";
 
-import { leerRespuesta, revisarConfig } from "./verificar-config-nube.mjs";
+import {
+  conPayload,
+  leerRespuesta,
+  revisarConfig,
+} from "./verificar-config-nube.mjs";
 
 const REF = "twtoqaqgziwryuaibktt";
 const URL_BUENA = `https://${REF}.supabase.co/functions/v1`;
@@ -137,6 +141,17 @@ describe("leerRespuesta", () => {
     );
   });
 
+  it("enseña la respuesta recibida, para que el rojo se arregle sin otro despliegue", () => {
+    // La primera versión decía solo "no llegaron filas" y se callaba el resto:
+    // el despliegue de staging se puso rojo y no había forma de saber por qué
+    // sin reproducirlo a mano contra el proyecto.
+    const error = JSON.stringify({ _tag: "Error", error: { message: "boom" } });
+
+    expect(() => leerRespuesta(error)).toThrow(/Respuesta recibida/);
+    expect(() => leerRespuesta(error)).toThrow(/boom/);
+    expect(() => leerRespuesta("no soy json")).toThrow(/no soy json/);
+  });
+
   it("lanza si las columnas no son las que esta comprobación espera", () => {
     expect(() =>
       leerRespuesta(JSON.stringify({ rows: [{ otra_cosa: 1 }] })),
@@ -146,5 +161,31 @@ describe("leerRespuesta", () => {
         JSON.stringify({ rows: [{ faltan: [], functions_url: 42 }] }),
       ),
     ).toThrow(/`functions_url`/);
+  });
+});
+
+describe("conPayload", () => {
+  it("redacta la contraseña de una cadena de conexión antes de imprimirla", () => {
+    // Un error del CLI puede arrastrar la cadena de conexión entera, y esto va
+    // al log de un runner. GitHub enmascara lo que conoce; eso es su red, no la
+    // nuestra.
+    const salida = conPayload(
+      "falló",
+      "error: postgresql://postgres:sUp3r-s3cr3t@db.abc.supabase.co:5432/postgres rechazó la conexión",
+    );
+
+    expect(salida).not.toContain("sUp3r-s3cr3t");
+    expect(salida).toContain("postgresql://postgres:***@db.abc.supabase.co");
+  });
+
+  it("recorta una respuesta larga en vez de volcar el log entero", () => {
+    const salida = conPayload("falló", "x".repeat(2000));
+
+    expect(salida.length).toBeLessThan(600);
+    expect(salida).toContain("…");
+  });
+
+  it("deja intacta una respuesta corta y sin credenciales", () => {
+    expect(conPayload("falló", '{"rows":[]}')).toContain('{"rows":[]}');
   });
 });
