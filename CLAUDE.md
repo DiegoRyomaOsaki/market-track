@@ -98,6 +98,7 @@ todos/                task tracker
 | Build | `pnpm build` | |
 | Test | `pnpm test` | Vitest (web y packages) · Jest/jest-expo (móvil). Tests co-locados: `*.test.ts` junto al código. **No necesita Docker** |
 | **Aislamiento (RLS)** | `pnpm turbo run test:db` | `packages/db/test/` — **exige `supabase start`** |
+| Tests de `scripts/` | `pnpm test:scripts` | `scripts/` no es un workspace: `pnpm test` (turbo) **no lo ve** |
 | **Lint (todo)** | `pnpm turbo run lint` | raíz + workspaces |
 | **Type check (todo)** | `pnpm turbo run typecheck` | raíz + workspaces |
 | Lint (solo raíz) | `pnpm lint` | `eslint .` |

@@ -11,6 +11,7 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "test": "turbo run test",
+    "test:scripts": "vitest run --dir scripts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "format": "prettier --write .",
