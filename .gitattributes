@@ -3,3 +3,9 @@
 # commitea blobs con CRLF, y `prettier --check` se pone en rojo en el CI de Linux
 # con un error que no menciona los finales de línea por ningún lado.
 * text=auto eol=lf
+
+# La regla de arriba ya deja en paz a los binarios, pero por DETECCIÓN: git mira
+# los primeros bytes y decide. Los `.woff2` de `apps/web/src/fuentes` no dependen
+# de esa heurística — un fichero de fuente corrupto por una conversión de saltos
+# de línea no rompería aquí, sino en el clon de otra persona.
+*.woff2 binary
