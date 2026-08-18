@@ -357,6 +357,21 @@ Aún no hay `.env`. Al scaffoldear, crear `.env.example` por app. Previstas:
 - **El esquema `app` NO está expuesto por PostgREST** (`config.toml` publica solo
   `public` y `graphql_public`): `supabase.rpc(...)` no alcanza ninguna función de
   `app`. Para llamarla desde la app hace falta una envoltura delgada en `public`.
+- **Las GUCs `app.settings.*` NO se pueden poner en un Supabase gestionado.**
+  Desde Postgres 15, fijar un parámetro *placeholder* a nivel de base o de rol
+  exige **superusuario**, y `postgres` no lo es (`rolsuper = false`):
+  `alter database … set` muere con `42501 permission denied to set parameter`.
+  Tampoco hay salida por `grant set on parameter` ni por la API de configuración
+  del proyecto (`400: Unrecognized key`). La configuración de entorno va por
+  **`supabase_vault`**, con `app.config(clave)` como único lector. Lo que costó
+  descubrirlo: staging pasó desde que existía sin enviar un solo correo de
+  alerta ni sellar una foto, en silencio.
+- **Un no-op silencioso en la nube es indistinguible de "no había trabajo".**
+  El trigger de email y el barrido de fotos hacen `return` cuando les falta la
+  configuración —tiene que ser así: no pueden romper la escritura del sync—, así
+  que el hueco solo se ve si algo lo mira. Lo mira el último paso de
+  `deploy-supabase.yml` (`app.config_faltante()`), y por eso el primer despliegue
+  de un entorno nuevo sale **rojo a propósito**.
 - **Una columna que escribe el cliente no prueba nada del mundo real.**
   `foto.hash` y `foto.subida_at` los escribe el móvil, y un uuid dentro de
   `*_respuesta.valor` no tiene verja de autenticidad: cualquier lógica que pague

@@ -67,6 +67,24 @@ export async function comoUsuario<T>(
   }
 }
 
+/**
+ * Carga una clave de configuración de entorno en el vault local, igual que
+ * `SETUP.md` la carga en la nube. Va SIEMPRE dentro de una transacción que
+ * revierte: `vault.secrets` es una tabla normal y su nombre es único, así que
+ * una fila que sobreviva al test rompe al siguiente que cargue la misma clave.
+ */
+export async function cargarConfig(
+  client: Client,
+  clave: string,
+  valor: string,
+): Promise<void> {
+  await client.query("select vault.create_secret($1, $2, $3)", [
+    valor,
+    clave,
+    "seed de test",
+  ]);
+}
+
 /** Cuántas filas ve este usuario en esta tabla. La pregunta central del harness. */
 export async function contarFilas(
   client: Client,

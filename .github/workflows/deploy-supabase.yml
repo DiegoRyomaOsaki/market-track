@@ -105,3 +105,28 @@ jobs:
         # Sin nombres: el CLI despliega todas las de `supabase/functions/`. La
         # carpeta `_shared` no entra porque su nombre no es un slug válido.
         run: pnpm exec supabase functions deploy
+
+      - name: Configuración del entorno cargada
+        # Un no-op silencioso no se distingue de "no había alertas". El trigger
+        # del email y el barrido de fotos hacen `return` cuando les falta la
+        # configuración —a propósito: el trigger no puede romper la escritura del
+        # sync, y en local no hay a quién llamar—, así que staging estuvo desde
+        # que existe sin enviar un correo ni sellar una foto, en silencio.
+        #
+        # Va DESPUÉS de desplegar a propósito: el esquema y las funciones se
+        # aplican igual. Lo que se pone rojo es esta comprobación, con el comando
+        # exacto que falta por ejecutar.
+        #
+        # La primera vez que un entorno se despliega, ESTE PASO SALE ROJO y así
+        # debe ser: es la lista de deberes de SETUP.md, no un fallo del pipeline.
+        #
+        # Solo viajan NOMBRES: `app.config_faltante()` no devuelve valores, así
+        # que ningún secreto puede acabar escrito en el log de Actions.
+        # `functions_url` sí se lee — es la URL pública del proyecto, y sin ella
+        # no hay forma de comprobar que apunta a ESTE entorno y no al de al lado.
+        run: |
+          set -euo pipefail
+          pnpm exec supabase db query --linked --output json \
+            "select app.config_faltante() as faltan, app.config('functions_url') as functions_url" \
+            > config-nube.json
+          node scripts/verificar-config-nube.mjs "$PROJECT_REF" < config-nube.json

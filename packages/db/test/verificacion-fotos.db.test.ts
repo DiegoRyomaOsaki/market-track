@@ -1,7 +1,13 @@
 import type { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { comoUsuario, conectar, TENANTS, USUARIOS } from "./ayudas";
+import {
+  cargarConfig,
+  comoUsuario,
+  conectar,
+  TENANTS,
+  USUARIOS,
+} from "./ayudas";
 
 // La autenticidad de `foto` (`verificada_at`, `bytes_r2`,
 // `verificacion_intento_at`) la escribe SOLO el servidor: la Edge Function
@@ -526,8 +532,10 @@ describe("el barrido programado", () => {
       await db.query("select app.barrer_fotos_sin_verificar()");
       expect(await encoladas()).toBe(antes);
 
-      await db.query(
-        "select set_config('app.settings.functions_url', 'http://localhost:9999/functions/v1', true)",
+      await cargarConfig(
+        db,
+        "functions_url",
+        "http://localhost:9999/functions/v1",
       );
       await db.query("select app.barrer_fotos_sin_verificar()");
       expect(await encoladas()).toBe(antes + 1);
