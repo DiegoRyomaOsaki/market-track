@@ -33,6 +33,39 @@ import { escaparAnotacion } from "./verificar-migraciones.mjs";
 
 const SUFIJO_FUNCIONES = "/functions/v1";
 
+const ERROR_FALTAN =
+  "La columna `faltan` no es una lista de nombres de clave; la consulta no es la esperada.";
+
+/** Cuánto de la respuesta cruda se enseña. Suficiente para ver un error del CLI. */
+const MAX_PAYLOAD = 400;
+
+/**
+ * Añade al mensaje lo que de verdad llegó, que es lo único que permite arreglar
+ * un rojo sin gastar otro despliegue en averiguar qué pasó. La primera versión
+ * de este script decía «no llegaron filas» y se callaba el resto: obligaba a
+ * reproducirlo a mano contra el proyecto, o sea justo la fricción que este
+ * guardarraíl existe para quitar.
+ *
+ * REDACTA credenciales antes de imprimir: un error del CLI puede arrastrar una
+ * cadena de conexión con la contraseña de la base dentro, y esto va al log de un
+ * runner. GitHub enmascara los secretos que conoce, pero eso es su red de
+ * seguridad, no la nuestra.
+ *
+ * @param {string} mensaje
+ * @param {string} texto Respuesta cruda.
+ * @returns {string}
+ */
+export function conPayload(mensaje, texto) {
+  const redactado = texto
+    .replace(/(\w+:\/\/[^:@\s/]+):[^@\s]*@/g, "$1:***@")
+    .trim();
+  const recortado =
+    redactado.length > MAX_PAYLOAD
+      ? `${redactado.slice(0, MAX_PAYLOAD)}…`
+      : redactado;
+  return `${mensaje}\n  Respuesta recibida: ${recortado}`;
+}
+
 /**
  * Los problemas de configuración de un entorno de la nube, en frases que digan
  * qué ejecutar. Pura a propósito: la consulta la hace el shim de abajo.
@@ -135,16 +168,18 @@ export function leerRespuesta(texto) {
   try {
     cuerpo = JSON.parse(texto);
   } catch {
-    throw new Error(
-      `La salida de \`supabase db query\` no es JSON:\n${texto.slice(0, 500)}`,
-    );
+    throw new Error(conPayload("La salida no es JSON.", texto));
   }
 
   const filasCrudas = propiedad(cuerpo, "rows");
   if (!Array.isArray(filasCrudas) || filasCrudas.length !== 1) {
     throw new Error(
-      `Se esperaba exactamente una fila y llegaron ${Array.isArray(filasCrudas) ? filasCrudas.length : "ninguna"}. ` +
-        `¿Se aplicó la migración que crea \`app.config_faltante()\`?`,
+      conPayload(
+        `Se esperaba exactamente una fila y llegaron ${Array.isArray(filasCrudas) ? filasCrudas.length : "ninguna"}. ` +
+          "O la migración que crea `app.config_faltante()` no está aplicada, o " +
+          "el CLI devolvió un error en vez del resultado.",
+        texto,
+      ),
     );
   }
   /** @type {unknown[]} */
@@ -153,21 +188,19 @@ export function leerRespuesta(texto) {
 
   const clavesCrudas = propiedad(fila, "faltan");
   if (!Array.isArray(clavesCrudas)) {
-    throw new Error(
-      "La columna `faltan` no es una lista de nombres de clave; la consulta no es la esperada.",
-    );
+    throw new Error(conPayload(ERROR_FALTAN, texto));
   }
   /** @type {unknown[]} */
   const claves = clavesCrudas;
   if (!claves.every((clave) => typeof clave === "string")) {
-    throw new Error(
-      "La columna `faltan` no es una lista de nombres de clave; la consulta no es la esperada.",
-    );
+    throw new Error(conPayload(ERROR_FALTAN, texto));
   }
 
   const url = propiedad(fila, "functions_url");
   if (url !== null && url !== undefined && typeof url !== "string") {
-    throw new Error("La columna `functions_url` no es texto ni NULL.");
+    throw new Error(
+      conPayload("La columna `functions_url` no es texto ni NULL.", texto),
+    );
   }
 
   // El cast se apoya en el `every` de arriba, que es lo que acaba de recorrer
