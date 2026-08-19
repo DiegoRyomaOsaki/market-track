@@ -175,8 +175,24 @@ producto usa se activan en Dashboard → Authentication → Hooks:
 | **Send SMS** | `https://<REF>.supabase.co/functions/v1/enviar-otp`, con `SEND_SMS_HOOK_SECRET` | No se entrega ningún OTP: **nadie completa el 2FA**, y como el gate `aal2` vive en la RLS, una sesión que no llega a aal2 no ve ni una fila |
 | **Custom Access Token** | La función de Postgres `public.custom_access_token_hook` | El pase de acceso temporal no eleva la sesión a `aal2` (ADR-0008) |
 
+Y **el factor Teléfono hay que habilitarlo aparte**, en Authentication →
+Multi-Factor Authentication: *enroll* y *verify*. `config.toml` lo trae en
+`[auth.mfa.phone]`, pero —otra vez— eso solo manda en local. Sin él, enrolar el
+segundo factor responde:
+
+```
+422 mfa_phone_enroll_not_enabled — "MFA enroll is disabled for Phone"
+```
+
+> "Teléfono" es el mecanismo, no el medio. La entrega la reescribe el hook
+> `send_sms`, que normalmente manda el código **por correo**. Es la rareza que
+> documenta el ADR-0008: Supabase no tiene un factor "email", así que el correo
+> se monta encima del factor Teléfono.
+
 Misma familia que apagar *Allow public access* en Realtime: es configuración de
 proyecto, no viaja en migraciones, y no hay forma de ponerla en el repositorio.
+**Son tres interruptores, no dos** — y el 2FA no funciona hasta que están los
+tres.
 
 ### La configuración que vive en el vault
 
