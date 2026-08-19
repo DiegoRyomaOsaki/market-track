@@ -140,7 +140,20 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+declare
+  -- Si el cambio sale también al canal del cliente dueño de la fila.
+  --
+  -- Se resuelve en un `if` aparte y NO dentro de la condición de abajo: PL/pgSQL
+  -- evalúa cada expresión como una consulta SQL entera, sin cortocircuito que
+  -- valga, así que un `tg_table_name <> 'alerta' or ...new.tipo...` intenta
+  -- resolver `new.tipo` también para `visita` —que no tiene esa columna— y el
+  -- feed de visitas entero se cae al WARNING de abajo. Medido: el seed lo delató.
+  al_canal_del_tenant boolean := true;
 begin
+  if tg_table_name = 'alerta' then
+    al_canal_del_tenant := app.tipo_alerta_del_cliente(new.tipo);
+  end if;
+
   -- El feed en vivo NUNCA puede tumbar la escritura que lo origina.
   --
   -- Este trigger corre dentro de la transacción del check-in o de la alerta, y el
@@ -161,7 +174,7 @@ begin
     --
     -- Salvo las alertas que no son del cliente-marca: esas salen SOLO al canal del
     -- staff. Misma regla que la política de lectura, mismo dueño.
-    if tg_table_name <> 'alerta' or app.tipo_alerta_del_cliente(new.tipo) then
+    if al_canal_del_tenant then
       perform realtime.broadcast_changes(
         app.topico_tenant(new.tenant_id, tg_table_name),
         tg_op, tg_op, tg_table_name, tg_table_schema, new, old

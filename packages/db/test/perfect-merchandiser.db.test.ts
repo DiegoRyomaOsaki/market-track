@@ -1464,7 +1464,9 @@ describe("guardarraíl: una caída de R2 no cierra el periodo", () => {
       await c.query("set local role authenticated");
 
       const r = await calcular(c, MES_CERRADO);
-      expect(r?.cerrado_at).toBe(cerrado?.cerrado_at);
+      // `toEqual` y no `toBe`: pg devuelve `timestamptz` como Date, y dos Date
+      // iguales no son el mismo objeto.
+      expect(r?.cerrado_at).toEqual(cerrado?.cerrado_at);
       expect(r?.cierre_bloqueado).toBe(false);
       expect(r?.calidad_pct).toBe(cerrado?.calidad_pct);
       expect(await alertasDeVerificacion(c)).toBe(0);

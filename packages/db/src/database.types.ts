@@ -183,6 +183,7 @@ export type Database = {
           peso_tiempo_efectivo: number
           tenant_id: string
           tolerancia_puntualidad_min: number
+          umbral_fotos_sin_verificar_pct: number
           vigente_desde: string
         }
         Insert: {
@@ -199,6 +200,7 @@ export type Database = {
           peso_tiempo_efectivo?: number
           tenant_id: string
           tolerancia_puntualidad_min: number
+          umbral_fotos_sin_verificar_pct?: number
           vigente_desde?: string
         }
         Update: {
@@ -215,6 +217,7 @@ export type Database = {
           peso_tiempo_efectivo?: number
           tenant_id?: string
           tolerancia_puntualidad_min?: number
+          umbral_fotos_sin_verificar_pct?: number
           vigente_desde?: string
         }
         Relationships: [
@@ -1411,9 +1414,13 @@ export type Database = {
           campos_obligatorios: number
           campos_respondidos: number
           cerrado_at: string | null
+          cierre_bloqueado: boolean
           config_id: string
+          fotos_del_periodo: number
           fotos_esperadas: number
           fotos_presentes: number
+          fotos_subidas: number
+          fotos_verificadas: number
           herramientas_pct: number | null
           items_checklist: number
           items_cumplidos: number
@@ -1437,9 +1444,13 @@ export type Database = {
           campos_obligatorios?: number
           campos_respondidos?: number
           cerrado_at?: string | null
+          cierre_bloqueado?: boolean
           config_id: string
+          fotos_del_periodo?: number
           fotos_esperadas?: number
           fotos_presentes?: number
+          fotos_subidas?: number
+          fotos_verificadas?: number
           herramientas_pct?: number | null
           items_checklist?: number
           items_cumplidos?: number
@@ -1463,9 +1474,13 @@ export type Database = {
           campos_obligatorios?: number
           campos_respondidos?: number
           cerrado_at?: string | null
+          cierre_bloqueado?: boolean
           config_id?: string
+          fotos_del_periodo?: number
           fotos_esperadas?: number
           fotos_presentes?: number
+          fotos_subidas?: number
+          fotos_verificadas?: number
           herramientas_pct?: number | null
           items_checklist?: number
           items_cumplidos?: number
@@ -2566,7 +2581,10 @@ export type Database = {
           p_mercaderista?: string
           p_tipo: Database["public"]["Enums"]["periodo_puntaje"]
         }
-        Returns: number
+        Returns: {
+          bloqueados: number
+          procesados: number
+        }[]
       }
       reordenar_paradas: {
         Args: { p_paradas: string[]; p_rutero_id: string }
@@ -2670,6 +2688,7 @@ export type Database = {
         | "promo_no_activa"
         | "exhibicion_incompleta"
         | "contingencia"
+        | "verificacion_fotos"
       tipo_exhibicion: "cabecera" | "isla" | "ruma" | "pop" | "adicional"
       tipo_foto:
         | "selfie"
@@ -2871,6 +2890,7 @@ export const Constants = {
         "promo_no_activa",
         "exhibicion_incompleta",
         "contingencia",
+        "verificacion_fotos",
       ],
       tipo_exhibicion: ["cabecera", "isla", "ruma", "pop", "adicional"],
       tipo_foto: [
