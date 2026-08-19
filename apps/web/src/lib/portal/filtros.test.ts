@@ -109,6 +109,14 @@ describe("leerTipoFoto", () => {
 });
 
 describe("leerFiltrosAlerta", () => {
+  it("un tipo de alerta de STAFF escrito a mano en la URL cae a null", () => {
+    // `verificacion_fotos` habla del bono de un mercaderista y la política RLS no
+    // se la devolvería nunca al cliente-marca. Filtrar por él dejaría la bandeja
+    // vacía sin explicar por qué; se trata como lo que es, un valor que no
+    // pertenece a esta pantalla.
+    expect(leerFiltrosAlerta({ tipo: "verificacion_fotos" }).tipo).toBeNull();
+  });
+
   it("lee los tres filtros de la bandeja cuando son válidos", () => {
     expect(
       leerFiltrosAlerta({

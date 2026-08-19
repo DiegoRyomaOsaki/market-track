@@ -220,6 +220,32 @@ describe("alertas de staff: el cliente-marca no las ve", () => {
     });
   });
 
+  it("clasifica TODOS los valores del enum, sin dejar ninguno sin decidir", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      // La regla del proyecto: una función que se ramifica sobre un enum se
+      // prueba con todos sus valores. Aquí además importa el fail-closed — el
+      // tipo que alguien añada mañana tiene que nacer siendo de staff, y este
+      // test se pondrá rojo para obligar a decidirlo a conciencia.
+      const r = await c.query<{ tipo: string; del_cliente: boolean }>(
+        `select t::text as tipo, app.tipo_alerta_del_cliente(t) as del_cliente
+         from unnest(enum_range(null::public.tipo_alerta)) as t
+         order by t::text`,
+      );
+      const porTipo = Object.fromEntries(
+        r.rows.map((f) => [f.tipo, f.del_cliente]),
+      );
+      expect(porTipo).toEqual({
+        quiebre: true,
+        diferencia_stock: true,
+        desviacion_precio: true,
+        promo_no_activa: true,
+        exhibicion_incompleta: true,
+        contingencia: true,
+        verificacion_fotos: false,
+      });
+    });
+  });
+
   it("las alertas de la operación de tienda las sigue viendo el cliente", async () => {
     await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
       await c.query("set local role postgres");

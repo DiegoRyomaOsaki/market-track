@@ -258,6 +258,10 @@ export function FormMerchandiser({
             cada nivel de bono.
           </span>
         </label>
+      </fieldset>
+
+      <fieldset className="flex flex-wrap gap-3" disabled={soloLectura}>
+        <legend className="text-[13px] font-bold">Guardarraíl de cierre</legend>
         <label className="flex w-44 flex-col gap-1">
           <span className={etiqueta}>Umbral de fotos sin verificar</span>
           <input
@@ -274,8 +278,8 @@ export function FormMerchandiser({
             className="text-[11.5px] text-muted-foreground"
           >
             Porcentaje de fotos subidas y sin sellar por el servidor a partir del
-            cual el periodo no se cierra. Evita que una caída de R2 pague el bono
-            sobre evidencia que no llegó.
+            cual el periodo no se cierra. Evita pagar el bono sobre evidencia que
+            no terminó de guardarse.
           </span>
         </label>
       </fieldset>

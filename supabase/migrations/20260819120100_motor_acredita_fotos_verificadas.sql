@@ -102,9 +102,18 @@ grant execute on function app.tipo_alerta_del_cliente(public.tipo_alerta)
 -- ⚠️ `app.tipo_alerta_del_cliente(tipo)` va SIN envolver en `(select ...)`, al
 -- contrario que `app.tenant_actual()`. La regla del proyecto —envolver siempre—
 -- aplica a las funciones que NO dependen de la fila: envueltas se evalúan una vez
--- por consulta en vez de una por fila. Esta depende de `tipo`, que es por fila:
--- envolverla la convertiría en una subconsulta correlacionada, que es peor. Al
--- ser `immutable` y de una sola expresión, Postgres la inlinea en el predicado.
+-- por consulta en vez de una por fila. Esta depende de `tipo`, que es por fila, y
+-- envolverla la convertiría en un SubPlan correlacionado — peor que la llamada
+-- directa.
+--
+-- Y NO se inlinea, aunque sea `immutable` y de una sola expresión: Postgres nunca
+-- inlinea una función SQL que lleve un `SET` a nivel de función, porque ejecutarla
+-- exige envolverla en un push/pop de GUC. Medido con EXPLAIN sobre 50.000 alertas:
+-- el plan enseña `Filter: (... and app.tipo_alerta_del_cliente(alerta.tipo))`, una
+-- llamada por fila superviviente, no la comparación contra el array. La misma
+-- función sin `set search_path` sí se inlinea — pero quitarlo para ganar el inline
+-- sería cambiar una llamada barata (comparar contra un array de seis valores) por
+-- un `search_path` mutable en una función que gobierna un aislamiento. No se toca.
 alter policy alerta_usuario_lee_su_tenant on public.alerta
   using (
     tenant_id = (select app.tenant_actual())

@@ -1413,6 +1413,87 @@ describe("guardarraíl: una caída de R2 no cierra el periodo", () => {
     });
   });
 
+  /**
+   * Publica una config con el umbral dado, vigente desde antes del periodo de
+   * prueba. `vigente_desde` distinta de la del seed: la clave natural es
+   * (tenant, vigente_desde) y la fila del seed rige desde 2026-01-01.
+   */
+  async function conUmbral(c: Client, umbral: number): Promise<void> {
+    await c.query("set local role postgres");
+    await c.query(
+      `insert into public.config_perfect_merchandiser
+         (tenant_id, peso_puntualidad, peso_asistencia, peso_tiempo_efectivo,
+          peso_calidad, peso_herramientas, tolerancia_puntualidad_min,
+          minutos_tardanza_cero, dias_gracia_cierre,
+          umbral_fotos_sin_verificar_pct, vigente_desde)
+       values ($1, 25, 30, 0, 25, 20, 15, 60, 7, $2, '2026-01-15')`,
+      [TENANTS.maracumango, umbral],
+    );
+    await c.query("set local role authenticated");
+  }
+
+  it("el umbral es una frontera ESTRICTA: igualarlo no bloquea", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      // Una de dos subidas sin sellar = 50 %, y el umbral en 50: `>` es falso.
+      // Si alguien cambiara el operador a `>=`, este test se pone rojo — y sin
+      // él, ese cambio pasaría verde.
+      await conUmbral(c, 50);
+      await conDosFotos(c, "60", "50", "51", "verificada", "subida");
+
+      const r = await calcular(c, MES_CERRADO);
+      expect(r?.cierre_bloqueado).toBe(false);
+      expect(r?.cerrado_at).not.toBeNull();
+    });
+  });
+
+  it("con el umbral en 0, una sola foto sin sellar bloquea el cierre", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await conUmbral(c, 0);
+      await conDosFotos(c, "61", "52", "53", "verificada", "subida");
+
+      const r = await calcular(c, MES_CERRADO);
+      expect(r?.cierre_bloqueado).toBe(true);
+      expect(r?.cerrado_at).toBeNull();
+    });
+  });
+
+  it("con el umbral en 100, ni el pipeline entero caído bloquea", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      // 100 % sin sellar contra un umbral de 100: `100 > 100` es falso. Es la
+      // vía de escape del admin que decide asumir el riesgo, y tiene que existir.
+      await conUmbral(c, 100);
+      await conDosFotos(c, "62", "54", "55", "subida", "subida");
+
+      const r = await calcular(c, MES_CERRADO);
+      expect(r?.cierre_bloqueado).toBe(false);
+      expect(r?.cerrado_at).not.toBeNull();
+    });
+  });
+
+  it("las fotos de OTRO mercaderista no entran en el denominador", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      // El del cliente rival deja su periodo lleno de evidencia sin sellar. Si la
+      // consulta de salud no acotara por mercaderista, arrastraría el cierre del
+      // nuestro — el fallo recurrente del proyecto: la lectura sin acotar pasa
+      // verde hasta que cruza clientes.
+      await conDosFotos(c, "63", "56", "57", "verificada", "verificada");
+      await c.query("set local role postgres");
+      await c.query(
+        `insert into public.rutero (id, tenant_id, mercaderista_id, fecha, estado)
+         values ($1, $2, $3, '2026-02-11', 'publicado')`,
+        [id("1", "64"), TENANTS.rival, USUARIOS.mercaderistaRival],
+      );
+      await c.query("set local role authenticated");
+
+      const r = await calcular(c, MES_CERRADO);
+      // Solo las dos suyas, las dos selladas: ni denominador contaminado ni
+      // bloqueo prestado.
+      expect(r?.fotos_del_periodo).toBe(2);
+      expect(r?.fotos_subidas).toBe(2);
+      expect(r?.cierre_bloqueado).toBe(false);
+    });
+  });
+
   it("recalcular tres veces levanta UNA sola alerta", async () => {
     await comoUsuario(db, USUARIOS.admin, async (c) => {
       await conDosFotos(c, "75", "88", "89", "verificada", "subida");

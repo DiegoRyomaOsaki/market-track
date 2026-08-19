@@ -161,5 +161,16 @@ describe("FormMerchandiser", () => {
     ).toBeNull();
     const fieldset = peso("Puntualidad").closest("fieldset");
     expect(fieldset?.hasAttribute("disabled")).toBe(true);
+    // Cada fieldset lleva su propio `disabled`: comprobar solo el de los pesos
+    // dejaría sin cubrir los otros dos, y el umbral vive en el suyo.
+    //
+    // Se comprueba el FIELDSET y no `input.disabled`: jsdom refleja ahí el
+    // atributo del propio input, no el estado que hereda del fieldset — el
+    // navegador sí lo deshabilita.
+    expect(
+      campoPorEtiqueta(/fotos sin verificar/i)
+        .closest("fieldset")
+        ?.hasAttribute("disabled"),
+    ).toBe(true);
   });
 });
