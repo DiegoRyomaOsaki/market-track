@@ -144,11 +144,55 @@ quedan ahí.
 supabase secrets set --project-ref <REF> \
   R2_ACCOUNT_ID=… R2_ACCESS_KEY_ID=… R2_SECRET_ACCESS_KEY=… R2_BUCKET=… \
   RESEND_API_KEY=… \
-  ALERTA_WEBHOOK_SECRET=… PASE_HASH_SECRET=… FOTO_VERIFICACION_SECRET=…
+  ALERTA_WEBHOOK_SECRET=… PASE_HASH_SECRET=… FOTO_VERIFICACION_SECRET=… \
+  SEND_SMS_HOOK_SECRET='v1,whsec_<base64 de ≥32 bytes>'
 ```
+
+**Ocho de ellos son obligatorios porque su función es *fail-closed*:** sin el
+secreto lanza al cargar el módulo y no atiende ni una petición. Es la postura
+correcta para un endpoint cuya única puerta es ese secreto — pero enterarse por
+casualidad no lo es, así que **el despliegue lo comprueba** (`scripts/verificar-
+secretos-funciones.mjs`) y se pone rojo nombrando el que falte. `RESEND_API_KEY`
+y `RESEND_FROM` no entran en esa lista: sin ellas el envío degrada a *dry-run*,
+no revienta.
+
+> `SEND_SMS_HOOK_SECRET` tiene dos trampas. **El formato lo valida el CLI**
+> (`v1,whsec_<base64>`), no solo la función: uno mal formado hace que `supabase
+> start` muera al leer `config.toml`, en local y en CI. Y su valor tiene que ser
+> **el mismo** que el proyecto tenga en Authentication → Hooks; cargarlo sin
+> activar el hook allí deja el 2FA igual de roto.
 
 > `SUPABASE_SERVICE_ROLE_KEY` **no se carga a mano**: Supabase ya lo inyecta en
 > las Edge Functions. Ponerlo otra vez sería una copia más que mantener.
+
+### ⚠️ Los hooks de auth se activan a mano, en cada proyecto
+
+`config.toml` **solo manda en local**. En la nube, los dos hooks que este
+producto usa se activan en Dashboard → Authentication → Hooks:
+
+| Hook | Apunta a | Sin él |
+|---|---|---|
+| **Send SMS** | `https://<REF>.supabase.co/functions/v1/enviar-otp`, con `SEND_SMS_HOOK_SECRET` | No se entrega ningún OTP: **nadie completa el 2FA**, y como el gate `aal2` vive en la RLS, una sesión que no llega a aal2 no ve ni una fila |
+| **Custom Access Token** | La función de Postgres `public.custom_access_token_hook` | El pase de acceso temporal no eleva la sesión a `aal2` (ADR-0008) |
+
+Y **el factor Teléfono hay que habilitarlo aparte**, en Authentication →
+Multi-Factor Authentication: *enroll* y *verify*. `config.toml` lo trae en
+`[auth.mfa.phone]`, pero —otra vez— eso solo manda en local. Sin él, enrolar el
+segundo factor responde:
+
+```
+422 mfa_phone_enroll_not_enabled — "MFA enroll is disabled for Phone"
+```
+
+> "Teléfono" es el mecanismo, no el medio. La entrega la reescribe el hook
+> `send_sms`, que normalmente manda el código **por correo**. Es la rareza que
+> documenta el ADR-0008: Supabase no tiene un factor "email", así que el correo
+> se monta encima del factor Teléfono.
+
+Misma familia que apagar *Allow public access* en Realtime: es configuración de
+proyecto, no viaja en migraciones, y no hay forma de ponerla en el repositorio.
+**Son tres interruptores, no dos** — y el 2FA no funciona hasta que están los
+tres.
 
 ### La configuración que vive en el vault
 

@@ -130,3 +130,22 @@ jobs:
             "select app.config_faltante() as faltan, app.config('functions_url') as functions_url" \
             > config-nube.json
           node scripts/verificar-config-nube.mjs "$PROJECT_REF" < config-nube.json
+
+      - name: Secretos de las Edge Functions
+        # `if: always()` a propósito: si el paso anterior encontró configuración
+        # que falta, quiero que ESTE también corra. Un entorno nuevo tiene las dos
+        # listas de deberes a la vez, y descubrirlas de una en una cuesta un
+        # despliegue por cada mitad.
+        #
+        # Varias funciones son fail-closed: sin su secreto lanzan al cargar y no
+        # atienden ni una petición. Es la postura correcta; lo que no lo es es
+        # enterarse por casualidad, que pasó dos veces en un día (el motor de
+        # alertas, el barrido de fotos y `enviar-otp`, este último dejando a
+        # cualquiera sin poder completar el 2FA).
+        #
+        # `secrets list` devuelve NOMBRES y digests: ningún valor viaja al log.
+        if: always()
+        run: |
+          set -euo pipefail
+          pnpm exec supabase secrets list --project-ref "$PROJECT_REF" -o json > secretos-funciones.json
+          node scripts/verificar-secretos-funciones.mjs "$PROJECT_REF" < secretos-funciones.json
