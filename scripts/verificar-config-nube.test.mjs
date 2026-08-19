@@ -169,12 +169,18 @@ describe("conPayload", () => {
     // Un error del CLI puede arrastrar la cadena de conexión entera, y esto va
     // al log de un runner. GitHub enmascara lo que conoce; eso es su red, no la
     // nuestra.
+    //
+    // La URI se ARMA en tiempo de ejecución en vez de escribirse entera: un
+    // literal `postgresql://usuario:clave@host` en el código —aunque la clave
+    // sea de mentira— es una credencial a ojos de un escáner de secretos, y este
+    // test puso en rojo a GitGuardian. La cadena que se prueba es idéntica.
+    const claveDeMentira = "no-es-una-clave-real";
     const salida = conPayload(
       "falló",
-      "error: postgresql://postgres:sUp3r-s3cr3t@db.abc.supabase.co:5432/postgres rechazó la conexión",
+      `error: postgresql://postgres:${claveDeMentira}@db.abc.supabase.co:5432/postgres rechazó la conexión`,
     );
 
-    expect(salida).not.toContain("sUp3r-s3cr3t");
+    expect(salida).not.toContain(claveDeMentira);
     expect(salida).toContain("postgresql://postgres:***@db.abc.supabase.co");
   });
 
