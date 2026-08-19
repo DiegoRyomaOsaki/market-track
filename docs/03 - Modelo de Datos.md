@@ -364,7 +364,8 @@ cliente* a nuestros campos, guardado para no repetir el trabajo en cada carga.
 > fila entera con que PowerSync reintenta siga pasando. La sella un barrido de
 > pg_cron cada 5 min (`app.barrer_fotos_sin_verificar`); 404 no sella, 5xx no
 > sella y se reintenta — nunca se borra nada. `verificacion_intento_at` ordena
-> la cola del barrido; `bytes_r2` es el tamaño que devolvió R2.
+> la cola del barrido; `bytes_r2` es el tamaño que devolvió R2. **El motor del
+> plan de lealtad acredita por esta columna**, nunca por `hash`.
 
 | `tipo` | |
 |---|---|
@@ -392,7 +393,13 @@ cliente* a nuestros campos, guardado para no repetir el trabajo en cada carga.
 |---|---|---|
 | id, tenant_id, visita_id | FK | |
 | marca_id | uuid FK | de qué marca es la alerta — el portal filtra por ella |
-| tipo | enum | `quiebre`\|`diferencia_stock`\|`desviacion_precio`\|`promo_no_activa`\|`vencimiento`\|`exhibicion_incompleta`\|`hora_extra`\|`contingencia` |
+| tipo | enum | `quiebre`\|`diferencia_stock`\|`desviacion_precio`\|`promo_no_activa`\|`exhibicion_incompleta`\|`contingencia`\|`verificacion_fotos` |
+
+> **`verificacion_fotos` es de STAFF, no del cliente-marca.** La levanta el
+> guardarraíl del plan de lealtad y habla del bono de un mercaderista. Quien
+> impide que llegue al portal es la política `alerta_usuario_lee_su_tenant` (y,
+> para el feed en vivo, `app.difundir_cambio_en_vivo`), a través del whitelist
+> `app.tipo_alerta_del_cliente` — no la consulta que agrupe las alertas.
 | severidad | enum | `info`\|`alta`\|`critica` |
 | canal | enum | `dashboard`\|`email`\|`whatsapp` |
 | estado | enum | `nueva`\|`vista`\|`resuelta` |
@@ -524,14 +531,32 @@ Reparto sin doble conteo entre las dos variables que leen formularios: los de
 puntúan **herramientas de trabajo**. Las dos cuentan **filas `foto`**, nunca el
 uuid guardado dentro del `valor` de una respuesta: esa referencia no tiene verja
 de autenticidad (sin FK ni trigger — un rechazo del servidor haría que el
-conector de PowerSync descartara el paso entero). Hoy acreditan una foto por
-`foto.hash is not null`, que escribe el móvil: los `least()` acotan cuántas
-filas cuentan, no si son reales. La verja existe ya en `foto.verificada_at`
-(sello del servidor tras verificar contra R2), pero **el cambio de lectura del
-motor a esa columna todavía no está implementado**: va en un despliegue
-posterior, cuando el barrido haya sellado el histórico en producción — cambiar
-la lectura antes pondría a cero la calidad de registro y las herramientas del
-periodo abierto. Si alguna pantalla resuelve
+conector de PowerSync descartara el paso entero). Acreditan una foto por
+**`foto.verificada_at is not null`**, el sello que estampa el servidor tras
+comprobar contra R2 que el binario existe: `hash` y `subida_at` los escribe el
+móvil y no prueban nada del mundo real, y los `least()` acotan cuántas filas
+cuentan, no si son reales. Lo que el sello no prueba es el CONTENIDO de la
+imagen — eso lo acotan el watermark en captura y esos mismos `least()`.
+
+**El guardarraíl anti-outage.** Como el crédito depende de que R2 responda, una
+caída o una rotación de credenciales pondría la calidad de registro y las
+herramientas de todos a cero con forma de mal desempeño. Por eso, en el momento
+en que el cálculo iba a sellar el periodo, mira qué porcentaje de las fotos
+**subidas** del periodo sigue sin verificar; si supera
+`config_perfect_merchandiser.umbral_fotos_sin_verificar_pct` (20 % por defecto),
+**no cierra el periodo**: escribe el puntaje, deja `cerrado_at` en null, marca
+`cierre_bloqueado` y levanta una alerta `verificacion_fotos` al staff (una por
+mercaderista y periodo, garantizada por índice único). Las fotos que siguen en la
+cola del teléfono (`subida_at is null`) NO entran en el denominador: eso es el
+offline-first funcionando, no R2 fallando. Con cero fotos subidas nunca bloquea.
+
+> **Un bloqueo no se desatasca solo, y subir el umbral tampoco lo desatasca:** la
+> configuración se resuelve por el INICIO del periodo y sus filas son inmutables.
+> O el barrido sella lo que falta, o un operador con `service_role` sella el
+> periodo a mano. Es el precio de que nadie pueda subir el umbral después de ver
+> los resultados.
+
+Si alguna pantalla resuelve
 ese uuid algún día, lo hace con un join que exija `foto.levantamiento_id =
 levantamiento_respuesta.levantamiento_id` (o `foto.visita_id =
 visita_respuesta.visita_id`) y el mismo tenant, tratando el desajuste como "sin

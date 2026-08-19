@@ -7,6 +7,7 @@ import {
   type TipoAlerta,
   tipoAlertaSchema,
 } from "../enums";
+import { periodoPuntajeSchema } from "./perfect-merchandiser";
 
 // La forma de lo que devuelven `bandeja_alertas` y `detalle_alerta`, y —lo que
 // más importa— la del `payload` que escribe el motor de alertas.
@@ -58,6 +59,25 @@ const exhibicionIncompletaSchema = z.object({
 });
 
 /**
+ * El guardarraíl del plan de lealtad: el periodo no se cerró porque demasiada
+ * evidencia subida sigue sin el sello del servidor (una caída de R2 o una
+ * rotación de credenciales lo provocan).
+ *
+ * Es una alerta de STAFF: nunca llega al portal del cliente-marca. Y las cifras
+ * son las de la PRIMERA detección — la alerta es una por mercaderista y periodo,
+ * no se re-emite. Lo vivo está en `puntaje_merchandiser`.
+ */
+const verificacionFotosSchema = z.object({
+  mercaderista_id: uuid,
+  periodo_tipo: periodoPuntajeSchema,
+  periodo_inicio: z.iso.date(),
+  fotos_subidas: z.number(),
+  fotos_verificadas: z.number(),
+  pct_sin_verificar: z.number(),
+  umbral_pct: z.number(),
+});
+
+/**
  * El payload que corresponde a cada tipo de alerta.
  *
  * Es un `Record` de todos los tipos y no un `switch`: si el enum crece, esto deja
@@ -71,6 +91,7 @@ export const PAYLOAD_ALERTA = {
   promo_no_activa: promoNoActivaSchema,
   contingencia: contingenciaSchema,
   exhibicion_incompleta: exhibicionIncompletaSchema,
+  verificacion_fotos: verificacionFotosSchema,
 } as const satisfies Record<TipoAlerta, z.ZodType>;
 
 export type PayloadAlerta = {

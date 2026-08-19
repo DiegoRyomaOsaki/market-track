@@ -48,6 +48,7 @@ export type ConfigMerchandiser = {
   minutos_tardanza_cero: number;
   dias_gracia_cierre: number;
   periodicidad: PeriodoPuntaje;
+  umbral_fotos_sin_verificar_pct: number;
   vigente_desde: string;
 };
 
@@ -110,7 +111,7 @@ export async function datosDeMetricas(
       supabase
         .from("config_perfect_merchandiser")
         .select(
-          "id, peso_puntualidad, peso_asistencia, peso_tiempo_efectivo, peso_calidad, peso_herramientas, tolerancia_puntualidad_min, minutos_tardanza_cero, dias_gracia_cierre, periodicidad, vigente_desde",
+          "id, peso_puntualidad, peso_asistencia, peso_tiempo_efectivo, peso_calidad, peso_herramientas, tolerancia_puntualidad_min, minutos_tardanza_cero, dias_gracia_cierre, periodicidad, umbral_fotos_sin_verificar_pct, vigente_desde",
         )
         .eq("tenant_id", tenantId)
         .order("vigente_desde", { ascending: false })

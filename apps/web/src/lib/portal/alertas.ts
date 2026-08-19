@@ -22,6 +22,11 @@ export const ETIQUETA_TIPO_ALERTA: Record<TipoAlerta, string> = {
   promo_no_activa: "Promoción no activa",
   exhibicion_incompleta: "Exhibición incompleta",
   contingencia: "Contingencia",
+  // De staff: el portal del cliente-marca nunca la recibe (lo impiden la política
+  // `alerta_usuario_lee_su_tenant` y el emisor del feed en vivo). Está aquí porque
+  // el mapa es exhaustivo por diseño, y porque el día que exista una bandeja de
+  // staff la leerá de aquí.
+  verificacion_fotos: "Verificación de fotos pendiente",
 };
 
 export const ETIQUETA_SEVERIDAD: Record<SeveridadAlerta, string> = {
@@ -104,6 +109,12 @@ const EVIDENCIA: {
   ],
   exhibicion_incompleta: (p) => [
     { etiqueta: "Unidades instaladas", valor: numero(p.unidades) },
+  ],
+  verificacion_fotos: (p) => [
+    { etiqueta: "Fotos subidas", valor: String(p.fotos_subidas) },
+    { etiqueta: "Con sello del servidor", valor: String(p.fotos_verificadas) },
+    { etiqueta: "Sin verificar", valor: `${p.pct_sin_verificar}%` },
+    { etiqueta: "Umbral configurado", valor: `${p.umbral_pct}%` },
   ],
 };
 

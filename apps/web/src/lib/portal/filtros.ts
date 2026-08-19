@@ -3,7 +3,7 @@ import {
   type EstadoAlerta,
   SEVERIDADES_ALERTA,
   type SeveridadAlerta,
-  TIPOS_ALERTA,
+  TIPOS_ALERTA_CLIENTE,
   type TipoAlerta,
   TIPOS_FOTO_PORTAL,
   type TipoFoto,
@@ -102,7 +102,10 @@ function unoDe<T extends string>(
 
 export function leerFiltrosAlerta(params: ParamsBusqueda): FiltrosAlerta {
   return {
-    tipo: unoDe(primero(params.tipo), TIPOS_ALERTA),
+    // Solo los tipos del cliente-marca. Un `?tipo=verificacion_fotos` escrito a
+    // mano en la URL cae a null en vez de filtrar por algo que la política no le
+    // va a devolver nunca.
+    tipo: unoDe(primero(params.tipo), TIPOS_ALERTA_CLIENTE),
     severidad: unoDe(primero(params.severidad), SEVERIDADES_ALERTA),
     estado: unoDe(primero(params.estado), ESTADOS_ALERTA),
     pagina: leerPagina(primero(params.pagina)),

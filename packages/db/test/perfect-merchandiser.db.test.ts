@@ -42,11 +42,17 @@ type Puntaje = {
   fotos_presentes: number;
   items_checklist: number;
   items_cumplidos: number;
+  fotos_del_periodo: number;
+  fotos_subidas: number;
+  fotos_verificadas: number;
+  cierre_bloqueado: boolean;
   config_id: string;
   nivel_bono_id: string | null;
   cerrado_at: string | null;
   calculado_at: string;
 };
+
+type Recalculo = { procesados: number; bloqueados: number };
 
 /** Un id irrepetible por caso: cada test siembra el suyo y hace rollback. */
 function id(prefijo: string, sufijo: string): string {
@@ -173,6 +179,16 @@ async function conLevantamiento(
   return lev;
 }
 
+/**
+ * Dónde está la foto en el pipeline: `verificada` es el caso normal —el binario
+ * llegó a R2 y el servidor lo selló—, `subida` es la que el móvil dice haber
+ * subido pero nadie ha comprobado, y `en_cola` la que sigue en el teléfono.
+ *
+ * Por defecto `verificada`: es lo único que acredita el motor, así que un test
+ * que no hable de autenticidad quiere una foto que cuente.
+ */
+type EstadoFoto = "verificada" | "subida" | "en_cola";
+
 async function conFoto(
   c: Client,
   sufijo: string,
@@ -180,13 +196,27 @@ async function conFoto(
   levantamiento: string | null,
   tipo: string,
   hash: string | null = "sha256",
+  estado: EstadoFoto = "verificada",
 ): Promise<void> {
+  // Como `postgres`: `verificada_at` y `subida_at` no las escribe la app, las
+  // sella el servidor (trigger `app.foto_autenticidad_del_servidor`).
   await c.query("set local role postgres");
   await c.query(
     `insert into public.foto
-       (id, tenant_id, visita_id, levantamiento_id, tipo, hash, capturada_at)
-     values ($1, $2, $3, $4, $5, $6, now())`,
-    [id("7", sufijo), TENANTS.maracumango, visita, levantamiento, tipo, hash],
+       (id, tenant_id, visita_id, levantamiento_id, tipo, hash, capturada_at,
+        subida_at, verificada_at)
+     values ($1, $2, $3, $4, $5, $6, now(),
+             case when $7 = 'en_cola' then null else now() end,
+             case when $7 = 'verificada' then now() else null end)`,
+    [
+      id("7", sufijo),
+      TENANTS.maracumango,
+      visita,
+      levantamiento,
+      tipo,
+      hash,
+      estado,
+    ],
   );
   await c.query("set local role authenticated");
 }
@@ -500,12 +530,14 @@ describe("calidad de registro", () => {
     });
   });
 
-  it("una foto sin hash no cuenta: el pipeline de captura falló", async () => {
+  it("una foto con hash pero sin sello del servidor no puntúa: el crédito lo da R2", async () => {
     await comoUsuario(db, USUARIOS.admin, async (c) => {
       const p = await conParada(c, "25", "'2026-02-10'::date", null);
       const visita = await llegaA(c, p, "25", enLima("2026-02-10", "09:00"));
       const lev = await conLevantamiento(c, "25", visita, null);
-      await conFoto(c, "25", visita, lev, "antes", null);
+      // El hash lo escribe el móvil y no prueba nada: sin `verificada_at` no hay
+      // evidencia de que exista un solo byte en R2.
+      await conFoto(c, "25", visita, lev, "antes", "sha256", "subida");
       await conFoto(c, "26", visita, lev, "despues");
 
       const r = await calcular(c, MES_CERRADO);
@@ -1238,23 +1270,25 @@ describe("quién ve y quién dispara el puntaje", () => {
 
   it("el staff recalcula el cliente entero y dice a cuántos alcanzó", async () => {
     await comoUsuario(db, USUARIOS.admin, async (c) => {
-      const r = await c.query<{ recalcular_puntaje_merchandiser: number }>(
-        `select public.recalcular_puntaje_merchandiser('mensual', '2026-02-01')`,
+      const r = await c.query<Recalculo>(
+        `select * from public.recalcular_puntaje_merchandiser('mensual', '2026-02-01')`,
       );
       // Los tres mercaderistas del seed con cliente: el de Maracumango, el del
       // rival y el desvinculado (sigue siendo mercaderista del suyo). El número
       // EXACTO: un "más de cero" pasaría igual si el bucle contara de más.
-      expect(r.rows[0]!.recalcular_puntaje_merchandiser).toBe(3);
+      expect(r.rows[0]!.procesados).toBe(3);
+      // Sin fotos sembradas no hay nada que verificar: nadie queda bloqueado.
+      expect(r.rows[0]!.bloqueados).toBe(0);
     });
   });
 
   it("recalcular a UNO no toca al resto", async () => {
     await comoUsuario(db, USUARIOS.admin, async (c) => {
-      const r = await c.query<{ recalcular_puntaje_merchandiser: number }>(
-        `select public.recalcular_puntaje_merchandiser('mensual', '2026-02-01', $1)`,
+      const r = await c.query<Recalculo>(
+        `select * from public.recalcular_puntaje_merchandiser('mensual', '2026-02-01', $1)`,
         [MERCADERISTA],
       );
-      expect(r.rows[0]!.recalcular_puntaje_merchandiser).toBe(1);
+      expect(r.rows[0]!.procesados).toBe(1);
 
       const filas = await c.query<{ mercaderista_id: string }>(
         `select mercaderista_id from public.puntaje_merchandiser
@@ -1263,6 +1297,190 @@ describe("quién ve y quién dispara el puntaje", () => {
       expect(filas.rows.every((f) => f.mercaderista_id === MERCADERISTA)).toBe(
         true,
       );
+    });
+  });
+});
+
+
+describe("guardarraíl: una caída de R2 no cierra el periodo", () => {
+  /** Las alertas de verificación levantadas para este mercaderista y periodo. */
+  async function alertasDeVerificacion(
+    c: Client,
+    inicio = "2026-02-01",
+  ): Promise<number> {
+    await c.query("set local role postgres");
+    const r = await c.query<{ n: string }>(
+      `select count(*) as n from public.alerta
+        where tipo = 'verificacion_fotos'
+          and payload->>'mercaderista_id' = $1
+          and payload->>'periodo_inicio' = $2`,
+      [MERCADERISTA, inicio],
+    );
+    await c.query("set local role authenticated");
+    return Number(r.rows[0]!.n);
+  }
+
+  /**
+   * Una visita del periodo cerrado con dos fotos, en los estados que se pidan.
+   *
+   * Los sufijos son de DOS caracteres y distintos entre sí: `id()` los pega al
+   * final de un uuid, y uno más largo lo dejaría malformado.
+   */
+  async function conDosFotos(
+    c: Client,
+    sufijo: string,
+    fotoA: string,
+    fotoB: string,
+    primera: EstadoFoto,
+    segunda: EstadoFoto,
+  ): Promise<void> {
+    const p = await conParada(c, sufijo, "'2026-02-10'::date", null);
+    const visita = await llegaA(c, p, sufijo, enLima("2026-02-10", "09:00"));
+    const lev = await conLevantamiento(c, sufijo, visita, null);
+    await conFoto(c, fotoA, visita, lev, "antes", "sha256", primera);
+    await conFoto(c, fotoB, visita, lev, "despues", "sha256", segunda);
+  }
+
+  it("por encima del umbral no cierra el periodo y avisa al staff", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      // Una de dos subidas sin sellar: 50 %, muy por encima del 20 % por defecto.
+      await conDosFotos(c, "70", "80", "81", "verificada", "subida");
+
+      const r = await calcular(c, MES_CERRADO);
+      expect(r?.cierre_bloqueado).toBe(true);
+      expect(r?.cerrado_at).toBeNull();
+      expect(await alertasDeVerificacion(c)).toBe(1);
+    });
+  });
+
+  it("por debajo del umbral cierra el periodo con normalidad", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await conDosFotos(c, "71", "82", "83", "verificada", "verificada");
+
+      const r = await calcular(c, MES_CERRADO);
+      expect(r?.cierre_bloqueado).toBe(false);
+      expect(r?.cerrado_at).not.toBeNull();
+      expect(await alertasDeVerificacion(c)).toBe(0);
+    });
+  });
+
+  it("sin una sola foto subida no bloquea a nadie: no hay nada que juzgar", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      // Las dos siguen en el teléfono. Eso es el offline-first funcionando, no R2
+      // fallando: bloquearía a todo mercaderista sin cobertura.
+      await conDosFotos(c, "72", "84", "85", "en_cola", "en_cola");
+
+      const r = await calcular(c, MES_CERRADO);
+      expect(r?.fotos_subidas).toBe(0);
+      expect(r?.cierre_bloqueado).toBe(false);
+      expect(r?.cerrado_at).not.toBeNull();
+      expect(await alertasDeVerificacion(c)).toBe(0);
+    });
+  });
+
+  it("un periodo todavía abierto ni bloquea ni avisa, por sucia que esté la cola", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const p = await conParada(c, "73", `app.hoy_lima()`, null);
+      const visita = await llegaA(c, p, "73", horasEnElDia("0", "09:00"));
+      const lev = await conLevantamiento(c, "73", visita, null);
+      await conFoto(c, "96", visita, lev, "antes", "sha256", "subida");
+      await conFoto(c, "97", visita, lev, "despues", "sha256", "subida");
+
+      const r = await calcular(c, MES_ACTUAL);
+      // 100 % sin verificar, pero el sellado es asíncrono y el periodo no tocaba
+      // cerrarse: juzgarlo aquí sería una alerta espuria en cada recálculo.
+      expect(r?.cierre_bloqueado).toBe(false);
+      expect(r?.cerrado_at).toBeNull();
+      const hoy = await c.query<{ inicio: string }>(
+        `select ${MES_ACTUAL}::text as inicio`,
+      );
+      expect(await alertasDeVerificacion(c, hoy.rows[0]!.inicio)).toBe(0);
+    });
+  });
+
+  it("bloquear escribe el puntaje igual: solo deja el periodo sin sellar", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await conDosFotos(c, "74", "86", "87", "verificada", "subida");
+
+      const r = await calcular(c, MES_CERRADO);
+      // Los números son provisionales, no inexistentes: esconderlos dejaría al
+      // panel sin nada que enseñar justo cuando hay un problema que mirar.
+      expect(r?.calidad_pct).toBe("50.00");
+      expect(r?.total_pct).not.toBeNull();
+      expect(r?.fotos_del_periodo).toBe(2);
+      expect(r?.fotos_subidas).toBe(2);
+      expect(r?.fotos_verificadas).toBe(1);
+    });
+  });
+
+  it("recalcular tres veces levanta UNA sola alerta", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await conDosFotos(c, "75", "88", "89", "verificada", "subida");
+
+      await calcular(c, MES_CERRADO);
+      await calcular(c, MES_CERRADO);
+      await calcular(c, MES_CERRADO);
+
+      expect(await alertasDeVerificacion(c)).toBe(1);
+    });
+  });
+
+  it("el umbral sale de la config del INICIO del periodo, no de la última publicada", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await conDosFotos(c, "76", "90", "91", "verificada", "subida");
+      // Una config posterior con el umbral por las nubes: si el motor resolviera
+      // por la fecha de fin —o por la última—, este periodo dejaría de bloquear y
+      // el umbral sería una puerta trasera para desatascar lo ya jugado.
+      await c.query("set local role postgres");
+      await c.query(
+        `insert into public.config_perfect_merchandiser
+           (tenant_id, peso_puntualidad, peso_asistencia, peso_tiempo_efectivo,
+            peso_calidad, peso_herramientas, tolerancia_puntualidad_min,
+            minutos_tardanza_cero, dias_gracia_cierre,
+            umbral_fotos_sin_verificar_pct, vigente_desde)
+         values ($1, 25, 30, 0, 25, 20, 15, 60, 7, 99, '2026-07-01')`,
+        [TENANTS.maracumango],
+      );
+      await c.query("set local role authenticated");
+
+      const r = await calcular(c, MES_CERRADO);
+      expect(r?.cierre_bloqueado).toBe(true);
+    });
+  });
+
+  it("un periodo ya cerrado no se desella ni se recalcula por el guardarraíl", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await conDosFotos(c, "77", "92", "93", "verificada", "verificada");
+      const cerrado = await calcular(c, MES_CERRADO);
+      expect(cerrado?.cerrado_at).not.toBeNull();
+
+      // Se pierde el sello de una foto ya acreditada: si el motor recalculara un
+      // periodo cerrado, el bono ya pagado cambiaría.
+      await c.query("set local role postgres");
+      await c.query(
+        `update public.foto set verificada_at = null where id = $1`,
+        [id("7", "93")],
+      );
+      await c.query("set local role authenticated");
+
+      const r = await calcular(c, MES_CERRADO);
+      expect(r?.cerrado_at).toBe(cerrado?.cerrado_at);
+      expect(r?.cierre_bloqueado).toBe(false);
+      expect(r?.calidad_pct).toBe(cerrado?.calidad_pct);
+      expect(await alertasDeVerificacion(c)).toBe(0);
+    });
+  });
+
+  it("la RPC dice cuántos periodos dejó sin cerrar", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await conDosFotos(c, "78", "94", "95", "verificada", "subida");
+
+      const r = await c.query<Recalculo>(
+        `select * from public.recalcular_puntaje_merchandiser('mensual', '2026-02-01', $1)`,
+        [MERCADERISTA],
+      );
+      expect(r.rows[0]!.procesados).toBe(1);
+      expect(r.rows[0]!.bloqueados).toBe(1);
     });
   });
 });

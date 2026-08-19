@@ -17,6 +17,7 @@ import {
 } from "./alertas";
 
 const SKU = "a0000003-0000-0000-0000-000000000001";
+const MERCADERISTA = "e4000000-0000-0000-0000-000000000001";
 
 describe("las etiquetas y los tonos", () => {
   it("cubren todos los valores de los tres enums", () => {
@@ -150,6 +151,15 @@ describe("filasDeEvidencia", () => {
       promo_no_activa: { sku_id: SKU, precio_registrado: 1, precio_regular: 2 },
       contingencia: { paso: "precios", motivo: "x" },
       exhibicion_incompleta: { exhibicion_id: SKU, unidades: 2 },
+      verificacion_fotos: {
+        mercaderista_id: MERCADERISTA,
+        periodo_tipo: "mensual",
+        periodo_inicio: "2026-02-01",
+        fotos_subidas: 8,
+        fotos_verificadas: 2,
+        pct_sin_verificar: 75,
+        umbral_pct: 20,
+      },
     } as const;
 
     for (const tipo of TIPOS_ALERTA) {

@@ -25,6 +25,7 @@ const VIGENTE = {
   minutos_tardanza_cero: 90,
   dias_gracia_cierre: 14,
   periodicidad: "trimestral" as const,
+  umbral_fotos_sin_verificar_pct: 35,
   vigente_desde: "2026-01-01",
 };
 
@@ -65,6 +66,21 @@ describe("FormMerchandiser", () => {
     expect(peso("Asistencia").value).toBe("20");
     expect(campoPorEtiqueta(/tardanza que da 0/i).value).toBe("90");
     expect(campoPorEtiqueta(/días de gracia/i).value).toBe("14");
+    expect(campoPorEtiqueta(/fotos sin verificar/i).value).toBe("35");
+  });
+
+  it("publica el umbral del guardarraíl que el admin escribe", () => {
+    montar();
+    fireEvent.change(campoPorEtiqueta(/fotos sin verificar/i), {
+      target: { value: "5" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /publicar versión/i }));
+
+    return waitFor(() =>
+      expect(publicar).toHaveBeenCalledWith(
+        expect.objectContaining({ umbral_fotos_sin_verificar_pct: 5 }),
+      ),
+    );
   });
 
   it("el peso del tiempo efectivo llega deshabilitado y en 0", () => {

@@ -70,6 +70,9 @@ export function FormMerchandiser({
   const [periodicidad, setPeriodicidad] = useState(
     vigente?.periodicidad ?? "mensual",
   );
+  const [umbralSinVerificar, setUmbralSinVerificar] = useState(
+    String(vigente?.umbral_fotos_sin_verificar_pct ?? 20),
+  );
   const [vigenteDesde, setVigenteDesde] = useState(hoy);
   const [pendiente, arrancar] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -89,6 +92,7 @@ export function FormMerchandiser({
       minutos_tardanza_cero: Number(tardanzaCero),
       dias_gracia_cierre: Number(gracia),
       periodicidad,
+      umbral_fotos_sin_verificar_pct: Number(umbralSinVerificar),
       vigente_desde: vigenteDesde,
     };
   }
@@ -252,6 +256,26 @@ export function FormMerchandiser({
           >
             Cada cuánto se cierra y se paga el plan. Es del plan entero, no de
             cada nivel de bono.
+          </span>
+        </label>
+        <label className="flex w-44 flex-col gap-1">
+          <span className={etiqueta}>Umbral de fotos sin verificar</span>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            value={umbralSinVerificar}
+            onChange={(e) => setUmbralSinVerificar(e.target.value)}
+            aria-describedby="ayuda-umbral-verificacion"
+            className={campo}
+          />
+          <span
+            id="ayuda-umbral-verificacion"
+            className="text-[11.5px] text-muted-foreground"
+          >
+            Porcentaje de fotos subidas y sin sellar por el servidor a partir del
+            cual el periodo no se cierra. Evita que una caída de R2 pague el bono
+            sobre evidencia que no llegó.
           </span>
         </label>
       </fieldset>

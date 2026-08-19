@@ -376,12 +376,16 @@ Aún no hay `.env`. Al scaffoldear, crear `.env.example` por app. Previstas:
   `foto.hash` y `foto.subida_at` los escribe el móvil, y un uuid dentro de
   `*_respuesta.valor` no tiene verja de autenticidad: cualquier lógica que pague
   o puntúe sobre ellos es falsificable. Acotar cuántas filas se acreditan
-  (`least`) limita el daño, no valida que cada una sea real. La columna de
-  autenticidad sellada por el servidor **ya existe** (`foto.verificada_at`,
-  verificada contra R2 por el barrido de `fotos-verificar`), pero **el motor
-  todavía lee `hash`**: el cambio de lectura es un despliegue posterior, tras el
-  backfill en producción. Hasta entonces el bono se apoya en esa cota y en que
-  el mercaderista solo lee (y solo referencia) fotos de sus propias visitas.
+  (`least`) limita el daño, no valida que cada una sea real. Por eso el motor de
+  puntaje acredita por **`foto.verificada_at`** —el sello que estampa el servidor
+  tras comprobar contra R2 que el binario existe— y nunca por `hash`.
+- **Y una verja que depende de un tercero necesita un guardarraíl para su caída.**
+  Al pagar sobre `verificada_at`, una caída de R2 o una rotación de credenciales
+  pondría el bono de TODOS a cero con forma de mal desempeño. El motor mira, solo
+  en el instante en que iba a sellar, qué porcentaje de las fotos **subidas** del
+  periodo sigue sin sello; por encima del umbral configurado no cierra el periodo
+  y levanta una alerta. Un fallo de infraestructura no puede convertirse en dinero
+  mal pagado, y "no había trabajo" tiene que distinguirse de "el pipeline murió".
 - **Una configuración que es un CONJUNTO se publica por RPC con guardia, no con
   un insert de varias filas.** Insertar sobre una `vigente_desde` que ya existe
   no falla: FUSIONA (la clave natural solo choca en el duplicado exacto) — y sin

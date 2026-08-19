@@ -9,9 +9,10 @@ import { detalleAlertaSchema, PAYLOAD_ALERTA } from "./alerta";
 // renombra una clave, este archivo se pone rojo antes que la pantalla.
 
 const SKU = "a0000003-0000-0000-0000-000000000001";
+const MERCADERISTA = "e4000000-0000-0000-0000-000000000001";
 
 describe("PAYLOAD_ALERTA", () => {
-  it("cubre los seis tipos del enum, sin caso por defecto", () => {
+  it("cubre todos los tipos del enum, sin caso por defecto", () => {
     expect(Object.keys(PAYLOAD_ALERTA).sort()).toEqual(
       [...TIPOS_ALERTA].sort(),
     );
@@ -39,6 +40,15 @@ describe("PAYLOAD_ALERTA", () => {
       },
       contingencia: { paso: "precios", motivo: "Góndola en remodelación" },
       exhibicion_incompleta: { exhibicion_id: SKU, unidades: 3 },
+      verificacion_fotos: {
+        mercaderista_id: MERCADERISTA,
+        periodo_tipo: "mensual",
+        periodo_inicio: "2026-02-01",
+        fotos_subidas: 40,
+        fotos_verificadas: 5,
+        pct_sin_verificar: 87.5,
+        umbral_pct: 20,
+      },
     } as const;
 
     for (const tipo of TIPOS_ALERTA) {
