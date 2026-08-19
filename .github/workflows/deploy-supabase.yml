@@ -146,6 +146,6 @@ jobs:
         # `secrets list` devuelve NOMBRES y digests: ningún valor viaja al log.
         if: always()
         run: |
-          set -uo pipefail
+          set -euo pipefail
           pnpm exec supabase secrets list --project-ref "$PROJECT_REF" -o json > secretos-funciones.json
           node scripts/verificar-secretos-funciones.mjs "$PROJECT_REF" < secretos-funciones.json

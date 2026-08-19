@@ -5,13 +5,34 @@ import { describe, expect, it } from "vitest";
 
 import {
   leerSecretos,
+  resumirPayload,
   OBLIGATORIOS,
   revisarSecretos,
   secretosUsadosEnElCodigo,
 } from "./verificar-secretos-funciones.mjs";
 
 const REF = "twtoqaqgziwryuaibktt";
-const TODOS = Object.keys(OBLIGATORIOS);
+
+/**
+ * Los obligatorios, ESCRITOS A MANO. Derivarlos de `OBLIGATORIOS` haría estos
+ * tests autoconsistentes en vez de fijar nada: borrar las cuatro `R2_*` de la
+ * lista dejaría la suite entera en verde y el guardarraíl mudo sobre R2. Y el
+ * escáner de código tampoco las cubre —`leerConfigR2` las lee con
+ * `Deno.env.toObject()`, que el regex no ve—, así que esta lista es lo único
+ * que las sostiene. Es un contrato de seguridad: se fija a mano, a propósito.
+ */
+const OBLIGATORIOS_ESPERADOS = [
+  "ALERTA_WEBHOOK_SECRET",
+  "FOTO_VERIFICACION_SECRET",
+  "PASE_HASH_SECRET",
+  "R2_ACCESS_KEY_ID",
+  "R2_ACCOUNT_ID",
+  "R2_BUCKET",
+  "R2_SECRET_ACCESS_KEY",
+  "SEND_SMS_HOOK_SECRET",
+];
+
+const TODOS = OBLIGATORIOS_ESPERADOS;
 
 /**
  * La salida de `supabase secrets list`: nombres y digests, sin valores.
@@ -28,6 +49,25 @@ function respuesta(nombres) {
     })),
   });
 }
+
+describe("la lista de obligatorios", () => {
+  it("es exactamente esta, y cambiarla exige cambiar el test", () => {
+    expect(Object.keys(OBLIGATORIOS).sort()).toEqual(
+      [...OBLIGATORIOS_ESPERADOS].sort(),
+    );
+  });
+
+  it.each(OBLIGATORIOS_ESPERADOS)("exige %s cuando falta", (secreto) => {
+    const problemas = revisarSecretos({
+      presentes: OBLIGATORIOS_ESPERADOS.filter((n) => n !== secreto),
+      usados: [],
+      projectRef: REF,
+    });
+
+    expect(problemas).toHaveLength(1);
+    expect(problemas[0]).toContain(secreto);
+  });
+});
 
 describe("revisarSecretos", () => {
   it("no dice nada de un entorno con todo cargado", () => {
@@ -103,6 +143,16 @@ describe("secretosUsadosEnElCodigo", () => {
     expect(usados).toContain("PASE_HASH_SECRET");
   });
 
+  it("NO ve las R2_*, que se leen con toObject: por eso van declaradas a mano", () => {
+    // Fija la limitación conocida en vez de dejarla solo en un comentario. Si
+    // algún día `leerConfigR2` pasara a `Deno.env.get`, este test avisa de que
+    // el escáner ya las cubre y la declaración a mano puede revisarse.
+    const usados = secretosUsadosEnElCodigo();
+
+    expect(usados).not.toContain("R2_ACCOUNT_ID");
+    expect(usados).not.toContain("R2_BUCKET");
+  });
+
   it("todo lo que el código lee está clasificado", () => {
     // El test que mantiene honesta la lista: si entra un secreto nuevo sin
     // clasificar, esto se pone rojo en CI antes de llegar a un despliegue.
@@ -150,5 +200,25 @@ describe("leerSecretos", () => {
     expect(() => leerSecretos(JSON.stringify({ secrets: [{ x: 1 }] }))).toThrow(
       /`name`/,
     );
+  });
+});
+
+describe("resumirPayload", () => {
+  it("tacha el digest de cada secreto antes de que llegue al log", () => {
+    // `secrets list` trae un `value` por secreto que es su digest SHA-256. No es
+    // reversible con un secreto de alta entropía, pero tampoco hay motivo para
+    // publicarlo en el log de un runner.
+    const crudo = JSON.stringify([
+      { name: "PASE_HASH_SECRET", value: "f2ddcee9dc892bae", updated_at: "x" },
+    ]);
+    const salida = resumirPayload(crudo);
+
+    expect(salida).not.toContain("f2ddcee9dc892bae");
+    expect(salida).toContain("PASE_HASH_SECRET");
+    expect(salida).toContain("digest tachado");
+  });
+
+  it("recorta lo largo en vez de volcar el log entero", () => {
+    expect(resumirPayload("x".repeat(2000)).length).toBeLessThan(450);
   });
 });

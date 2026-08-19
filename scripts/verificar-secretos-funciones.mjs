@@ -43,10 +43,14 @@ export const OBLIGATORIOS = {
     "`emitir-pase` y `canjear-pase` no arrancan sin él: es el HMAC del código del pase.",
   SEND_SMS_HOOK_SECRET:
     "`enviar-otp` no arranca sin él. Sin OTP nadie completa el 2FA, y como el gate `aal2` vive en la RLS, una sesión que no llega a aal2 no ve ni una fila.",
-  R2_ACCOUNT_ID: "`leerConfigR2` exige las cuatro R2_* o lanza (fail-closed).",
-  R2_ACCESS_KEY_ID: "`leerConfigR2` exige las cuatro R2_* o lanza.",
-  R2_SECRET_ACCESS_KEY: "`leerConfigR2` exige las cuatro R2_* o lanza.",
-  R2_BUCKET: "`leerConfigR2` exige las cuatro R2_* o lanza.",
+  R2_ACCOUNT_ID:
+    "`leerConfigR2` exige las cuatro R2_* o lanza (fail-closed): sin ellas no arranca ninguna función de fotos.",
+  R2_ACCESS_KEY_ID:
+    "`leerConfigR2` exige las cuatro R2_* o lanza (fail-closed): sin ellas no arranca ninguna función de fotos.",
+  R2_SECRET_ACCESS_KEY:
+    "`leerConfigR2` exige las cuatro R2_* o lanza (fail-closed): sin ellas no arranca ninguna función de fotos.",
+  R2_BUCKET:
+    "`leerConfigR2` exige las cuatro R2_* o lanza (fail-closed): sin ellas no arranca ninguna función de fotos.",
 };
 
 /** Con estos la función arranca igual; su ausencia degrada, no rompe. */
@@ -81,7 +85,15 @@ export function revisarSecretos({ presentes, usados, projectRef }) {
   const problemas = [];
   const cargados = new Set(presentes);
 
-  for (const [nombre, motivo] of Object.entries(OBLIGATORIOS).sort()) {
+  // Comparador explícito: el `sort()` por defecto compararía los pares
+  // [nombre, motivo] convertidos a texto. Aquí funcionaría por casualidad —los
+  // nombres van delante de la coma y no chocan—, y el guardarraíl hermano de
+  // migraciones ya dejó escrito por qué eso no basta como criterio.
+  const obligatorios = Object.entries(OBLIGATORIOS).sort(([a], [b]) =>
+    a.localeCompare(b),
+  );
+
+  for (const [nombre, motivo] of obligatorios) {
     if (cargados.has(nombre)) continue;
     problemas.push(
       `Falta el secreto «${nombre}» en ${projectRef}. ${motivo} ` +
@@ -167,7 +179,7 @@ export function leerSecretos(texto) {
     cuerpo = JSON.parse(texto);
   } catch {
     throw new Error(
-      `La salida de \`supabase secrets list\` no es JSON.\n  Respuesta recibida: ${texto.slice(0, 400)}`,
+      `La salida de \`supabase secrets list\` no es JSON.\n  Respuesta recibida: ${resumirPayload(texto)}`,
     );
   }
 
@@ -182,7 +194,7 @@ export function leerSecretos(texto) {
       : undefined;
   if (!Array.isArray(lista)) {
     throw new Error(
-      `La salida no es ni una lista de secretos ni un objeto con \`secrets\`.\n  Respuesta recibida: ${texto.slice(0, 400)}`,
+      `La salida no es ni una lista de secretos ni un objeto con \`secrets\`.\n  Respuesta recibida: ${resumirPayload(texto)}`,
     );
   }
 
@@ -198,6 +210,25 @@ export function leerSecretos(texto) {
     }
     return nombre;
   });
+}
+
+/**
+ * La respuesta cruda, lista para meterla en un mensaje de error.
+ *
+ * Enseñarla es lo que permite arreglar un rojo sin gastar otro despliegue — pero
+ * `secrets list` trae un `value` por secreto que es su digest SHA-256, y esto va
+ * al log de un runner. El digest de un secreto de alta entropía no es reversible,
+ * así que no es una fuga grave; tampoco hay motivo para publicarlo. Se tacha.
+ *
+ * @param {string} texto
+ * @returns {string}
+ */
+export function resumirPayload(texto) {
+  const sinDigests = texto.replace(
+    /("value"\s*:\s*)"[^"]*"/g,
+    '$1"<digest tachado>"',
+  );
+  return sinDigests.length > 400 ? `${sinDigests.slice(0, 400)}…` : sinDigests;
 }
 
 /** Todo el stdin como texto. */
