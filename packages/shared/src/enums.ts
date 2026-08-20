@@ -39,6 +39,12 @@ export const TIPOS_FOTO = Constants.public.Enums.tipo_foto;
 export const tipoExhibicionSchema = z.enum(
   Constants.public.Enums.tipo_exhibicion,
 );
+// La escala cualitativa de orden y limpieza. Tres niveles y no una nota
+// numérica: el mercaderista se estaría calificando a sí mismo. Cuánto vale cada
+// nivel lo dice `config_perfect_store`, nunca el código.
+export const nivelOrdenSchema = z.enum(Constants.public.Enums.nivel_orden);
+/** Los valores del enum, para pintar los tres botones sin escribirlos a mano. */
+export const NIVELES_ORDEN = Constants.public.Enums.nivel_orden;
 export const tipoAlertaSchema = z.enum(Constants.public.Enums.tipo_alerta);
 /** Los valores del enum, para pintar un desplegable sin escribirlos a mano. */
 export const TIPOS_ALERTA = Constants.public.Enums.tipo_alerta;
@@ -78,6 +84,7 @@ export type EstadoParada = z.infer<typeof estadoParadaSchema>;
 export type PasoLevantamiento = z.infer<typeof pasoLevantamientoSchema>;
 export type TipoFoto = z.infer<typeof tipoFotoSchema>;
 export type TipoExhibicion = z.infer<typeof tipoExhibicionSchema>;
+export type NivelOrden = z.infer<typeof nivelOrdenSchema>;
 export type TipoAlerta = z.infer<typeof tipoAlertaSchema>;
 export type SeveridadAlerta = z.infer<typeof severidadAlertaSchema>;
 export type EstadoAlerta = z.infer<typeof estadoAlertaSchema>;

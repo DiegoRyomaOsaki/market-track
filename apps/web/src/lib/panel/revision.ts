@@ -1,4 +1,5 @@
 import type { Database } from "@market-track/db";
+import type { NivelOrden } from "@market-track/shared";
 
 // La lógica PURA de la cola de revisión: cómo se lee cada fila en pantalla y cómo
 // se aplica encima la decisión que se acaba de tomar.
@@ -48,6 +49,23 @@ const ESTILO_DECISION: Record<DecisionRevision, string> = {
 
 const ETIQUETA_PENDIENTE = "Pendiente";
 const ESTILO_PENDIENTE = "bg-en-curso-suave text-en-curso-texto";
+
+// La escala de orden y limpieza en pantalla. Exhaustivos por el mismo motivo:
+// un nivel nuevo tiene que romper la compilación, no aparecer sin nombre.
+//
+// El tono ACOMPAÑA a la etiqueta, nunca la sustituye: el color por sí solo no le
+// dice nada a quien no lo distingue (WCAG 1.4.1).
+export const ETIQUETA_NIVEL_ORDEN: Record<NivelOrden, string> = {
+  bien: "Bien",
+  regular: "Regular",
+  mal: "Mal",
+};
+
+export const TONO_NIVEL_ORDEN: Record<NivelOrden, string> = {
+  bien: "bg-completado-suave text-completado-texto",
+  regular: "bg-en-curso-suave text-en-curso-texto",
+  mal: "bg-alerta-suave text-alerta-texto",
+};
 
 export function etiquetaDecision(decision: DecisionRevision | null): string {
   return decision === null ? ETIQUETA_PENDIENTE : ETIQUETA_DECISION[decision];

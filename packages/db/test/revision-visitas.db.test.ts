@@ -420,6 +420,8 @@ describe("detalle_visita", () => {
         "exhibiciones",
         "id",
         "marca_nombre",
+        "orden_foto_id",
+        "orden_nivel",
         "respuestas",
         "skus",
         "sos_frentes_competencia",

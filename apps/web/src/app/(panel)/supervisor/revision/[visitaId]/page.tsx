@@ -11,6 +11,10 @@ import {
   FotoEvidencia,
 } from "@/components/evidencia/foto-evidencia";
 import { Aviso, Pastilla, TD, TH } from "@/components/panel/tabla";
+import {
+  ETIQUETA_NIVEL_ORDEN,
+  TONO_NIVEL_ORDEN,
+} from "@/lib/panel/revision";
 import { soles } from "@/lib/formato";
 import { urlsFirmadas } from "@/lib/fotos-firmadas";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -260,6 +264,19 @@ export default async function DetalleReportePage({
             {lev.sos_frentes_propios !== null ? (
               <p className="text-[12px] text-muted-foreground">
                 Share of Shelf: {lev.sos_frentes_propios} frentes propios.
+              </p>
+            ) : null}
+
+            {lev.orden_nivel !== null ? (
+              // La nota va junto a la foto que la sostiene: el supervisor la
+              // audita mirando la góndola, no creyéndose la calificación. El
+              // texto viaja en la pastilla, no solo el tono — el color por sí
+              // solo no comunica nada a quien no lo distingue (WCAG 1.4.1).
+              <p className="flex items-center gap-2 text-[12px] text-muted-foreground">
+                Orden y limpieza:
+                <Pastilla tono={TONO_NIVEL_ORDEN[lev.orden_nivel]}>
+                  {ETIQUETA_NIVEL_ORDEN[lev.orden_nivel]}
+                </Pastilla>
               </p>
             ) : null}
 
