@@ -29,6 +29,7 @@ export const ETIQUETA_FOTO: Record<TipoFoto, string> = {
   precio: "Precio",
   contingencia: "Contingencia",
   campo_extra: "Campo del formulario",
+  orden: "Orden y limpieza",
 };
 
 const PROPORCION = {

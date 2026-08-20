@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   decisionRevisionSchema,
   estadoLevantamientoSchema,
+  nivelOrdenSchema,
   pasoLevantamientoSchema,
   tipoFotoSchema,
 } from "../enums";
@@ -53,6 +54,9 @@ const levantamientoRevisadoSchema = z.object({
   estado: estadoLevantamientoSchema,
   sos_frentes_propios: z.number().int().nullable(),
   sos_frentes_competencia: z.unknown(),
+  /** Null cuando el paso se omitió por contingencia: no evaluada, no "mal". */
+  orden_nivel: nivelOrdenSchema.nullable(),
+  orden_foto_id: uuid.nullable(),
   skus: z.array(skuRevisadoSchema),
   exhibiciones: z.array(exhibicionRevisadaSchema),
   respuestas: z.array(respuestaRevisadaSchema),

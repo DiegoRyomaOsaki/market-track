@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   ambitoFormularioSchema,
   moduloPortalSchema,
+  nivelOrdenSchema,
   pasoLevantamientoSchema,
   rolUsuarioSchema,
   tipoFotoSchema,
@@ -21,12 +22,21 @@ describe("enums derivados de la base", () => {
       "share_of_shelf",
     );
     expect(moduloPortalSchema.parse("galeria")).toBe("galeria");
+    // La escala de orden y limpieza y su paso en el wizard (MAR-96).
+    expect(nivelOrdenSchema.parse("regular")).toBe("regular");
+    expect(tipoFotoSchema.parse("orden")).toBe("orden");
+    expect(pasoLevantamientoSchema.parse("orden_limpieza")).toBe(
+      "orden_limpieza",
+    );
   });
 
   it("rechaza un valor que la base no reconoce", () => {
     expect(rolUsuarioSchema.safeParse("auditor").success).toBe(false);
     expect(tipoFotoSchema.safeParse("selfie_grupal").success).toBe(false);
     expect(moduloPortalSchema.safeParse("facturacion").success).toBe(false);
+    // La escala tiene TRES niveles: una nota numérica no es un nivel válido.
+    expect(nivelOrdenSchema.safeParse("excelente").success).toBe(false);
+    expect(nivelOrdenSchema.safeParse("8").success).toBe(false);
   });
 
   it("no duplica la lista: el esquema y la base son literalmente el mismo array", () => {
@@ -40,6 +50,9 @@ describe("enums derivados de la base", () => {
     ]);
     expect(moduloPortalSchema.options).toEqual([
       ...Constants.public.Enums.modulo_portal,
+    ]);
+    expect(nivelOrdenSchema.options).toEqual([
+      ...Constants.public.Enums.nivel_orden,
     ]);
   });
 });

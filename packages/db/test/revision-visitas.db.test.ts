@@ -7,6 +7,7 @@ import { comoUsuario, conectar, TENANTS, USUARIOS } from "./ayudas";
 // la cola y el detalle. Todo derivado vive en la base, así que se prueba aquí.
 
 const VISITA_MRC = "a0000010-0000-0000-0000-000000000001";
+const LEVANTAMIENTO_MRC = "a0000011-0000-0000-0000-000000000001";
 const VISITA_RIVAL = "b0000010-0000-0000-0000-000000000002";
 
 let db: Client;
@@ -370,6 +371,41 @@ describe("detalle_visita", () => {
     });
   });
 
+  it("trae la calificación de orden y limpieza con el id de SU foto", async () => {
+    // El test de claves de arriba comprueba la FORMA. Este comprueba el VALOR:
+    // sin él, un `jsonb_build_object('orden_nivel', <otra columna>)` pasaría
+    // verde, y el supervisor vería una nota que no es la que puso el
+    // mercaderista.
+    await comoUsuario(db, USUARIOS.supervisor, async (c) => {
+      await conVisitaCerrada(c);
+
+      const foto = "e0000019-0000-0000-0000-000000000099";
+      await c.query("set local role postgres");
+      await c.query(
+        `insert into public.foto
+           (id, tenant_id, visita_id, levantamiento_id, tipo, capturada_at)
+         values ($1, $2, $3, $4, 'orden', now())`,
+        [foto, TENANTS.maracumango, VISITA_MRC, LEVANTAMIENTO_MRC],
+      );
+      await c.query(
+        `update public.levantamiento
+            set orden_nivel = 'regular', orden_foto_id = $2 where id = $1`,
+        [LEVANTAMIENTO_MRC, foto],
+      );
+      await c.query("set local role authenticated");
+
+      const r = await c.query<{ d: Record<string, unknown> }>(
+        `select public.detalle_visita($1) as d`,
+        [VISITA_MRC],
+      );
+      const d = r.rows[0]?.d as Record<string, Record<string, unknown>[]>;
+      const lev = (d.levantamientos as Record<string, unknown>[])[0];
+
+      expect(lev?.orden_nivel).toBe("regular");
+      expect(lev?.orden_foto_id).toBe(foto);
+    });
+  });
+
   it("devuelve EXACTAMENTE las claves que espera el schema Zod", async () => {
     // `detalleVisitaSchema` (packages/shared) y esta función son un contrato entre
     // dos archivos que nadie compila juntos: si una migración renombra una clave,
@@ -420,6 +456,8 @@ describe("detalle_visita", () => {
         "exhibiciones",
         "id",
         "marca_nombre",
+        "orden_foto_id",
+        "orden_nivel",
         "respuestas",
         "skus",
         "sos_frentes_competencia",

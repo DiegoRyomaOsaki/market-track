@@ -806,6 +806,8 @@ export type Database = {
           foto_despues_id: string | null
           id: string
           marca_id: string
+          orden_foto_id: string | null
+          orden_nivel: Database["public"]["Enums"]["nivel_orden"] | null
           sos_foto_id: string | null
           sos_frentes_competencia: Json
           sos_frentes_propios: number | null
@@ -820,6 +822,8 @@ export type Database = {
           foto_despues_id?: string | null
           id?: string
           marca_id: string
+          orden_foto_id?: string | null
+          orden_nivel?: Database["public"]["Enums"]["nivel_orden"] | null
           sos_foto_id?: string | null
           sos_frentes_competencia?: Json
           sos_frentes_propios?: number | null
@@ -834,6 +838,8 @@ export type Database = {
           foto_despues_id?: string | null
           id?: string
           marca_id?: string
+          orden_foto_id?: string | null
+          orden_nivel?: Database["public"]["Enums"]["nivel_orden"] | null
           sos_foto_id?: string | null
           sos_frentes_competencia?: Json
           sos_frentes_propios?: number | null
@@ -868,6 +874,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "marca"
             referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "lev_orden_foto_fk"
+            columns: ["orden_foto_id", "id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "foto"
+            referencedColumns: ["id", "levantamiento_id", "tenant_id"]
           },
           {
             foreignKeyName: "lev_sos_foto_fk"
@@ -1534,6 +1547,7 @@ export type Database = {
           config_id: string
           distribucion_pct: number | null
           levantamiento_id: string
+          orden_pct: number | null
           precio_pct: number | null
           skus_codificados: number
           skus_evaluados: number
@@ -1550,6 +1564,7 @@ export type Database = {
           config_id: string
           distribucion_pct?: number | null
           levantamiento_id: string
+          orden_pct?: number | null
           precio_pct?: number | null
           skus_codificados?: number
           skus_evaluados?: number
@@ -1566,6 +1581,7 @@ export type Database = {
           config_id?: string
           distribucion_pct?: number | null
           levantamiento_id?: string
+          orden_pct?: number | null
           precio_pct?: number | null
           skus_codificados?: number
           skus_evaluados?: number
@@ -2666,6 +2682,7 @@ export type Database = {
         | "alertas"
         | "reportes"
         | "perfect_store"
+      nivel_orden: "bien" | "regular" | "mal"
       nivel_perfect_store: "categoria" | "tipo_tienda" | "cadena" | "tienda"
       paso_levantamiento:
         | "checkin"
@@ -2677,6 +2694,7 @@ export type Database = {
         | "foto_despues"
         | "checkout"
         | "campos_extra"
+        | "orden_limpieza"
       periodo_puntaje: "mensual" | "trimestral" | "anual"
       politica_pop: "dentro_del_tope" | "bonus_sobre_100"
       rol_usuario: "admin" | "supervisor" | "mercaderista" | "cliente"
@@ -2699,6 +2717,7 @@ export type Database = {
         | "precio"
         | "contingencia"
         | "campo_extra"
+        | "orden"
       tipo_solicitud_ruta: "cambio_tienda" | "cambio_dia" | "no_visita" | "otro"
       tipo_tienda: "hiper" | "super" | "express"
       unidad_sos: "frentes" | "centimetros"
@@ -2867,6 +2886,7 @@ export const Constants = {
         "reportes",
         "perfect_store",
       ],
+      nivel_orden: ["bien", "regular", "mal"],
       nivel_perfect_store: ["categoria", "tipo_tienda", "cadena", "tienda"],
       paso_levantamiento: [
         "checkin",
@@ -2878,6 +2898,7 @@ export const Constants = {
         "foto_despues",
         "checkout",
         "campos_extra",
+        "orden_limpieza",
       ],
       periodo_puntaje: ["mensual", "trimestral", "anual"],
       politica_pop: ["dentro_del_tope", "bonus_sobre_100"],
@@ -2902,6 +2923,7 @@ export const Constants = {
         "precio",
         "contingencia",
         "campo_extra",
+        "orden",
       ],
       tipo_solicitud_ruta: ["cambio_tienda", "cambio_dia", "no_visita", "otro"],
       tipo_tienda: ["hiper", "super", "express"],

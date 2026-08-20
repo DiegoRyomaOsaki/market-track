@@ -72,6 +72,8 @@ type Puntaje = {
   distribucion_pct: string | null;
   visibilidad_pct: string | null;
   precio_pct: string | null;
+  orden_pct: string | null;
+  total_pct: string | null;
   sos_real_pct: string | null;
   skus_codificados: number;
   skus_evaluados: number;
@@ -95,6 +97,8 @@ async function levantarYPuntuar(
     estado?: string;
     sosPropios?: number | null;
     sosCompetencia?: { marca: string; frentes: number }[];
+    /** La calificación de orden y limpieza, con su foto obligatoria. */
+    orden?: "bien" | "regular" | "mal";
     skus?: {
       skuId?: string;
       quiebre?: { sistema: number; piso: number };
@@ -158,6 +162,10 @@ async function levantarYPuntuar(
       if (n > 50) break;
     }
 
+    if (opciones.orden) {
+      await calificarOrden(c, sufijo, lev, visita, opciones.orden);
+    }
+
     await c.query(`update public.levantamiento set estado = $2 where id = $1`, [
       lev,
       opciones.estado ?? "completado",
@@ -165,13 +173,66 @@ async function levantarYPuntuar(
   });
 
   const r = await c.query<Puntaje>(
-    `select distribucion_pct, visibilidad_pct, precio_pct, sos_real_pct,
+    `select distribucion_pct, visibilidad_pct, precio_pct, orden_pct, total_pct,
+            sos_real_pct,
             skus_codificados, skus_evaluados, skus_presentes,
             skus_precio_evaluados, skus_precio_correctos, config_id
      from public.puntaje_perfect_store where levantamiento_id = $1`,
     [lev],
   );
   return r.rows[0] ?? null;
+}
+
+/**
+ * El SQLSTATE que deja una sentencia que debe fallar, sin llevarse por delante la
+ * transacción del test.
+ *
+ * El savepoint es obligatorio: una restricción violada ABORTA la transacción, y a
+ * partir de ahí toda consulta muere con "current transaction is aborted" —
+ * incluida la que restaura el rol al salir del helper. Sin esto, un test que
+ * comprueba un CHECK rompe al siguiente.
+ */
+async function codigoDeError(c: Client, sql: string): Promise<string> {
+  await c.query("savepoint intento");
+  try {
+    await c.query(sql);
+    await c.query("release savepoint intento");
+    return "";
+  } catch (err) {
+    await c.query("rollback to savepoint intento");
+    return (err as { code?: string }).code ?? "";
+  }
+}
+
+/**
+ * Califica el orden del levantamiento, con su foto.
+ *
+ * La foto PRIMERO y la calificación después, en una sola sentencia: es el orden
+ * que el móvil tiene que respetar, porque el CHECK exige las dos juntas. La fila
+ * `foto` se escribe al capturar y su binario sube horas después — por eso
+ * `subida_at` se queda null aquí, como en el campo de verdad.
+ */
+async function calificarOrden(
+  c: Client,
+  sufijo: string,
+  levantamiento: string,
+  visita: string,
+  nivel: string,
+): Promise<string> {
+  const foto = `f0000014-0000-0000-0000-0000000000${sufijo}`;
+  await c.query(
+    `insert into public.foto
+       (id, tenant_id, visita_id, levantamiento_id, tipo, capturada_at)
+     values ($1, $2, $3, $4, 'orden', now())`,
+    [foto, TENANTS.maracumango, visita, levantamiento],
+  );
+  await c.query(
+    `update public.levantamiento
+        set orden_nivel = $2::public.nivel_orden, orden_foto_id = $3
+      where id = $1`,
+    [levantamiento, nivel, foto],
+  );
+  return foto;
 }
 
 /**
@@ -403,6 +464,330 @@ describe("precio y promoción", () => {
 
       expect(Number(p?.precio_pct)).toBe(0);
       expect(p?.skus_precio_evaluados).toBe(1);
+    });
+  });
+});
+
+describe("orden y limpieza: la escala cualitativa", () => {
+  /** Los puntos que la configuración vigente le da a cada nivel. */
+  async function puntosDeLaConfig(
+    c: Client,
+  ): Promise<{ bien: string; regular: string; mal: string }> {
+    const r = await c.query<{ bien: string; regular: string; mal: string }>(
+      `select orden_bien_pts as bien, orden_regular_pts as regular,
+              orden_mal_pts as mal
+         from public.config_perfect_store where id = $1`,
+      [IDS.configDefault],
+    );
+    return r.rows[0]!;
+  }
+
+  it("'bien' vale lo que diga la configuración, no un 100 escrito en el motor", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const pts = await puntosDeLaConfig(c);
+      const p = await levantarYPuntuar(c, "40", {
+        orden: "bien",
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+
+      expect(p?.orden_pct).toBe(pts.bien);
+    });
+  });
+
+  it("'regular' y 'mal' salen igual de la configuración", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const pts = await puntosDeLaConfig(c);
+      const reg = await levantarYPuntuar(c, "41", {
+        orden: "regular",
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+      const mal = await levantarYPuntuar(c, "42", {
+        orden: "mal",
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+
+      expect(reg?.orden_pct).toBe(pts.regular);
+      // "mal" es CERO, y cero no es null: la góndola se evaluó y estaba mal.
+      // Confundirlos borraría la diferencia entre un mal trabajo y uno no hecho.
+      expect(mal?.orden_pct).toBe(pts.mal);
+      expect(mal?.orden_pct).not.toBeNull();
+    });
+  });
+
+  it("un umbral distinto en la configuración cambia el puntaje", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      // Aquí es donde de verdad se rompería "configurable, no en el código": si
+      // el motor tuviera el 100 escrito, este test seguiría dando 100.
+      await c.query(
+        `insert into public.config_perfect_store
+           (tenant_id, marca_id, categoria_id, tipo_tienda,
+            peso_distribucion, peso_visibilidad, peso_precio, peso_pop, peso_orden,
+            sos_objetivo_pct, orden_bien_pts, orden_regular_pts, orden_mal_pts,
+            vigente_desde)
+         values ($1, $2, null, null, 30, 25, 25, 10, 10, 35, 70, 40, 10, '2026-06-01')`,
+        [TENANTS.maracumango, IDS.marca],
+      );
+
+      const p = await levantarYPuntuar(c, "43", {
+        orden: "bien",
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+
+      expect(p?.orden_pct).toBe("70.00");
+    });
+  });
+
+  it("cada valor del enum tiene puntos: ninguno se queda sin traducir", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      // La regla del proyecto: una función que se ramifica sobre un enum se
+      // prueba con TODOS sus valores. El `case` del motor no tiene `else` a
+      // propósito —un `raise` ahí haría que el conector descarte el trabajo del
+      // mercaderista—, así que un nivel nuevo sin traducir saldría null y su peso
+      // se renormalizaría en silencio. Este test es lo que lo delata.
+      const niveles = await c.query<{ nivel: string }>(
+        `select unnest(enum_range(null::public.nivel_orden))::text as nivel`,
+      );
+      expect(niveles.rows.length).toBeGreaterThan(0);
+
+      let sufijo = 44;
+      for (const { nivel } of niveles.rows) {
+        const p = await levantarYPuntuar(c, String(sufijo), {
+          orden: nivel as "bien" | "regular" | "mal",
+          skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+        });
+        expect(p?.orden_pct, `el nivel ${nivel} no puntúa`).not.toBeNull();
+        sufijo += 1;
+      }
+    });
+  });
+
+  it("el paso omitido por contingencia deja la variable NO evaluada, no en cero", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const p = await levantarYPuntuar(c, "48", {
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+
+      // Null y no 0: con un cero, una góndola que nadie llegó a mirar se leería
+      // como una góndola sucia, y el peso de la variable se cobraría entero.
+      expect(p?.orden_pct).toBeNull();
+      expect(p?.total_pct).not.toBeNull();
+    });
+  });
+
+  it("la calificación EXIGE su foto", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await levantarYPuntuar(c, "49", {
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+
+      let codigo = "";
+      // Como el MERCADERISTA: el admin no tiene política de escritura sobre
+      // `levantamiento`, así que su update no tocaría ninguna fila y la
+      // restricción no llegaría a evaluarse — el test pasaría sin probar nada.
+      await comoOtro(c, USUARIOS.mercaderistaMaracumango, async () => {
+        codigo = await codigoDeError(
+          c,
+          `update public.levantamiento set orden_nivel = 'bien'
+            where id = 'f0000011-0000-0000-0000-000000000049'`,
+        );
+      });
+      // Sin evidencia la nota dependería del criterio del mercaderista, que es
+      // justo lo que la reunión quiso evitar.
+      expect(codigo).toBe("23514");
+    });
+  });
+
+  it("la foto tiene que ser DE ESE levantamiento", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await levantarYPuntuar(c, "50", {
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+      await levantarYPuntuar(c, "51", {
+        orden: "bien",
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+
+      let codigo = "";
+      await comoOtro(c, USUARIOS.mercaderistaMaracumango, async () => {
+        // La foto del levantamiento 51 no puede sostener la nota del 50: sin la
+        // FK de tres columnas, apuntar a la selfie del check-in sería legal.
+        codigo = await codigoDeError(
+          c,
+          `update public.levantamiento
+              set orden_nivel = 'bien',
+                  orden_foto_id = 'f0000014-0000-0000-0000-000000000051'
+            where id = 'f0000011-0000-0000-0000-000000000050'`,
+        );
+      });
+      expect(codigo).toBe("23503");
+    });
+  });
+
+  it("la acción de borrado de la FK es NO ACTION, no SET NULL", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      // Se comprueba en el CATÁLOGO y no borrando una visita de verdad.
+      //
+      // La prueba end-to-end existió y se retiró: es la única del arnés que hace
+      // un `delete from visita`, y al correr en paralelo contra la misma base se
+      // daba de bruces con los tests que insertan hijos de otra visita —
+      // deadlock medido, con `delete from public.visita` y un `insert into
+      // visita_respuesta` esperándose mutuamente. La app NUNCA borra una visita
+      // (no hay grant de delete: nada se borra en duro), así que el escenario
+      // solo lo alcanza el servidor, y no vale desestabilizar la suite entera
+      // por cubrirlo.
+      //
+      // Lo que sí protege esta aserción es la DECISIÓN: copiar el `on delete set
+      // null` de las tres columnas hermanas rompería el borrado en cascada de una
+      // visita —la cascada se lleva el levantamiento y a la vez intentaría poner
+      // a null esa misma fila, violando el CHECK—, y sin esto ese "arreglo"
+      // pasaría verde.
+      const r = await c.query<{ accion: string }>(
+        `select confdeltype as accion from pg_constraint
+          where conname = 'lev_orden_foto_fk'`,
+      );
+      expect(r.rows[0]?.accion).toBe("a");
+    });
+  });
+
+  it("no se puede retirar la foto que sostiene una calificación", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await levantarYPuntuar(c, "52", {
+        orden: "bien",
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+
+      // Como `postgres`: `authenticated` no tiene delete sobre `foto`. Borrar la
+      // evidencia dejaría una nota que ya nadie puede auditar, que es justo lo
+      // que la reunión quiso evitar.
+      await c.query("set local role postgres");
+      const codigo = await codigoDeError(
+        c,
+        `delete from public.foto where id = 'f0000014-0000-0000-0000-000000000052'`,
+      );
+      await c.query("set local role authenticated");
+
+      expect(codigo).toBe("23503");
+    });
+  });
+
+  it("el orden PESA en el total, y su ausencia renormaliza el resto", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      // El único test que mira el número del que sale el juicio sobre la tienda.
+      // Los demás comprueban `orden_pct` por separado, y los del ponderado dejan
+      // la variable nula: entre todos, nadie se daría cuenta de que los
+      // argumentos POSICIONALES del ponderador se cruzaron (el 5.º es el material
+      // POP, el 6.º el orden) y el peso se estaría aplicando a la variable
+      // equivocada.
+      //
+      // Config del seed: distribución 30 · visibilidad 25 · precio 25 · POP 10 ·
+      // orden 10. Se busca a propósito un caso donde las variables NO valgan lo
+      // mismo, porque con todas a 100 el total sale 100 pese a cualquier error.
+      //
+      //   distribución   0 (el SKU en quiebre)
+      //   visibilidad  100 (sos real 100 sobre un objetivo de 35, con tope)
+      //   precio       100 (registrado al precio regular)
+      //   orden          0 ('mal')
+      // Sin `as const`: congelaría los arrays como readonly y no encajarían en la
+      // firma del helper.
+      const comun = {
+        sosPropios: 100,
+        sosCompetencia: [],
+        skus: [{ quiebre: { sistema: 5, piso: 0 }, precio: PRECIO_REGULAR }],
+      };
+
+      const conOrden = await levantarYPuntuar(c, "55", {
+        ...comun,
+        orden: "mal",
+      });
+      // (0·30 + 100·25 + 100·25 + 0·10) / (30+25+25+10) = 5000/90
+      expect(conOrden?.orden_pct).toBe("0.00");
+      expect(Number(conOrden?.total_pct)).toBeCloseTo(55.56, 2);
+
+      const sinOrden = await levantarYPuntuar(c, "56", comun);
+      // Sin la variable, su peso se REPARTE: (0·30 + 100·25 + 100·25) / 80.
+      // Que 55,56 y 62,50 sean distintos es justo lo que separa "la góndola
+      // estaba mal" de "nadie la miró".
+      expect(sinOrden?.orden_pct).toBeNull();
+      expect(Number(sinOrden?.total_pct)).toBeCloseTo(62.5, 2);
+    });
+  });
+
+  it("el desglose por categoría NO lleva la calificación", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      // Hay una sola medición de orden por levantamiento —la góndola es una—, así
+      // que repartirla entre categorías sería inventar una medición que nadie
+      // hizo. Es la misma decisión que ya se tomó con la visibilidad. Este test
+      // fija la omisión para que añadir la columna sea un cambio deliberado y no
+      // un descuido que nadie ve.
+      await codificar(c, 1, true);
+      const conOrden = await levantarYPuntuar(c, "57", {
+        orden: "mal",
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+      expect(conOrden?.orden_pct).toBe("0.00");
+
+      const cat = await c.query<{ total_pct: string | null }>(
+        `select total_pct from public.puntaje_perfect_store_categoria
+          where levantamiento_id = 'f0000011-0000-0000-0000-000000000057'`,
+      );
+      const sinOrden = await levantarYPuntuar(c, "58", {
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+      const catSin = await c.query<{ total_pct: string | null }>(
+        `select total_pct from public.puntaje_perfect_store_categoria
+          where levantamiento_id = 'f0000011-0000-0000-0000-000000000058'`,
+      );
+
+      // El total del levantamiento SÍ se mueve; el de la categoría no.
+      expect(conOrden?.total_pct).not.toBe(sinOrden?.total_pct);
+      expect(cat.rows[0]?.total_pct).toBe(catSin.rows[0]?.total_pct);
+    });
+  });
+
+  it("una calificación que llega tarde recalcula el puntaje", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      // El teléfono reintenta una operación rechazada, o el mercaderista corrige
+      // la nota: el levantamiento ya está cerrado. Sin ampliar el trigger a esta
+      // columna, el puntaje se quedaría calculado sin ella para siempre.
+      const antes = await levantarYPuntuar(c, "53", {
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+      expect(antes?.orden_pct).toBeNull();
+
+      await comoOtro(c, USUARIOS.mercaderistaMaracumango, async () => {
+        // 'mal' y no 'bien': el resto de variables ya valen 100, así que una
+        // nota de 100 dejaría el total igual y el test no distinguiría "se
+        // recalculó" de "no se tocó nada".
+        await calificarOrden(
+          c,
+          "53",
+          "f0000011-0000-0000-0000-000000000053",
+          "f0000010-0000-0000-0000-000000000053",
+          "mal",
+        );
+      });
+
+      const despues = await c.query<{
+        orden_pct: string | null;
+        total_pct: string | null;
+      }>(
+        `select orden_pct, total_pct from public.puntaje_perfect_store
+          where levantamiento_id = 'f0000011-0000-0000-0000-000000000053'`,
+      );
+      expect(despues.rows[0]?.orden_pct).not.toBeNull();
+      expect(despues.rows[0]?.total_pct).not.toBe(antes?.total_pct);
+    });
+  });
+
+  it("un levantamiento omitido no deja puntaje aunque esté calificado", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const p = await levantarYPuntuar(c, "54", {
+        orden: "bien",
+        estado: "omitido",
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+
+      expect(p).toBeNull();
     });
   });
 });

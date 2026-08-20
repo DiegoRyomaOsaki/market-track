@@ -569,13 +569,39 @@ describe("visita_respuesta — el checklist del check-in", () => {
 
   it("borrar la visita arrastra sus respuestas (cascade)", async () => {
     await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      // La visita la siembra ESTE test, en vez de borrar la del seed.
+      //
+      // Borrar una fila compartida es lo que hacía antes, y el borrado en cascada
+      // de una visita toca media base (levantamiento, foto, respuestas): mientras
+      // otro archivo del arnés insertaba hijos de esa misma visita del seed, las
+      // dos transacciones se esperaban en distinto orden y saltaba un deadlock.
+      // Medido, con `delete from public.visita` y un `insert into
+      // visita_respuesta` bloqueándose mutuamente.
+      //
+      // Es además la regla del proyecto: un test asegura sobre lo que él mismo
+      // sembró. La cobertura no cambia — la cascada es la misma.
+      await c.query(
+        `insert into public.visita (id, tenant_id, rutero_parada_id, mercaderista_id,
+                                    tienda_id, estado, check_in_at)
+         values ($1, $2, $3, $4, $5, 'en_curso', now())`,
+        [
+          IDS.nuevaVisita,
+          TENANTS.maracumango,
+          IDS.ruteroParadaMrc,
+          USUARIOS.mercaderistaMaracumango,
+          IDS.tiendaMrc,
+        ],
+      );
       await c.query(
         `insert into public.visita_respuesta (id, tenant_id, visita_id, campo_id, valor)
          values ($1, $2, $3, 'llevas_botas', 'true'::jsonb)`,
-        [IDS.nuevaRespuestaVisita, TENANTS.maracumango, IDS.visitaMrc],
+        [IDS.nuevaRespuestaVisita, TENANTS.maracumango, IDS.nuevaVisita],
       );
       await c.query("set local role postgres");
-      await c.query(`delete from public.visita where id = $1`, [IDS.visitaMrc]);
+      await c.query(`delete from public.visita where id = $1`, [
+        IDS.nuevaVisita,
+      ]);
+      await c.query("set local role authenticated");
       const r = await c.query(
         `select id from public.visita_respuesta where id = $1`,
         [IDS.nuevaRespuestaVisita],
