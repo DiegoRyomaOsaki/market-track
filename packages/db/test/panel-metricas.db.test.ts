@@ -62,15 +62,18 @@ async function conPuntajePs(
   levantamiento: string,
   tenant: string,
   config: string,
+  ordenPct: number | null = null,
 ): Promise<void> {
   await c.query("set local role postgres");
   await c.query(
     `insert into public.puntaje_perfect_store
        (levantamiento_id, tenant_id, config_id,
-        distribucion_pct, visibilidad_pct, precio_pct, total_pct)
-     values ($1, $2, $3, 80, 60, 100, 80)
-     on conflict (levantamiento_id) do update set total_pct = excluded.total_pct`,
-    [levantamiento, tenant, config],
+        distribucion_pct, visibilidad_pct, precio_pct, orden_pct, total_pct)
+     values ($1, $2, $3, 80, 60, 100, $4, 80)
+     on conflict (levantamiento_id) do update set
+       orden_pct = excluded.orden_pct,
+       total_pct = excluded.total_pct`,
+    [levantamiento, tenant, config, ordenPct],
   );
   await c.query("set local role authenticated");
 }
@@ -149,6 +152,37 @@ describe("publicar_escalera_bono — una escalera es un conjunto, no filas suelt
 });
 
 describe("previsualizar_perfect_store", () => {
+  it("la previa incluye el orden y limpieza calificado", async () => {
+    // Sin esto, `total_actual` —que lo calcula el motor— incluiría la variable y
+    // `total_previsto` no: el admin vería una previsualización que MIENTE sobre
+    // el efecto de los pesos que está a punto de publicar.
+    //
+    // El test anterior de este describe pasaba con la firma vieja de tres
+    // argumentos porque los dos lados coincidían en null; este obliga a que la
+    // envoltura pase de verdad la quinta variable.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await conPuntajePs(
+        c,
+        LEVANTAMIENTO_MRC,
+        TENANTS.maracumango,
+        CONFIG_PS_MRC,
+        0,
+      );
+
+      const pesos = { ...PESOS_PS, peso_distribucion: 30, peso_orden: 20 };
+      const previa = await c.query<{ total_previsto: string }>(
+        `select total_previsto from public.previsualizar_perfect_store($1, $2::jsonb)`,
+        [MARCA_MRC, JSON.stringify(pesos)],
+      );
+
+      // (80·30 + 60·25 + 100·25 + 0·20) / (30+25+25+20) = 6400/100 = 64.00.
+      // Si la envoltura ignorara `orden_pct`, el peso de orden no entraría en el
+      // denominador y saldría 80,00 — un ocho por ciento largo de diferencia
+      // sobre el que el admin decidiría.
+      expect(previa.rows[0]?.total_previsto).toBe("64.00");
+    });
+  });
+
   it("da el MISMO número que el ponderador que envuelve", async () => {
     // La envoltura existe solo porque el esquema `app` no está expuesto por
     // PostgREST. Si introdujera una segunda cuenta, la previa mentiría sobre el

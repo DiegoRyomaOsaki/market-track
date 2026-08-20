@@ -670,6 +670,80 @@ describe("orden y limpieza: la escala cualitativa", () => {
     });
   });
 
+  it("el orden PESA en el total, y su ausencia renormaliza el resto", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      // El único test que mira el número del que sale el juicio sobre la tienda.
+      // Los demás comprueban `orden_pct` por separado, y los del ponderado dejan
+      // la variable nula: entre todos, nadie se daría cuenta de que los
+      // argumentos POSICIONALES del ponderador se cruzaron (el 5.º es el material
+      // POP, el 6.º el orden) y el peso se estaría aplicando a la variable
+      // equivocada.
+      //
+      // Config del seed: distribución 30 · visibilidad 25 · precio 25 · POP 10 ·
+      // orden 10. Se busca a propósito un caso donde las variables NO valgan lo
+      // mismo, porque con todas a 100 el total sale 100 pese a cualquier error.
+      //
+      //   distribución   0 (el SKU en quiebre)
+      //   visibilidad  100 (sos real 100 sobre un objetivo de 35, con tope)
+      //   precio       100 (registrado al precio regular)
+      //   orden          0 ('mal')
+      // Sin `as const`: congelaría los arrays como readonly y no encajarían en la
+      // firma del helper.
+      const comun = {
+        sosPropios: 100,
+        sosCompetencia: [],
+        skus: [{ quiebre: { sistema: 5, piso: 0 }, precio: PRECIO_REGULAR }],
+      };
+
+      const conOrden = await levantarYPuntuar(c, "55", {
+        ...comun,
+        orden: "mal",
+      });
+      // (0·30 + 100·25 + 100·25 + 0·10) / (30+25+25+10) = 5000/90
+      expect(conOrden?.orden_pct).toBe("0.00");
+      expect(Number(conOrden?.total_pct)).toBeCloseTo(55.56, 2);
+
+      const sinOrden = await levantarYPuntuar(c, "56", comun);
+      // Sin la variable, su peso se REPARTE: (0·30 + 100·25 + 100·25) / 80.
+      // Que 55,56 y 62,50 sean distintos es justo lo que separa "la góndola
+      // estaba mal" de "nadie la miró".
+      expect(sinOrden?.orden_pct).toBeNull();
+      expect(Number(sinOrden?.total_pct)).toBeCloseTo(62.5, 2);
+    });
+  });
+
+  it("el desglose por categoría NO lleva la calificación", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      // Hay una sola medición de orden por levantamiento —la góndola es una—, así
+      // que repartirla entre categorías sería inventar una medición que nadie
+      // hizo. Es la misma decisión que ya se tomó con la visibilidad. Este test
+      // fija la omisión para que añadir la columna sea un cambio deliberado y no
+      // un descuido que nadie ve.
+      await codificar(c, 1, true);
+      const conOrden = await levantarYPuntuar(c, "57", {
+        orden: "mal",
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+      expect(conOrden?.orden_pct).toBe("0.00");
+
+      const cat = await c.query<{ total_pct: string | null }>(
+        `select total_pct from public.puntaje_perfect_store_categoria
+          where levantamiento_id = 'f0000011-0000-0000-0000-000000000057'`,
+      );
+      const sinOrden = await levantarYPuntuar(c, "58", {
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+      const catSin = await c.query<{ total_pct: string | null }>(
+        `select total_pct from public.puntaje_perfect_store_categoria
+          where levantamiento_id = 'f0000011-0000-0000-0000-000000000058'`,
+      );
+
+      // El total del levantamiento SÍ se mueve; el de la categoría no.
+      expect(conOrden?.total_pct).not.toBe(sinOrden?.total_pct);
+      expect(cat.rows[0]?.total_pct).toBe(catSin.rows[0]?.total_pct);
+    });
+  });
+
   it("una calificación que llega tarde recalcula el puntaje", async () => {
     await comoUsuario(db, USUARIOS.admin, async (c) => {
       // El teléfono reintenta una operación rechazada, o el mercaderista corrige

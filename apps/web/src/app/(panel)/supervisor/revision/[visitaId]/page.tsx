@@ -240,9 +240,17 @@ export default async function DetalleReportePage({
       ) : null}
 
       {detalle.levantamientos.map((lev) => {
+        // La foto que sostiene la calificación se saca de la rejilla genérica y
+        // se pinta JUNTO a su nota: el ticket pide que el supervisor la audite
+        // mirando la evidencia, y en un grid de cuatro columnas mezclado con
+        // antes/después/SOS/precio habría que leer cada pie de foto para dar con
+        // ella.
         const fotos = detalle.fotos.filter(
-          (f) => f.levantamiento_id === lev.id,
+          (f) =>
+            f.levantamiento_id === lev.id && f.id !== lev.orden_foto_id,
         );
+        const fotoDelOrden =
+          detalle.fotos.find((f) => f.id === lev.orden_foto_id) ?? null;
         return (
           <section
             key={lev.id}
@@ -267,18 +275,39 @@ export default async function DetalleReportePage({
               </p>
             ) : null}
 
-            {lev.orden_nivel !== null ? (
-              // La nota va junto a la foto que la sostiene: el supervisor la
-              // audita mirando la góndola, no creyéndose la calificación. El
-              // texto viaja en la pastilla, no solo el tono — el color por sí
-              // solo no comunica nada a quien no lo distingue (WCAG 1.4.1).
+            {/*
+              La nota va junto a la foto que la sostiene: el supervisor la audita
+              mirando la góndola, no creyéndose la calificación. El texto viaja en
+              la pastilla, no solo el tono — el color por sí solo no comunica nada
+              a quien no lo distingue (WCAG 1.4.1).
+
+              Sin calificación se dice "No evaluada" en vez de callar, igual que
+              `etiquetaDecision` hace con la revisión pendiente: el silencio no
+              distingue "se omitió por contingencia" de "falta el dato".
+            */}
+            <div className="flex items-start gap-3">
+              {fotoDelOrden ? (
+                <div className="w-32 shrink-0">
+                  <FotoEvidencia
+                    url={urls[fotoDelOrden.id]}
+                    etiqueta={ETIQUETA_FOTO[fotoDelOrden.tipo]}
+                    capturadaAt={fotoDelOrden.capturada_at}
+                  />
+                </div>
+              ) : null}
               <p className="flex items-center gap-2 text-[12px] text-muted-foreground">
                 Orden y limpieza:
-                <Pastilla tono={TONO_NIVEL_ORDEN[lev.orden_nivel]}>
-                  {ETIQUETA_NIVEL_ORDEN[lev.orden_nivel]}
-                </Pastilla>
+                {lev.orden_nivel === null ? (
+                  <Pastilla tono="bg-en-curso-suave text-en-curso-texto">
+                    No evaluada
+                  </Pastilla>
+                ) : (
+                  <Pastilla tono={TONO_NIVEL_ORDEN[lev.orden_nivel]}>
+                    {ETIQUETA_NIVEL_ORDEN[lev.orden_nivel]}
+                  </Pastilla>
+                )}
               </p>
-            ) : null}
+            </div>
 
             {fotos.length > 0 ? (
               // Antes y Después uno al lado del otro: comparar es la razón de
