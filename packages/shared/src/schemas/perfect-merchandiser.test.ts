@@ -128,6 +128,31 @@ describe("altaConfigMerchandiserSchema", () => {
     );
   });
 
+  it("sin umbral de fotos sin verificar, el guardarraíl salta al 20 %", () => {
+    // Compatibilidad con el alta anterior a la columna, igual que la periodicidad.
+    expect(
+      altaConfigMerchandiserSchema.parse(CONFIG).umbral_fotos_sin_verificar_pct,
+    ).toBe(20);
+  });
+
+  it("el umbral de fotos sin verificar es un porcentaje: fuera de 0-100 no pasa", () => {
+    for (const umbral of [-1, 101]) {
+      expect(
+        altaConfigMerchandiserSchema.safeParse({
+          ...CONFIG,
+          umbral_fotos_sin_verificar_pct: umbral,
+        }).success,
+      ).toBe(false);
+    }
+    // 0 es válido y significa "cualquier foto sin sellar bloquea el cierre".
+    expect(
+      altaConfigMerchandiserSchema.parse({
+        ...CONFIG,
+        umbral_fotos_sin_verificar_pct: 0,
+      }).umbral_fotos_sin_verificar_pct,
+    ).toBe(0);
+  });
+
   it("acepta trimestral y anual, y rechaza una cadencia inventada", () => {
     expect(
       altaConfigMerchandiserSchema.parse({

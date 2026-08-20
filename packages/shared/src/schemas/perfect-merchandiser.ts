@@ -109,6 +109,12 @@ export const altaConfigMerchandiserSchema = z
     // con `default 'mensual'` y el alta clásica no la enviaba.
     periodicidad: periodoPuntajeSchema.default("mensual"),
 
+    // El guardarraíl que impide que una caída de R2 cierre el periodo con la
+    // evidencia sin sellar. Mismo motivo que arriba para el default.
+    umbral_fotos_sin_verificar_pct: porcentaje(
+      "Escribe el umbral de fotos sin verificar",
+    ).default(20),
+
     vigente_desde: z.iso.date("Elige desde cuándo rige"),
   })
   .refine(

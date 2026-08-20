@@ -1,7 +1,7 @@
 import type { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { comoUsuario, conectar, USUARIOS } from "./ayudas";
+import { comoUsuario, conectar, TENANTS, USUARIOS } from "./ayudas";
 
 // El motor de alertas: triggers que producen `alerta` al insertar los datos de
 // campo. Las alertas las escribe el SERVIDOR (SECURITY DEFINER) — authenticated
@@ -154,6 +154,109 @@ describe("motor de alertas — seguridad", () => {
              null, null, 'alta'::public.severidad_alerta, '{}'::jsonb)`,
         ),
       ).rejects.toThrow();
+    });
+  });
+});
+
+describe("alertas de staff: el cliente-marca no las ve", () => {
+  // `verificacion_fotos` la levanta el guardarraíl del plan de lealtad y habla del
+  // bono de un mercaderista: la relación laboral de la outsourcing con su
+  // personal, no la operación de tienda que la marca compró. Quien lo impide es
+  // la POLÍTICA, no la consulta que las agrupe — una alerta escondida solo en una
+  // pantalla sigue siendo legible por PostgREST.
+  const ALERTA = "d0000019-0000-0000-0000-000000000001";
+
+  /** Siembra la alerta de staff como servidor y devuelve su id. */
+  async function conAlertaDeStaff(c: Client): Promise<string> {
+    await c.query("set local role postgres");
+    await c.query(
+      `insert into public.alerta (id, tenant_id, tipo, severidad, payload)
+       values ($1, $2, 'verificacion_fotos', 'alta', '{}'::jsonb)`,
+      [ALERTA, TENANTS.maracumango],
+    );
+    await c.query("set local role authenticated");
+    return ALERTA;
+  }
+
+  async function laVe(c: Client, alerta: string): Promise<boolean> {
+    const r = await c.query(`select 1 from public.alerta where id = $1`, [
+      alerta,
+    ]);
+    return r.rowCount === 1;
+  }
+
+  it("el cliente-marca no la lee", async () => {
+    await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
+      const alerta = await conAlertaDeStaff(c);
+      expect(await laVe(c, alerta)).toBe(false);
+    });
+  });
+
+  it("el mercaderista tampoco: es su propio bono", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const alerta = await conAlertaDeStaff(c);
+      expect(await laVe(c, alerta)).toBe(false);
+    });
+  });
+
+  it("el staff sí la lee: es quien paga el bono", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const alerta = await conAlertaDeStaff(c);
+      expect(await laVe(c, alerta)).toBe(true);
+    });
+  });
+
+  it("el cliente-marca no puede marcarla como vista", async () => {
+    await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
+      const alerta = await conAlertaDeStaff(c);
+      const r = await c.query(
+        `update public.alerta set estado = 'vista' where id = $1`,
+        [alerta],
+      );
+      // Sin filas afectadas: la política de UPDATE lleva el mismo predicado que
+      // la de lectura. Dejarla con el viejo permitiría cambiarle el estado a una
+      // alerta que no puede ni leer.
+      expect(r.rowCount).toBe(0);
+    });
+  });
+
+  it("clasifica TODOS los valores del enum, sin dejar ninguno sin decidir", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      // La regla del proyecto: una función que se ramifica sobre un enum se
+      // prueba con todos sus valores. Aquí además importa el fail-closed — el
+      // tipo que alguien añada mañana tiene que nacer siendo de staff, y este
+      // test se pondrá rojo para obligar a decidirlo a conciencia.
+      const r = await c.query<{ tipo: string; del_cliente: boolean }>(
+        `select t::text as tipo, app.tipo_alerta_del_cliente(t) as del_cliente
+         from unnest(enum_range(null::public.tipo_alerta)) as t
+         order by t::text`,
+      );
+      const porTipo = Object.fromEntries(
+        r.rows.map((f) => [f.tipo, f.del_cliente]),
+      );
+      expect(porTipo).toEqual({
+        quiebre: true,
+        diferencia_stock: true,
+        desviacion_precio: true,
+        promo_no_activa: true,
+        exhibicion_incompleta: true,
+        contingencia: true,
+        verificacion_fotos: false,
+      });
+    });
+  });
+
+  it("las alertas de la operación de tienda las sigue viendo el cliente", async () => {
+    await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
+      await c.query("set local role postgres");
+      await c.query(
+        `insert into public.alerta (id, tenant_id, tipo, severidad, payload)
+         values ($1, $2, 'quiebre', 'alta', '{}'::jsonb)`,
+        ["d0000019-0000-0000-0000-000000000002", TENANTS.maracumango],
+      );
+      await c.query("set local role authenticated");
+
+      expect(await laVe(c, "d0000019-0000-0000-0000-000000000002")).toBe(true);
     });
   });
 });

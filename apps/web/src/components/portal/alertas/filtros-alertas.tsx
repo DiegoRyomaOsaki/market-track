@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ESTADOS_ALERTA,
   SEVERIDADES_ALERTA,
-  TIPOS_ALERTA,
+  TIPOS_ALERTA_CLIENTE,
 } from "@market-track/shared";
 
 import {
@@ -30,7 +30,7 @@ const CAMPOS = [
   {
     nombre: "tipo",
     etiqueta: "Tipo",
-    valores: TIPOS_ALERTA,
+    valores: TIPOS_ALERTA_CLIENTE,
     rotulo: ETIQUETA_TIPO_ALERTA,
   },
   {

@@ -237,6 +237,23 @@ describe("emisión desde los triggers", () => {
     });
   });
 
+  it("una alerta de staff NO sale al canal del cliente-marca", async () => {
+    await comoUsuario(db, USUARIOS.supervisor, async (c) => {
+      await c.query("set local role postgres");
+      await vaciarMensajes(c);
+      await c.query(
+        `insert into public.alerta (tenant_id, tipo, severidad)
+         values ($1, 'verificacion_fotos', 'alta')`,
+        [TENANTS.maracumango],
+      );
+      // La RLS no cubre esto: el emisor es SECURITY DEFINER y manda la fila
+      // entera al canal del tenant, al que el portal del cliente está suscrito.
+      // Sin la guarda en el emisor, estrechar la política de lectura no serviría
+      // de nada — el bono de un empleado llegaría en vivo al portal de la marca.
+      expect(await topicosEmitidos(c)).toEqual([topicoStaff("alerta")]);
+    });
+  });
+
   it("el mensaje lleva la fila y la operación, no solo el topic", async () => {
     await comoUsuario(db, USUARIOS.supervisor, async (c) => {
       await c.query("set local role postgres");

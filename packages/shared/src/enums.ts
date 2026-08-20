@@ -42,6 +42,24 @@ export const tipoExhibicionSchema = z.enum(
 export const tipoAlertaSchema = z.enum(Constants.public.Enums.tipo_alerta);
 /** Los valores del enum, para pintar un desplegable sin escribirlos a mano. */
 export const TIPOS_ALERTA = Constants.public.Enums.tipo_alerta;
+/**
+ * Los tipos de alerta que el cliente-marca puede ver: la operación de tienda que
+ * compró. El resto son de staff — `verificacion_fotos` habla del bono de un
+ * mercaderista, que es la relación laboral de la outsourcing con su personal.
+ *
+ * Esta lista es de UX: sirve para no ofrecerle al cliente un filtro que siempre
+ * devuelve cero. Quien decide de verdad qué ve es la política
+ * `alerta_usuario_lee_su_tenant` (y, para el feed en vivo,
+ * `app.difundir_cambio_en_vivo`), no este array.
+ */
+export const TIPOS_ALERTA_CLIENTE = [
+  "quiebre",
+  "diferencia_stock",
+  "desviacion_precio",
+  "promo_no_activa",
+  "exhibicion_incompleta",
+  "contingencia",
+] as const satisfies readonly (typeof TIPOS_ALERTA)[number][];
 export const severidadAlertaSchema = z.enum(
   Constants.public.Enums.severidad_alerta,
 );
