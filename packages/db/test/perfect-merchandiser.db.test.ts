@@ -1301,7 +1301,6 @@ describe("quién ve y quién dispara el puntaje", () => {
   });
 });
 
-
 describe("guardarraíl: una caída de R2 no cierra el periodo", () => {
   /** Las alertas de verificación levantadas para este mercaderista y periodo. */
   async function alertasDeVerificacion(

@@ -277,9 +277,9 @@ export function FormMerchandiser({
             id="ayuda-umbral-verificacion"
             className="text-[11.5px] text-muted-foreground"
           >
-            Porcentaje de fotos subidas y sin sellar por el servidor a partir del
-            cual el periodo no se cierra. Evita pagar el bono sobre evidencia que
-            no terminó de guardarse.
+            Porcentaje de fotos subidas y sin sellar por el servidor a partir
+            del cual el periodo no se cierra. Evita pagar el bono sobre
+            evidencia que no terminó de guardarse.
           </span>
         </label>
       </fieldset>
