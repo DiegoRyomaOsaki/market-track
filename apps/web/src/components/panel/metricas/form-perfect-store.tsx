@@ -301,6 +301,10 @@ export function FormPerfectStore({
             peso_precio: Number(pesos.peso_precio),
             peso_pop: Number(pesos.peso_pop),
             peso_orden: Number(pesos.peso_orden),
+            // Va la política que el admin tiene elegida AHORA, no la publicada:
+            // la previa tiene que enseñar el efecto de lo que está a punto de
+            // guardar, y con `bonus_sobre_100` el total puede pasar de 100.
+            politica_pop: politicaPop,
           })
         }
         textoVacio={VACIO_VISTA_PREVIA_STORE}

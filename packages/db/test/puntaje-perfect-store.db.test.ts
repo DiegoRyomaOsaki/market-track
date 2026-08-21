@@ -26,6 +26,17 @@ const IDS = {
 const CADENA = "a0000001-0000-0000-0000-000000000001";
 const PRECIO_REGULAR = 6.9;
 
+/**
+ * Un uuid del arnés: `f000001<bloque>-…` con el sufijo alineado a la derecha.
+ *
+ * Interpolar sobre el literal de diez ceros exige un sufijo de exactamente dos
+ * caracteres; las exhibiciones concatenan el del levantamiento con su índice y
+ * miden tres, así que aquí se rellena en vez de interpolar.
+ */
+function id(bloque: string, sufijo: string): string {
+  return `f000001${bloque}-0000-0000-0000-${sufijo.padStart(12, "0")}`;
+}
+
 let db: Client;
 
 beforeAll(async () => {
@@ -72,6 +83,7 @@ type Puntaje = {
   distribucion_pct: string | null;
   visibilidad_pct: string | null;
   precio_pct: string | null;
+  pop_pct: string | null;
   orden_pct: string | null;
   total_pct: string | null;
   sos_real_pct: string | null;
@@ -99,6 +111,22 @@ async function levantarYPuntuar(
     sosCompetencia?: { marca: string; frentes: number }[];
     /** La calificación de orden y limpieza, con su foto obligatoria. */
     orden?: "bien" | "regular" | "mal";
+    /**
+     * Las exhibiciones auditadas. `negociada` la hace COMPROMETIDA (entra en el
+     * denominador); `tipoAdicional` la hace CONSEGUIDA por el mercaderista (suma
+     * al numerador y no al denominador).
+     *
+     * `instalada` y `completa` se dejan sin poner a propósito en varios tests:
+     * hoy el móvil no escribe ninguna de las dos, y el motor tiene un coalesce
+     * para cada una. Poder sembrar el `undefined` es lo que permite probarlos.
+     */
+    exhibiciones?: {
+      negociada?: string;
+      tipoAdicional?: string;
+      instalada?: boolean;
+      completa?: boolean;
+      vigente?: boolean;
+    }[];
     skus?: {
       skuId?: string;
       quiebre?: { sistema: number; piso: number };
@@ -162,6 +190,27 @@ async function levantarYPuntuar(
       if (n > 50) break;
     }
 
+    let e = 0;
+    for (const ex of opciones.exhibiciones ?? []) {
+      e += 1;
+      await c.query(
+        `insert into public.exhibicion
+           (id, tenant_id, levantamiento_id, exhibicion_negociada_id,
+            tipo_adicional, instalada, completa, vigente)
+         values ($1, $2, $3, $4, $5::public.tipo_exhibicion, $6, $7, $8)`,
+        [
+          id("5", `${sufijo}${e}`),
+          TENANTS.maracumango,
+          lev,
+          ex.negociada ?? null,
+          ex.tipoAdicional ?? null,
+          ex.instalada ?? null,
+          ex.completa ?? null,
+          ex.vigente ?? null,
+        ],
+      );
+    }
+
     if (opciones.orden) {
       await calificarOrden(c, sufijo, lev, visita, opciones.orden);
     }
@@ -173,7 +222,8 @@ async function levantarYPuntuar(
   });
 
   const r = await c.query<Puntaje>(
-    `select distribucion_pct, visibilidad_pct, precio_pct, orden_pct, total_pct,
+    `select distribucion_pct, visibilidad_pct, precio_pct, pop_pct, orden_pct,
+            total_pct,
             sos_real_pct,
             skus_codificados, skus_evaluados, skus_presentes,
             skus_precio_evaluados, skus_precio_correctos, config_id
@@ -202,6 +252,34 @@ async function codigoDeError(c: Client, sql: string): Promise<string> {
     await c.query("rollback to savepoint intento");
     return (err as { code?: string }).code ?? "";
   }
+}
+
+/**
+ * Una exhibición COMPROMETIDA por la marca en la tienda del seed.
+ *
+ * Se siembra aquí y no se reutiliza la del seed (`a0000007-…`) a propósito: las
+ * del seed las comparten otros archivos del arnés, así que apoyarse en ellas
+ * ataría estos tests a datos que no controlan.
+ *
+ * La fecha de inicio esquiva las del seed: la clave natural es
+ * `(tenant, tienda, marca, tipo, fecha_inicio)` y el seed ya tiene un jalavista
+ * y una activación arrancando el 1 de enero en esta misma tienda.
+ */
+async function conNegociada(
+  c: Client,
+  sufijo: string,
+  tipo = "cabecera",
+): Promise<string> {
+  const negociada = id("9", sufijo);
+  await c.query("set local role postgres");
+  await c.query(
+    `insert into public.exhibicion_negociada
+       (id, tenant_id, tienda_id, marca_id, tipo, fecha_inicio, fecha_fin)
+     values ($1, $2, $3, $4, $5::public.tipo_exhibicion, '2026-02-01', '2026-12-31')`,
+    [negociada, TENANTS.maracumango, IDS.tienda, IDS.marca, tipo],
+  );
+  await c.query("set local role authenticated");
+  return negociada;
 }
 
 /**
@@ -788,6 +866,411 @@ describe("orden y limpieza: la escala cualitativa", () => {
       });
 
       expect(p).toBeNull();
+    });
+  });
+});
+
+describe("material POP y activación", () => {
+  /** Publica una configuración con la política y el peso de POP que se quieran. */
+  async function conPolitica(
+    c: Client,
+    politica: string,
+    pesoPop = 10,
+  ): Promise<void> {
+    await c.query("set local role postgres");
+    await c.query(
+      `insert into public.config_perfect_store
+         (tenant_id, marca_id, categoria_id, tipo_tienda,
+          peso_distribucion, peso_visibilidad, peso_precio, peso_pop, peso_orden,
+          sos_objetivo_pct, politica_pop, vigente_desde)
+       values ($1, $2, null, null, $3, 25, 25, $4, 10, 35,
+               $5::public.politica_pop, '2026-06-01')`,
+      [
+        TENANTS.maracumango,
+        IDS.marca,
+        // Los pesos tienen que sumar 100: lo que se le quite a POP se le da a
+        // distribución.
+        100 - 25 - 25 - pesoPop - 10,
+        pesoPop,
+        politica,
+      ],
+    );
+    await c.query("set local role authenticated");
+  }
+
+  it("una comprometida instalada y completa vale 100", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const neg = await conNegociada(c, "60");
+      const p = await levantarYPuntuar(c, "60", {
+        exhibiciones: [{ negociada: neg, instalada: true, completa: true }],
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+
+      expect(p?.pop_pct).toBe("100.00");
+    });
+  });
+
+  it("instalada pero INCOMPLETA vale la mitad: presencia sin estado no es cumplimiento", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const neg = await conNegociada(c, "61");
+      const p = await levantarYPuntuar(c, "61", {
+        exhibiciones: [{ negociada: neg, instalada: true, completa: false }],
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+
+      expect(p?.pop_pct).toBe("50.00");
+    });
+  });
+
+  it("no instalada vale 0, y eso NO es lo mismo que no evaluada", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const neg = await conNegociada(c, "62");
+      const p = await levantarYPuntuar(c, "62", {
+        exhibiciones: [{ negociada: neg, instalada: false }],
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+
+      // Se comprometió y no está: cero de cumplimiento, con la variable SÍ
+      // evaluada. Confundirlo con null borraría la diferencia entre "la tienda
+      // no lo montó" y "la marca no negoció nada".
+      expect(p?.pop_pct).toBe("0.00");
+      expect(p?.pop_pct).not.toBeNull();
+    });
+  });
+
+  it("una exhibición no vigente no cuenta como presente", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const neg = await conNegociada(c, "63");
+      const p = await levantarYPuntuar(c, "63", {
+        exhibiciones: [
+          { negociada: neg, instalada: true, completa: true, vigente: false },
+        ],
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+
+      expect(p?.pop_pct).toBe("0.00");
+    });
+  });
+
+  it("`completa` sin escribir NO penaliza: el estado no se midió", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      // Hoy el móvil no escribe `completa` en ninguna fila. Sin el coalesce del
+      // motor, el día del despliegue TODA exhibición instalada caería de 100 a 50
+      // sin que nada hubiera cambiado en la tienda.
+      const neg = await conNegociada(c, "64");
+      const p = await levantarYPuntuar(c, "64", {
+        exhibiciones: [{ negociada: neg, instalada: true }],
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+
+      expect(p?.pop_pct).toBe("100.00");
+    });
+  });
+
+  it("una CONSEGUIDA sin `instalada` escrita puntúa: existe porque se consiguió", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      // El móvil tampoco escribe `instalada` en las conseguidas. Sin el coalesce,
+      // el premio se convertiría en castigo.
+      const neg = await conNegociada(c, "65");
+      const p = await levantarYPuntuar(c, "65", {
+        exhibiciones: [
+          { negociada: neg, instalada: false },
+          { tipoAdicional: "jalavista" },
+        ],
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+
+      // La comprometida da 0, la conseguida da 100, y el denominador es 1 (solo
+      // lo comprometido): la conseguida COMPENSA de verdad.
+      expect(p?.pop_pct).toBe("100.00");
+    });
+  });
+
+  it("dos comprometidas, una sí y otra no, dan la mitad", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const a = await conNegociada(c, "66");
+      const b = await conNegociada(c, "67", "glorificador");
+      const p = await levantarYPuntuar(c, "66", {
+        exhibiciones: [
+          { negociada: a, instalada: true, completa: true },
+          { negociada: b, instalada: false },
+        ],
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+
+      expect(p?.pop_pct).toBe("50.00");
+    });
+  });
+
+  it("lo conseguido no dispara la variable por encima de 100", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const neg = await conNegociada(c, "68");
+      const p = await levantarYPuntuar(c, "68", {
+        exhibiciones: [
+          { negociada: neg, instalada: true, completa: true },
+          { tipoAdicional: "activacion", instalada: true, completa: true },
+        ],
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+
+      // 200 puntos sobre 1 comprometida serían 200: el `least` lo topa. La
+      // columna tiene un CHECK de 0-100 y sin el tope la escritura reventaría.
+      expect(p?.pop_pct).toBe("100.00");
+    });
+  });
+
+  it("sin nada comprometido la variable NO se evalúa, y el total no baja", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const conPop = await levantarYPuntuar(c, "69", {
+        exhibiciones: [{ tipoAdicional: "jalavista", instalada: true }],
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+      const sinNada = await levantarYPuntuar(c, "70", {
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+
+      // El caso que el ticket pide decidir: hay conseguido pero no hay
+      // compromiso. La variable mide CUMPLIMIENTO de un compromiso; sin
+      // compromiso no hay nada que cumplir, así que no se evalúa y su peso se
+      // renormaliza. Un 0 penalizaría a la marca que no negoció material; un 100
+      // premiaría a la que no invirtió.
+      expect(conPop?.pop_pct).toBeNull();
+      expect(sinNada?.pop_pct).toBeNull();
+      expect(conPop?.total_pct).toBe(sinNada?.total_pct);
+    });
+  });
+
+  it("`dentro_del_tope`: el POP pondera como una más y el total no pasa de 100", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await conPolitica(c, "dentro_del_tope");
+      const a = await conNegociada(c, "71");
+      const b = await conNegociada(c, "72", "jalavista");
+      const p = await levantarYPuntuar(c, "71", {
+        sosPropios: 100,
+        sosCompetencia: [],
+        exhibiciones: [
+          { negociada: a, instalada: true, completa: true },
+          { negociada: b, instalada: false },
+        ],
+        skus: [{ quiebre: { sistema: 5, piso: 5 }, precio: PRECIO_REGULAR }],
+      });
+
+      // dist 100 · vis 100 · precio 100 · orden null · pop 50, pesos 30/25/25/10.
+      // (30·100 + 25·100 + 25·100 + 10·50) / 90 = 8500/90 = 94.44
+      expect(p?.pop_pct).toBe("50.00");
+      expect(Number(p?.total_pct)).toBeCloseTo(94.44, 2);
+      expect(Number(p?.total_pct)).toBeLessThanOrEqual(100);
+    });
+  });
+
+  it("`bonus_sobre_100`: el POP se suma POR ENCIMA y el total llega a 110", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await conPolitica(c, "bonus_sobre_100");
+      const neg = await conNegociada(c, "73");
+      const p = await levantarYPuntuar(c, "73", {
+        sosPropios: 100,
+        sosCompetencia: [],
+        exhibiciones: [{ negociada: neg, instalada: true, completa: true }],
+        skus: [{ quiebre: { sistema: 5, piso: 5 }, precio: PRECIO_REGULAR }],
+      });
+
+      // La frase literal del cliente: "podrías tener 100 puntos de perfect store
+      // y esto te suma y te lleva a 110".
+      //
+      // base  = (30·100 + 25·100 + 25·100) / 80 = 100.00  (el POP sale del promedio)
+      // bonus = 10 · 100 / 100 = 10.00
+      expect(p?.pop_pct).toBe("100.00");
+      expect(Number(p?.total_pct)).toBeCloseTo(110, 2);
+    });
+  });
+
+  it("en modo bonus un POP malo no RESTA: deja de sumar", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await conPolitica(c, "bonus_sobre_100");
+      const neg = await conNegociada(c, "74");
+      const conMalPop = await levantarYPuntuar(c, "74", {
+        sosPropios: 100,
+        sosCompetencia: [],
+        exhibiciones: [{ negociada: neg, instalada: false }],
+        skus: [{ quiebre: { sistema: 5, piso: 5 }, precio: PRECIO_REGULAR }],
+      });
+      const sinPop = await levantarYPuntuar(c, "75", {
+        sosPropios: 100,
+        sosCompetencia: [],
+        skus: [{ quiebre: { sistema: 5, piso: 5 }, precio: PRECIO_REGULAR }],
+      });
+
+      // Eso ES un bonus: el suelo no se mueve. Con `dentro_del_tope` el mismo
+      // dato bajaría el total.
+      expect(conMalPop?.pop_pct).toBe("0.00");
+      expect(Number(conMalPop?.total_pct)).toBeGreaterThanOrEqual(
+        Number(sinPop?.total_pct),
+      );
+    });
+  });
+
+  it("cada política del enum produce un total: ninguna se queda sin traducir", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      // El `case` de `app.total_perfect_store` no tiene `else` a propósito: una
+      // política nueva sin traducir devuelve NULL en vez de un número plausible
+      // del que se juzga a una tienda. Este test es lo que lo delata.
+      const r = await c.query<{ politica: string; total: string | null }>(
+        `select p::text as politica,
+                app.total_perfect_store(
+                  (select c from public.config_perfect_store c
+                    where c.id = $1),
+                  100, 100, 100, 100, 100)::text as total
+           from unnest(enum_range(null::public.politica_pop)) as p`,
+        [IDS.configDefault],
+      );
+      expect(r.rows.length).toBeGreaterThan(0);
+      for (const fila of r.rows) {
+        expect(
+          fila.total,
+          `la política '${fila.politica}' no traduce`,
+        ).not.toBeNull();
+      }
+    });
+  });
+
+  it("el total acepta 110 y sigue rechazando lo imposible", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      // Sobre un puntaje REAL, creado aquí: el seed deja sus levantamientos
+      // pendientes y esta tabla vacía, y un update de cero filas no evalúa
+      // ningún CHECK — el test pasaría en verde sin probar nada.
+      await levantarYPuntuar(c, "82", {
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+
+      await c.query("set local role postgres");
+      const ok = await codigoDeError(
+        c,
+        `update public.puntaje_perfect_store set total_pct = 110
+          where levantamiento_id = 'f0000011-0000-0000-0000-000000000082'`,
+      );
+      const malo = await codigoDeError(
+        c,
+        `update public.puntaje_perfect_store set total_pct = 201
+          where levantamiento_id = 'f0000011-0000-0000-0000-000000000082'`,
+      );
+      await c.query("set local role authenticated");
+
+      // El techo real es 100 + peso_pop, y peso_pop llega a 100: por eso el rango
+      // es 0-200 y no 0-110.
+      expect(ok).toBe("");
+      expect(malo).toBe("23514");
+    });
+  });
+
+  it("el desglose por categoría no se mueve con el POP", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await codificar(c, 1, true);
+      const neg = await conNegociada(c, "76");
+      await levantarYPuntuar(c, "76", {
+        exhibiciones: [{ negociada: neg, instalada: false }],
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+      await levantarYPuntuar(c, "77", {
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+
+      const con = await c.query<{ total_pct: string | null }>(
+        `select total_pct from public.puntaje_perfect_store_categoria
+          where levantamiento_id = 'f0000011-0000-0000-0000-000000000076'`,
+      );
+      const sin = await c.query<{ total_pct: string | null }>(
+        `select total_pct from public.puntaje_perfect_store_categoria
+          where levantamiento_id = 'f0000011-0000-0000-0000-000000000077'`,
+      );
+
+      // Hay una sola medición de POP por levantamiento; repartirla entre
+      // categorías sería inventarla. Mismo criterio que la visibilidad y el orden.
+      expect(con.rows[0]?.total_pct).toBe(sin.rows[0]?.total_pct);
+    });
+  });
+
+  it("una exhibición que llega DESPUÉS del cierre recalcula el puntaje", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const neg = await conNegociada(c, "78");
+      const antes = await levantarYPuntuar(c, "78", {
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+      expect(antes?.pop_pct).toBeNull();
+
+      // El teléfono reintenta una fila rechazada, o el mercaderista reentra al
+      // paso: el levantamiento ya está cerrado. Sin el trigger, el `pop_pct` se
+      // quedaría corto para siempre.
+      await comoOtro(c, USUARIOS.mercaderistaMaracumango, async () => {
+        await c.query(
+          `insert into public.exhibicion
+             (tenant_id, levantamiento_id, exhibicion_negociada_id, instalada, completa)
+           values ($1, 'f0000011-0000-0000-0000-000000000078', $2, true, true)`,
+          [TENANTS.maracumango, neg],
+        );
+      });
+
+      const despues = await c.query<{ pop_pct: string | null }>(
+        `select pop_pct from public.puntaje_perfect_store
+          where levantamiento_id = 'f0000011-0000-0000-0000-000000000078'`,
+      );
+      expect(despues.rows[0]?.pop_pct).toBe("100.00");
+    });
+  });
+
+  it("la foto de la exhibición tiene que ser DE ESE levantamiento", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const neg = await conNegociada(c, "79");
+      await levantarYPuntuar(c, "79", {
+        exhibiciones: [{ negociada: neg, instalada: true }],
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+      await levantarYPuntuar(c, "80", {
+        orden: "bien",
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+
+      // La foto del levantamiento 80 no puede ser la evidencia de una exhibición
+      // del 79: sin la FK de tres columnas, apuntar a la selfie del check-in
+      // sería legal.
+      const codigo = await comoOtro(
+        c,
+        USUARIOS.mercaderistaMaracumango,
+        async () =>
+          codigoDeError(
+            c,
+            `update public.exhibicion
+                set foto_id = 'f0000014-0000-0000-0000-000000000080'
+              where levantamiento_id = 'f0000011-0000-0000-0000-000000000079'`,
+          ),
+      );
+      expect(codigo).toBe("23503");
+    });
+  });
+
+  it("la evidencia no se puede retirar por debajo: la FK es NO ACTION", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const r = await c.query<{ accion: string }>(
+        `select confdeltype as accion from pg_constraint
+          where conname = 'exh_foto_fk'`,
+      );
+      // `set null` —lo que tenía antes— tropezaría con la cascada de una visita,
+      // igual que documentó la variable de orden.
+      expect(r.rows[0]?.accion).toBe("a");
+    });
+  });
+
+  it("los tipos nuevos se registran, comprometidos y conseguidos", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const neg = await conNegociada(c, "81", "glorificador");
+      const p = await levantarYPuntuar(c, "81", {
+        exhibiciones: [
+          { negociada: neg, instalada: true, completa: true },
+          { tipoAdicional: "activacion", instalada: true, completa: true },
+        ],
+        skus: [{ quiebre: { sistema: 5, piso: 5 } }],
+      });
+
+      expect(p?.pop_pct).toBe("100.00");
     });
   });
 });

@@ -6,7 +6,7 @@ import {
   altaConfigMerchandiserSchema,
   altaConfigPerfectStoreSchema,
   pesosMerchandiserSchema,
-  pesosPerfectStoreSchema,
+  previaPerfectStoreSchema,
   publicarEscaleraBonoSchema,
 } from "@market-track/shared";
 import { z } from "zod";
@@ -218,12 +218,14 @@ export type PreviaPuntaje = {
 /** El efecto de unos pesos sin guardar sobre el Perfect Store más reciente. */
 export async function previsualizarPerfectStore(
   marcaId: string,
-  pesos: Record<string, number>,
+  // La política es un string y no un número: entra en el mismo objeto que los
+  // pesos porque es lo que la RPC recibe como un solo jsonb.
+  pesos: Record<string, number | string>,
 ): Promise<
   { ok: true; previa: PreviaPuntaje | null } | { ok: false; error: string }
 > {
   const marca = idSchema.safeParse(marcaId);
-  const validos = pesosPerfectStoreSchema.safeParse(pesos);
+  const validos = previaPerfectStoreSchema.safeParse(pesos);
   if (!marca.success || !validos.success) {
     return { ok: false, error: "Revisa los pesos antes de ver el efecto" };
   }

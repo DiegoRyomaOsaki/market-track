@@ -562,6 +562,41 @@ levantamiento_respuesta.levantamiento_id` (o `foto.visita_id =
 visita_respuesta.visita_id`) y el mismo tenant, tratando el desajuste como "sin
 foto" — la regla vive también en el comentario de ambas columnas `valor`.
 
+**Material POP y activación** — la 4ª variable (MAR-97). El modelo ya la cubría a
+medias: `exhibicion_negociada` es lo que la marca **compromete** en una tienda y
+`exhibicion` lo que el mercaderista **audita** allí. Lo que faltaba eran los tipos
+—`jalavista`, `glorificador`, `activacion`, sumados a `tipo_exhibicion`— y que el
+motor leyera la política. No hay tabla nueva: de un jalavista no se pregunta nada
+que no se pregunte ya de una cabecera (si está, en qué estado, cuántas unidades y
+con qué foto).
+
+Cada fila auditada vale **0, 50 o 100**: no instalada o no vigente puntúa 0;
+instalada pero incompleta, 50; instalada y completa, 100. El **denominador es solo
+lo comprometido**, y lo que el mercaderista consiguió por su cuenta suma al
+numerador sin entrar en él — así una exhibición ganada compensa una comprometida
+que la tienda no montó, con tope en 100.
+
+> **Sin nada comprometido la variable NO se evalúa** (`pop_pct` null, su peso se
+> renormaliza), ni siquiera cuando hay conseguidas. Mide el cumplimiento de un
+> compromiso: sin compromiso no hay nada que cumplir. Un cero penalizaría a la
+> marca que no negoció material y un cien premiaría a la que no invirtió.
+
+Y el denominador cuenta **todo** lo comprometido, no solo el material: ninguna
+otra variable de Perfect Store cubre una cabecera pagada y no montada. El nombre
+de la variable se queda corto respecto a lo que mide, a propósito.
+
+**La política de la marca decide la forma del total** (`config_perfect_store.politica_pop`):
+
+| Política | Cómo entra | Techo |
+|---|---|---|
+| `dentro_del_tope` | una variable más del promedio ponderado; un POP malo **baja** el total | 100 |
+| `bonus_sobre_100` | sale del promedio (su peso se renormaliza) y su cumplimiento se suma por encima; un POP malo no resta, solo deja de sumar | `100 + peso_pop` |
+
+Su único dueño es `app.total_perfect_store`, que envuelve al ponderador y la usan
+el motor y la vista previa del panel — con una copia en cada sitio, la previa le
+mentiría al admin de una marca con bonus. Por eso `puntaje_perfect_store.total_pct`
+admite **0–200**: el techo real depende de `peso_pop`, que llega a 100.
+
 **Checklist de herramientas del check-in** — implementado (MAR-98). El
 formulario configurable llegó al check-in con
 `formulario_levantamiento.ambito` (`'levantamiento' | 'check_in'`; un check-in
