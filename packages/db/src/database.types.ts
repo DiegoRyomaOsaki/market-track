@@ -478,10 +478,10 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "exh_foto_fk"
-            columns: ["foto_id", "tenant_id"]
+            columns: ["foto_id", "levantamiento_id", "tenant_id"]
             isOneToOne: false
             referencedRelation: "foto"
-            referencedColumns: ["id", "tenant_id"]
+            referencedColumns: ["id", "levantamiento_id", "tenant_id"]
           },
           {
             foreignKeyName: "exh_lev_fk"
@@ -1548,6 +1548,7 @@ export type Database = {
           distribucion_pct: number | null
           levantamiento_id: string
           orden_pct: number | null
+          pop_pct: number | null
           precio_pct: number | null
           skus_codificados: number
           skus_evaluados: number
@@ -1565,6 +1566,7 @@ export type Database = {
           distribucion_pct?: number | null
           levantamiento_id: string
           orden_pct?: number | null
+          pop_pct?: number | null
           precio_pct?: number | null
           skus_codificados?: number
           skus_evaluados?: number
@@ -1582,6 +1584,7 @@ export type Database = {
           distribucion_pct?: number | null
           levantamiento_id?: string
           orden_pct?: number | null
+          pop_pct?: number | null
           precio_pct?: number | null
           skus_codificados?: number
           skus_evaluados?: number
@@ -2707,7 +2710,15 @@ export type Database = {
         | "exhibicion_incompleta"
         | "contingencia"
         | "verificacion_fotos"
-      tipo_exhibicion: "cabecera" | "isla" | "ruma" | "pop" | "adicional"
+      tipo_exhibicion:
+        | "cabecera"
+        | "isla"
+        | "ruma"
+        | "pop"
+        | "adicional"
+        | "jalavista"
+        | "glorificador"
+        | "activacion"
       tipo_foto:
         | "selfie"
         | "antes"
@@ -2913,7 +2924,16 @@ export const Constants = {
         "contingencia",
         "verificacion_fotos",
       ],
-      tipo_exhibicion: ["cabecera", "isla", "ruma", "pop", "adicional"],
+      tipo_exhibicion: [
+        "cabecera",
+        "isla",
+        "ruma",
+        "pop",
+        "adicional",
+        "jalavista",
+        "glorificador",
+        "activacion",
+      ],
       tipo_foto: [
         "selfie",
         "antes",
