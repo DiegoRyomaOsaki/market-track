@@ -117,6 +117,16 @@ export const NAV_ADMIN: readonly ItemNav[] = [
     ayuda:
       "Los pesos con los que se calculan las dos métricas: Perfect Store (por marca, afinable por categoría y tipo de tienda) y el plan de lealtad del mercaderista, con su escalera de bonos. Publicar crea una versión nueva: los puntajes ya calculados guardan con qué configuración se hicieron y no se mueven.",
   },
+  {
+    href: "/admin/ranking",
+    label: "Ranking",
+    icono: "🏆",
+    area: "admin",
+    titulo: "Ranking de mercaderistas",
+    subtitulo: "Puntaje del plan de lealtad por periodo",
+    ayuda:
+      "El ranking completo del plan de lealtad del cliente activo: posición, puntaje total y desglose por variable (puntualidad, asistencia, calidad de registro, herramientas), con la evolución contra el periodo anterior y el nivel de bono alcanzado. «Sin datos» significa que el periodo no se evaluó, no que puntúe cero. El detalle de cada mercaderista explica de dónde sale cada punto, parada a parada.",
+  },
 ];
 
 export const NAV_SUPERVISOR: readonly ItemNav[] = [
@@ -179,6 +189,16 @@ export const NAV_SUPERVISOR: readonly ItemNav[] = [
     subtitulo: "Pesos de Perfect Store y del plan de lealtad",
     ayuda:
       "Los pesos con los que se calculan las dos métricas: Perfect Store (por marca, afinable por categoría y tipo de tienda) y el plan de lealtad del mercaderista, con su escalera de bonos. Publicar crea una versión nueva: los puntajes ya calculados guardan con qué configuración se hicieron y no se mueven. Solo el admin publica; aquí se consultan.",
+  },
+  {
+    href: "/supervisor/ranking",
+    label: "Ranking",
+    icono: "🏆",
+    area: "supervisor",
+    titulo: "Ranking de mercaderistas",
+    subtitulo: "El puntaje de tu equipo, con las posiciones del cliente",
+    ayuda:
+      "El ranking del plan de lealtad de tu equipo: posición, puntaje total y desglose por variable, con la evolución contra el periodo anterior y el nivel de bono alcanzado. Ves solo a los tuyos, pero sus posiciones son las del cliente entero. «Sin datos» significa que el periodo no se evaluó, no que puntúe cero. El detalle explica cada punto, parada a parada.",
   },
 ];
 

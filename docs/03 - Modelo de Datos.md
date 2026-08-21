@@ -520,6 +520,24 @@ Cuatro invariantes:
   `minutos_desvio` y aplica su propia tolerancia versionada, nunca la editable de
   `tenant.tolerancia_puntualidad_min`.
 
+**El ranking del panel** — implementado (MAR-102). Lo sirve
+`public.ranking_merchandiser(tenant, tipo, inicio)`: posición por **rango de
+competición** (91/88/88/74 → 1, 2, 2, 4) sobre TODO el cliente, desglose por
+variable, nivel de bono **guardado** (`nivel_bono_id`, nunca recalculado: un
+periodo cerrado bajo una escalera vieja muestra su nivel de entonces) y la
+evolución contra el periodo anterior (`app.inicio_periodo_anterior`). Un total
+NULL es «sin datos»: queda fuera de la ventana, sin posición, y no desplaza a
+nadie. La RPC es `security definer` a propósito — con la RLS acotada al equipo,
+una ventana `invoker` le daría al supervisor un "puesto 1" para quien es 7.º del
+cliente; la visibilidad se aplica **después** de la ventana, con el mismo dueño
+que la política: **`app.puede_ver_mercaderista()`** (admin → todos; supervisor →
+solo `profile.supervisor_id = auth.uid()`). Esa función también estrechó la
+política `puntaje_pm_staff_lee`, que antes dejaba a cualquier supervisor leer
+los bonos de todos los clientes por PostgREST. El detalle parada a parada lo da
+`public.paradas_del_periodo_merchandiser`, con los puntos de
+**`app.puntaje_de_parada`** — la rampa extraída del motor, que ahora la promedia
+desde el mismo único dueño que el detalle enseña.
+
 El **tiempo efectivo de atención** existe como columna pero llega **apagado**: su
 peso está fijado a 0 por CHECK y su porcentaje es siempre NULL. No hay fórmula
 acordada —"puede ser un incentivo perverso de que haga todo mal y rápido"— y un

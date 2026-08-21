@@ -11,10 +11,7 @@ import {
   FotoEvidencia,
 } from "@/components/evidencia/foto-evidencia";
 import { Aviso, Pastilla, TD, TH } from "@/components/panel/tabla";
-import {
-  ETIQUETA_NIVEL_ORDEN,
-  TONO_NIVEL_ORDEN,
-} from "@/lib/panel/revision";
+import { ETIQUETA_NIVEL_ORDEN, TONO_NIVEL_ORDEN } from "@/lib/panel/revision";
 import { soles } from "@/lib/formato";
 import { urlsFirmadas } from "@/lib/fotos-firmadas";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -246,8 +243,7 @@ export default async function DetalleReportePage({
         // antes/después/SOS/precio habría que leer cada pie de foto para dar con
         // ella.
         const fotos = detalle.fotos.filter(
-          (f) =>
-            f.levantamiento_id === lev.id && f.id !== lev.orden_foto_id,
+          (f) => f.levantamiento_id === lev.id && f.id !== lev.orden_foto_id,
         );
         const fotoDelOrden =
           detalle.fotos.find((f) => f.id === lev.orden_foto_id) ?? null;

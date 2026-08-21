@@ -175,7 +175,7 @@ levantamiento — *"las tres primeras ya las tenemos"*.
 | 10 | **Material POP y activación** ampliados | 🟡 | `exhibicion` ampliada · 4ª variable |
 | 11 | **Orden y limpieza** con escala cualitativa | 🟡 | paso configurable + foto · 5ª variable |
 | 12 | **Panel: configurar** Perfect Store y niveles de bono | 🟡 | panel admin |
-| 13 | **Panel: ranking** de mercaderistas con desglose | 🟡 | panel |
+| 13 | **Panel: ranking** de mercaderistas con desglose | ✅ | panel |
 | 14 | **Móvil: mi puntaje** y mi posición | 🟡 | app · sync rules |
 | 15 | **Surtido ideal** por tipo de tienda (plantilla) | 🟡 | panel · expande `tienda_sku` |
 | 16 | **Publicar el prototipo** navegable para el cliente | 🟡 | compromiso de Diego en la reunión |

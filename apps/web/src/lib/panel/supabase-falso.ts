@@ -45,6 +45,9 @@ function consultaSobre(filas: Fila[]) {
     },
     not: () => encadenable,
     order: () => encadenable,
+    // Passthrough: el tope real lo aplica PostgREST. El doble conserva todas
+    // las filas para que `maybeSingle()` siga fallando por multiplicidad.
+    limit: () => encadenable,
     maybeSingle: () => {
       const encontradas = encajan();
       if (encontradas.length > 1) {
@@ -108,8 +111,18 @@ function esperableOUna(resultado: RespuestaLista) {
 function esperableCrudo(
   data: unknown,
   error: { message: string; code?: string } | null,
-) {
+): {
+  then: (
+    alResolver: (r: { data: unknown; error: unknown }) => unknown,
+    alFallar?: (e: unknown) => unknown,
+  ) => unknown;
+  maybeSingle: () => Promise<{ data: unknown; error: unknown }>;
+  limit: (n: number) => ReturnType<typeof esperableCrudo>;
+} {
   return {
+    // Una RPC que devuelve un conjunto admite `.limit()` en PostgREST; el doble
+    // lo acepta y no recorta — ver el passthrough de la lectura.
+    limit: () => esperableCrudo(data, error),
     then: (
       alResolver: (r: { data: unknown; error: unknown }) => unknown,
       alFallar?: (e: unknown) => unknown,
