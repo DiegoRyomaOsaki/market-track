@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { VistaPrecios } from "@/components/comercial/vista-precios";
 import { VistaPromociones } from "@/components/comercial/vista-promociones";
 import { Pestanas } from "@/components/panel/pestanas";
+import { leerPagina } from "@/lib/panel/listado";
 
 export const metadata: Metadata = {
   title: "Precios y promociones — Market Track",
@@ -30,11 +31,12 @@ function primero(v: string | string[] | undefined): string | undefined {
 export default async function PreciosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ vista?: string | string[] }>;
+  searchParams: Promise<{ vista?: string | string[]; p?: string | string[] }>;
 }) {
   const params = await searchParams;
   const vistaParam = primero(params.vista);
   const vista: Vista = esVista(vistaParam) ? vistaParam : "precios";
+  const pagina = leerPagina(params.p);
 
   return (
     <div className="flex flex-col gap-4">
@@ -45,7 +47,11 @@ export default async function PreciosPage({
         etiqueta="Precios o promociones"
       />
 
-      {vista === "precios" ? <VistaPrecios /> : <VistaPromociones />}
+      {vista === "precios" ? (
+        <VistaPrecios pagina={pagina} />
+      ) : (
+        <VistaPromociones pagina={pagina} />
+      )}
     </div>
   );
 }

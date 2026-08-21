@@ -1,20 +1,20 @@
 import type { Metadata } from "next";
 
 import { FormExhibicion } from "@/components/comercial/form-exhibicion";
-import {
-  marcasActivas,
-  skusActivos,
-  tiendasActivas,
-} from "@/lib/comercial/opciones-datos";
+import { Aviso } from "@/components/panel/tabla";
+import { marcasActivas } from "@/lib/comercial/opciones-datos";
+import { tenantActivo } from "@/lib/panel/tenant-activo";
 
 export const metadata: Metadata = { title: "Nueva exhibición — Market Track" };
 
 export default async function NuevaExhibicionPage() {
-  const [tiendas, marcas, skus] = await Promise.all([
-    tiendasActivas(),
-    marcasActivas(),
-    skusActivos(),
-  ]);
+  const tenant = await tenantActivo();
+  if (!tenant) {
+    return (
+      <Aviso>No hay ningún cliente activo para negociar exhibiciones.</Aviso>
+    );
+  }
 
-  return <FormExhibicion tiendas={tiendas} marcas={marcas} skus={skus} />;
+  const marcas = await marcasActivas(tenant.id);
+  return <FormExhibicion tenantId={tenant.id} marcas={marcas} />;
 }

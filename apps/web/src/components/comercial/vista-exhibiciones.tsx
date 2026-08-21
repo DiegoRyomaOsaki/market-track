@@ -1,48 +1,79 @@
 import Link from "next/link";
 
 import { botonPrimario, enlaceTabla } from "@/components/panel/estilos";
+import { Paginacion } from "@/components/panel/paginacion";
 import { Aviso, Tarjeta, TD, TH } from "@/components/panel/tabla";
-import { acotar, TOPE_CONSULTA } from "@/lib/comercial/listado";
+import { paginar, rangoDe } from "@/lib/panel/listado";
+import { tenantActivo } from "@/lib/panel/tenant-activo";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
-import { AvisoTope } from "./aviso-tope";
-
-// Los espacios de exhibición negociados por tienda.
+// Los espacios de exhibición negociados por tienda, del cliente activo.
 //
 // La cuenta de SKUs va como número y no como lista: una cabecera puede llevar
 // veinte y la tabla dejaría de leerse. El detalle está en el formulario.
 
-export async function VistaExhibiciones() {
+const RUTA = "/admin/exhibiciones";
+
+export async function VistaExhibiciones({ pagina }: { pagina: number }) {
+  const tenant = await tenantActivo();
+
+  const barra = (
+    <div className="flex flex-wrap items-center gap-3">
+      <div className="flex-1" />
+      <Link href={`${RUTA}/nueva`} className={botonPrimario}>
+        + Nueva exhibición
+      </Link>
+    </div>
+  );
+
+  if (!tenant) {
+    return (
+      <div className="flex flex-col gap-4">
+        {barra}
+        <Aviso>
+          No hay ningún cliente activo del que mostrar exhibiciones.
+        </Aviso>
+      </div>
+    );
+  }
+
   const supabase = await createServerSupabaseClient();
+  const [desde, hasta] = rangoDe(pagina);
   const { data, error } = await supabase
     .from("exhibicion_negociada")
     .select(
       "id, tipo, sku_ids, cantidad_sugerida, fecha_inicio, fecha_fin, tienda:exh_neg_tienda_fk(nombre), marca:exh_neg_marca_fk(nombre)",
     )
+    .eq("tenant_id", tenant.id)
     .order("fecha_inicio", { ascending: false })
-    .limit(TOPE_CONSULTA);
+    .order("id")
+    .range(desde, hasta);
 
-  const { filas, hayMas } = acotar(data ?? []);
+  const { filas, hayAnterior, haySiguiente, vaciaFueraDeRango } = paginar(
+    data ?? [],
+    pagina,
+  );
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex-1" />
-        <Link href="/admin/exhibiciones/nueva" className={botonPrimario}>
-          + Nueva exhibición
-        </Link>
-      </div>
+      {barra}
 
       {error ? (
         <Aviso>No se pudieron cargar las exhibiciones.</Aviso>
+      ) : vaciaFueraDeRango ? (
+        <Aviso>
+          Esta página está vacía.{" "}
+          <Link href={RUTA} className={enlaceTabla}>
+            Volver a la primera
+          </Link>
+        </Aviso>
       ) : filas.length === 0 ? (
         <Aviso>
-          Aún no hay exhibiciones negociadas. El mercaderista verifica en campo
-          que se cumplan; si faltan, se dispara una alerta.
+          Aún no hay exhibiciones negociadas de {tenant.nombre}. El mercaderista
+          verifica en campo que se cumplan; si faltan, se dispara una alerta.
         </Aviso>
       ) : (
         <>
-          <AvisoTope hayMas={hayMas} />
           <Tarjeta>
             <thead>
               <tr className="border-b border-border bg-muted/40">
@@ -89,10 +120,7 @@ export async function VistaExhibiciones() {
                     {e.fecha_inicio} → {e.fecha_fin}
                   </td>
                   <td className={`${TD} text-right`}>
-                    <Link
-                      href={`/admin/exhibiciones/${e.id}`}
-                      className={enlaceTabla}
-                    >
+                    <Link href={`${RUTA}/${e.id}`} className={enlaceTabla}>
                       Editar
                       <span className="sr-only">
                         {" "}
@@ -105,6 +133,12 @@ export async function VistaExhibiciones() {
               ))}
             </tbody>
           </Tarjeta>
+          <Paginacion
+            pagina={pagina}
+            hayAnterior={hayAnterior}
+            haySiguiente={haySiguiente}
+            href={(p) => `${RUTA}?p=${p}`}
+          />
         </>
       )}
     </div>

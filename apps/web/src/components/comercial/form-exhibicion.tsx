@@ -5,21 +5,22 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
 import { campo, Errores, etiqueta, Pie } from "@/components/panel/campos";
+import {
+  BuscadorOpcion,
+  type OpcionBusqueda,
+} from "@/components/panel/buscador-opcion";
 import { crearExhibicion, editarExhibicion } from "@/lib/comercial/acciones";
+import { buscarSkus, buscarTiendas } from "@/lib/comercial/buscar-opciones";
 import { leerCampo } from "@/lib/formulario";
 
-import {
-  SIN_CATALOGO,
-  type OpcionMarca,
-  type OpcionSku,
-  type OpcionTienda,
-} from "./opciones";
+import { SIN_CATALOGO, type OpcionMarca } from "./opciones";
 
 // Alta y edición del espacio de exhibición que una marca negocia en una tienda.
 //
 // La negocia UNA MARCA, no el cliente entero: la misma tienda puede tener a la
-// vez una cabecera de una marca y una isla de otra. El cliente lo trae la tienda,
-// y las marcas y los SKUs se acotan a ese cliente.
+// vez una cabecera de una marca y una isla de otra. Tienda y SKUs se BUSCAN en
+// el catálogo del cliente activo en vez de precargarse; los SKUs elegidos se
+// acumulan como fichas porque son varios.
 
 type Exhibicion = {
   id: string;
@@ -36,44 +37,38 @@ const VOLVER = "/admin/exhibiciones";
 
 export function FormExhibicion({
   exhibicion,
-  tiendas,
+  tenantId,
+  tiendaInicial = null,
   marcas,
-  skus,
+  skusIniciales = [],
 }: {
   exhibicion?: Exhibicion;
-  tiendas: OpcionTienda[];
+  /** El cliente cuyo catálogo se ofrece: el activo al crear, el de la exhibición al editar. */
+  tenantId: string;
+  /** La tienda ya guardada, resuelta por id por la página (edición). */
+  tiendaInicial?: OpcionBusqueda | null;
   marcas: OpcionMarca[];
-  skus: OpcionSku[];
+  /** Los SKUs ya guardados, resueltos por id por la página (edición). */
+  skusIniciales?: OpcionBusqueda[];
 }) {
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
-  const [tiendaId, setTiendaId] = useState(
-    exhibicion?.tienda_id ?? tiendas[0]?.id ?? "",
+  const [tiendaElegida, setTiendaElegida] = useState<OpcionBusqueda | null>(
+    tiendaInicial,
   );
-  const [marcaId, setMarcaId] = useState(exhibicion?.marca_id ?? "");
-  const [skusElegidos, setSkusElegidos] = useState<string[]>(
-    exhibicion?.sku_ids ?? [],
-  );
+  const [skusElegidos, setSkusElegidos] =
+    useState<OpcionBusqueda[]>(skusIniciales);
   const router = useRouter();
 
-  const tiendaElegida = tiendas.find((t) => t.id === tiendaId);
-  const delCliente = <T extends { tenant_id: string }>(xs: T[]) =>
-    xs.filter((x) => x.tenant_id === tiendaElegida?.tenant_id);
-
-  function elegirTienda(nuevaTiendaId: string) {
-    setTiendaId(nuevaTiendaId);
-    // La marca y los SKUs se limpian con la tienda. Los SKUs marcados de otro
-    // cliente dejan de VERSE al cambiar —el filtro los quita de la lista— pero
-    // seguirían en el estado y viajarían en el envío: `sku_ids` es un `uuid[]`
-    // sin FK, así que la base tampoco los rechazaría.
-    setMarcaId("");
-    setSkusElegidos([]);
+  function agregarSku(opcion: OpcionBusqueda | null) {
+    if (opcion === null) return;
+    setSkusElegidos((previos) =>
+      previos.some((s) => s.id === opcion.id) ? previos : [...previos, opcion],
+    );
   }
 
-  function alternarSku(id: string) {
-    setSkusElegidos((previos) =>
-      previos.includes(id) ? previos.filter((s) => s !== id) : [...previos, id],
-    );
+  function quitarSku(id: string) {
+    setSkusElegidos((previos) => previos.filter((s) => s.id !== id));
   }
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
@@ -90,7 +85,7 @@ export function FormExhibicion({
       tienda_id: leerCampo(fd, "tienda_id"),
       marca_id: leerCampo(fd, "marca_id"),
       tipo: leerCampo(fd, "tipo"),
-      sku_ids: skusElegidos,
+      sku_ids: skusElegidos.map((s) => s.id),
       cantidad_sugerida: cantidad === "" ? null : Number(cantidad),
       fecha_inicio: leerCampo(fd, "fecha_inicio"),
       fecha_fin: leerCampo(fd, "fecha_fin"),
@@ -109,11 +104,9 @@ export function FormExhibicion({
     router.refresh();
   }
 
-  if (tiendas.length === 0 || marcas.length === 0) {
+  if (marcas.length === 0) {
     return <p className={SIN_CATALOGO.clase}>{SIN_CATALOGO.exhibicion}</p>;
   }
-
-  const skusDelCliente = delCliente(skus);
 
   return (
     <form
@@ -121,36 +114,28 @@ export function FormExhibicion({
       className="flex max-w-xl flex-col gap-4 rounded-xl border border-border bg-background p-6"
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <label className="flex flex-col gap-1.5">
-          <span className={etiqueta}>Tienda</span>
-          <select
-            name="tienda_id"
-            required
-            value={tiendaId}
-            onChange={(e) => elegirTienda(e.target.value)}
-            className={campo}
-          >
-            {tiendas.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.nombre} ({t.cliente})
-              </option>
-            ))}
-          </select>
-        </label>
+        <BuscadorOpcion
+          etiqueta="Tienda"
+          nombreCampo="tienda_id"
+          placeholder="Busca por nombre…"
+          buscar={buscarTiendas}
+          tenantId={tenantId}
+          valorInicial={tiendaInicial}
+          alElegir={setTiendaElegida}
+        />
 
         <label className="flex flex-col gap-1.5">
           <span className={etiqueta}>Marca que lo negocia</span>
           <select
             name="marca_id"
             required
-            value={marcaId}
-            onChange={(e) => setMarcaId(e.target.value)}
+            defaultValue={exhibicion?.marca_id ?? ""}
             className={campo}
           >
             <option value="" disabled>
               Elige una marca…
             </option>
-            {delCliente(marcas).map((m) => (
+            {marcas.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.nombre}
               </option>
@@ -215,35 +200,39 @@ export function FormExhibicion({
 
       <fieldset className="flex flex-col gap-2">
         <legend className={etiqueta}>SKUs que ocupan el espacio</legend>
-        {skusDelCliente.length === 0 ? (
-          <p className="text-[12px] text-muted-foreground">
-            Este cliente todavía no tiene SKUs en el catálogo.
-          </p>
-        ) : (
-          <>
-            <div className="flex max-h-48 flex-wrap gap-2 overflow-y-auto">
-              {skusDelCliente.map((s) => (
-                <label
-                  key={s.id}
-                  className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-[12.5px]"
+        <BuscadorOpcion
+          etiqueta="Añadir SKU"
+          placeholder="Busca por código o nombre…"
+          buscar={buscarSkus}
+          tenantId={tenantId}
+          alElegir={agregarSku}
+          limpiarAlElegir
+        />
+        {skusElegidos.length > 0 && (
+          <ul className="flex flex-wrap gap-2">
+            {skusElegidos.map((s) => (
+              <li
+                key={s.id}
+                className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-[12.5px]"
+              >
+                {s.etiqueta}
+                <button
+                  type="button"
+                  onClick={() => quitarSku(s.id)}
+                  aria-label={`Quitar ${s.etiqueta}`}
+                  className="font-semibold text-muted-foreground hover:text-foreground"
                 >
-                  <input
-                    type="checkbox"
-                    checked={skusElegidos.includes(s.id)}
-                    onChange={() => alternarSku(s.id)}
-                    className="size-4"
-                  />
-                  {s.codigo} · {s.nombre}
-                </label>
-              ))}
-            </div>
-            {/* Se negocia el espacio antes de decidir qué entra en él: dejarlo
-                vacío es un caso normal, no un olvido. */}
-            <p className="text-[12px] text-muted-foreground">
-              Se puede dejar vacío si aún no está decidido qué SKUs lo ocupan.
-            </p>
-          </>
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
         )}
+        {/* Se negocia el espacio antes de decidir qué entra en él: dejarlo
+            vacío es un caso normal, no un olvido. */}
+        <p className="text-[12px] text-muted-foreground">
+          Se puede dejar vacío si aún no está decidido qué SKUs lo ocupan.
+        </p>
       </fieldset>
 
       <Errores error={error} />

@@ -10,6 +10,13 @@ import {
   TD,
   TH,
 } from "@/components/panel/tabla";
+import { Paginacion } from "@/components/panel/paginacion";
+import {
+  escaparPatronIlike,
+  leerPagina,
+  paginar,
+  rangoDe,
+} from "@/lib/panel/listado";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Clientes-marca — Market Track" };
@@ -26,9 +33,11 @@ const BOTON_SECUNDARIO =
 export default async function ClientesMarcaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string | string[] }>;
+  searchParams: Promise<{ q?: string | string[]; p?: string | string[] }>;
 }) {
-  const busqueda = (primero((await searchParams).q) ?? "").trim();
+  const params = await searchParams;
+  const busqueda = (primero(params.q) ?? "").trim();
+  const pagina = leerPagina(params.p);
   const supabase = await createServerSupabaseClient();
 
   return (
@@ -52,7 +61,7 @@ export default async function ClientesMarcaPage({
         </Link>
       </div>
 
-      <TablaMarcas supabase={supabase} busqueda={busqueda} />
+      <TablaMarcas supabase={supabase} busqueda={busqueda} pagina={pagina} />
       <TablaClientes supabase={supabase} busqueda={busqueda} />
     </div>
   );
@@ -63,10 +72,13 @@ type Supabase = Awaited<ReturnType<typeof createServerSupabaseClient>>;
 async function TablaMarcas({
   supabase,
   busqueda,
+  pagina,
 }: {
   supabase: Supabase;
   busqueda: string;
+  pagina: number;
 }) {
+  const href = (p: number) => `/admin?q=${encodeURIComponent(busqueda)}&p=${p}`;
   // El conteo de SKUs lo agrega Postgres; traerse los SKUs al panel para contarlos
   // sería traer el catálogo entero por una cifra.
   let query = supabase
@@ -74,13 +86,32 @@ async function TablaMarcas({
     .select(
       "id, nombre, tolerancia_precio_pct, codigo_externo, activo, tenant:tenant_id(nombre), sku(count)",
     )
-    .order("nombre");
-  if (busqueda) query = query.ilike("nombre", `%${busqueda}%`);
+    .order("nombre")
+    .order("id")
+    .range(...rangoDe(pagina));
+  if (busqueda)
+    query = query.ilike("nombre", `%${escaparPatronIlike(busqueda)}%`);
 
   const { data, error } = await query;
   if (error) return <Aviso>No se pudieron cargar las marcas.</Aviso>;
 
-  const filas = data ?? [];
+  const { filas, hayAnterior, haySiguiente, vaciaFueraDeRango } = paginar(
+    data ?? [],
+    pagina,
+  );
+  if (vaciaFueraDeRango) {
+    return (
+      <Aviso>
+        Esta página está vacía.{" "}
+        <Link
+          href={href(1)}
+          className="text-[13px] font-semibold text-primary hover:underline"
+        >
+          Volver a la primera
+        </Link>
+      </Aviso>
+    );
+  }
   if (filas.length === 0) {
     return (
       <Aviso>
@@ -92,64 +123,74 @@ async function TablaMarcas({
   }
 
   return (
-    <Tarjeta>
-      <thead>
-        <tr className="border-b border-border bg-muted/40">
-          <th scope="col" className={TH}>
-            MARCA
-          </th>
-          <th scope="col" className={TH}>
-            CLIENTE
-          </th>
-          <th scope="col" className={TH}>
-            TOL. PRECIO
-          </th>
-          <th scope="col" className={TH}>
-            SKUs
-          </th>
-          <th scope="col" className={TH}>
-            CÓDIGO EXTERNO
-          </th>
-          <th scope="col" className={TH}>
-            ESTADO
-          </th>
-          <th scope="col" className={TH}>
-            <span className="sr-only">Acciones</span>
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {filas.map((m) => (
-          <tr key={m.id} className="border-b border-border last:border-0">
-            <td className={TD}>
-              <div className="flex items-center gap-2.5">
-                <Avatar nombre={m.nombre} />
-                <span className="font-semibold">{m.nombre}</span>
-              </div>
-            </td>
-            <td className={`${TD} text-muted-foreground`}>
-              {m.tenant?.nombre ?? "—"}
-            </td>
-            <td className={`${TD} font-mono`}>± {m.tolerancia_precio_pct}%</td>
-            <td className={`${TD} font-mono`}>{m.sku[0]?.count ?? 0}</td>
-            <td className={`${TD} font-mono text-muted-foreground`}>
-              {m.codigo_externo ?? "—"}
-            </td>
-            <td className={TD}>
-              <Estado activo={m.activo} />
-            </td>
-            <td className={`${TD} text-right`}>
-              <Link
-                href={`/admin/marcas/${m.id}`}
-                className="text-[13px] font-semibold text-primary hover:underline"
-              >
-                Editar<span className="sr-only"> la marca {m.nombre}</span>
-              </Link>
-            </td>
+    <>
+      <Tarjeta>
+        <thead>
+          <tr className="border-b border-border bg-muted/40">
+            <th scope="col" className={TH}>
+              MARCA
+            </th>
+            <th scope="col" className={TH}>
+              CLIENTE
+            </th>
+            <th scope="col" className={TH}>
+              TOL. PRECIO
+            </th>
+            <th scope="col" className={TH}>
+              SKUs
+            </th>
+            <th scope="col" className={TH}>
+              CÓDIGO EXTERNO
+            </th>
+            <th scope="col" className={TH}>
+              ESTADO
+            </th>
+            <th scope="col" className={TH}>
+              <span className="sr-only">Acciones</span>
+            </th>
           </tr>
-        ))}
-      </tbody>
-    </Tarjeta>
+        </thead>
+        <tbody>
+          {filas.map((m) => (
+            <tr key={m.id} className="border-b border-border last:border-0">
+              <td className={TD}>
+                <div className="flex items-center gap-2.5">
+                  <Avatar nombre={m.nombre} />
+                  <span className="font-semibold">{m.nombre}</span>
+                </div>
+              </td>
+              <td className={`${TD} text-muted-foreground`}>
+                {m.tenant?.nombre ?? "—"}
+              </td>
+              <td className={`${TD} font-mono`}>
+                ± {m.tolerancia_precio_pct}%
+              </td>
+              <td className={`${TD} font-mono`}>{m.sku[0]?.count ?? 0}</td>
+              <td className={`${TD} font-mono text-muted-foreground`}>
+                {m.codigo_externo ?? "—"}
+              </td>
+              <td className={TD}>
+                <Estado activo={m.activo} />
+              </td>
+              <td className={`${TD} text-right`}>
+                <Link
+                  href={`/admin/marcas/${m.id}`}
+                  className="text-[13px] font-semibold text-primary hover:underline"
+                >
+                  Editar<span className="sr-only"> la marca {m.nombre}</span>
+                </Link>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </Tarjeta>
+      <Paginacion
+        pagina={pagina}
+        hayAnterior={hayAnterior}
+        haySiguiente={haySiguiente}
+        href={href}
+      />
+    </>
   );
 }
 
@@ -160,11 +201,14 @@ async function TablaClientes({
   supabase: Supabase;
   busqueda: string;
 }) {
+  // Sin paginar a propósito: la tabla de clientes crece de contrato en
+  // contrato, no de importación en importación.
   let query = supabase
     .from("tenant")
     .select("id, nombre, activo")
     .order("nombre");
-  if (busqueda) query = query.ilike("nombre", `%${busqueda}%`);
+  if (busqueda)
+    query = query.ilike("nombre", `%${escaparPatronIlike(busqueda)}%`);
 
   const [{ data: tenants, error }, { data: mercs, error: errMercs }] =
     await Promise.all([
