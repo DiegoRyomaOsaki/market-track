@@ -2640,6 +2640,7 @@ export type Database = {
         Args: {
           p_inicio: string
           p_mercaderista?: string
+          p_tenant?: string
           p_tipo: Database["public"]["Enums"]["periodo_puntaje"]
         }
         Returns: {

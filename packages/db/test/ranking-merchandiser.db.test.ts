@@ -464,6 +464,49 @@ describe("la POLÍTICA, no solo la RPC (lectura directa por PostgREST)", () => {
   });
 });
 
+describe("el recálculo se acota al cliente", () => {
+  it("recalcular el cliente A no toca a los mercaderistas del cliente B", async () => {
+    // El botón del panel dispara esta RPC. Sin acotar, el supervisor de un
+    // cliente SELLARÍA los periodos vencidos de otro — irreversible, y de ahí
+    // sale un bono. Es la frontera de esta acción, no un detalle de eficiencia.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const r = await c.query<{ procesados: number }>(
+        `select procesados from public.recalcular_puntaje_merchandiser(
+           'mensual', '2026-02-01', null, $1)`,
+        [TENANTS.maracumango],
+      );
+
+      expect(r.rows[0]!.procesados).toBeGreaterThan(0);
+
+      // El del OTRO cliente no recibió cálculo alguno.
+      const rival = await c.query(
+        `select 1 from public.puntaje_merchandiser
+         where mercaderista_id = $1 and periodo_inicio = '2026-02-01'`,
+        [USUARIOS.mercaderistaRival],
+      );
+      expect(rival.rowCount).toBe(0);
+    });
+  });
+
+  it("sin `p_tenant` sigue recorriendo todos: el operador con service_role no pierde su herramienta", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const acotado = await c.query<{ procesados: number }>(
+        `select procesados from public.recalcular_puntaje_merchandiser(
+           'mensual', '2026-03-01', null, $1)`,
+        [TENANTS.maracumango],
+      );
+      const todos = await c.query<{ procesados: number }>(
+        `select procesados from public.recalcular_puntaje_merchandiser(
+           'mensual', '2026-03-01')`,
+      );
+
+      expect(todos.rows[0]!.procesados).toBeGreaterThan(
+        acotado.rows[0]!.procesados,
+      );
+    });
+  });
+});
+
 describe("el detalle: los hechos y la MISMA rampa que el motor", () => {
   it("una llegada 20 min tarde puntúa 88.89 con la config del seed (tolerancia 15, cero 60)", async () => {
     await comoUsuario(db, USUARIOS.admin, async (c) => {

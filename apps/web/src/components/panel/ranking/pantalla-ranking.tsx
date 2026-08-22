@@ -117,7 +117,7 @@ export async function PantallaRanking({
             →<span className="sr-only"> periodo siguiente</span>
           </Link>
         </nav>
-        <BotonRecalcular tipo={tipo} inicio={inicio} />
+        <BotonRecalcular tipo={tipo} inicio={inicio} tenantId={tenant.id} />
       </div>
 
       {filas.length === 0 ? (

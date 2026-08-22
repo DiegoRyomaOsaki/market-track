@@ -17,9 +17,12 @@ import {
 export function BotonRecalcular({
   tipo,
   inicio,
+  tenantId,
 }: {
   tipo: string;
   inicio: string;
+  /** El cliente que se recalcula: acotarlo evita sellar los periodos de otro. */
+  tenantId: string;
 }) {
   const [pendiente, empezar] = useTransition();
   const [resultado, setResultado] = useState<ResultadoRecalculo | null>(null);
@@ -32,7 +35,7 @@ export function BotonRecalcular({
         disabled={pendiente}
         onClick={() =>
           empezar(async () => {
-            setResultado(await recalcularPeriodo(tipo, inicio));
+            setResultado(await recalcularPeriodo(tipo, inicio, tenantId));
           })
         }
       >

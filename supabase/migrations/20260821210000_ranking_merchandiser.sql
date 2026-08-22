@@ -740,3 +740,76 @@ revoke execute on function public.paradas_del_periodo_merchandiser(uuid, public.
 revoke execute on function public.paradas_del_periodo_merchandiser(uuid, public.periodo_puntaje, date) from anon;
 grant execute on function public.paradas_del_periodo_merchandiser(uuid, public.periodo_puntaje, date)
   to authenticated, service_role;
+
+-- ---------------------------------------------------------------------------
+-- 8. El recálculo se ACOTA a un cliente
+--
+-- El bucle recorría a TODOS los mercaderistas de TODOS los clientes: mientras
+-- la RPC no tuvo llamante en el panel, daba igual. Ahora el ranking la dispara
+-- con un botón, y el cálculo SELLA el periodo pasada la ventana de gracia
+-- (`cerrado_at`, sin reapertura): sin acotar, el supervisor de un cliente
+-- congelaría los bonos de otro con un clic. No es fuga de datos — es una
+-- escritura irreversible fuera de su ámbito.
+--
+-- `p_tenant` va al FINAL y con default null, así que el comportamiento previo
+-- (todos los clientes) sigue disponible para un operador con service_role y las
+-- llamadas posicionales existentes no cambian de significado.
+--
+-- `drop` + `create` y no `create or replace`: añadir un parámetro crea una
+-- SOBRECARGA en vez de reemplazar, y dos firmas vivas dejarían a PostgREST sin
+-- saber cuál llamar. El drop se lleva los grants, que se reponen abajo.
+-- ---------------------------------------------------------------------------
+drop function public.recalcular_puntaje_merchandiser(public.periodo_puntaje, date, uuid);
+
+create function public.recalcular_puntaje_merchandiser(
+  p_tipo         public.periodo_puntaje,
+  p_inicio       date,
+  p_mercaderista uuid default null,
+  p_tenant       uuid default null
+)
+returns table (procesados integer, bloqueados integer)
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_ids uuid[] := '{}';
+  v_id  uuid;
+begin
+  if not app.es_staff() then
+    raise exception 'solo el staff recalcula el plan de lealtad' using errcode = '42501';
+  end if;
+
+  for v_id in
+    select p.id
+    from public.profile p
+    where p.rol = 'mercaderista'
+      and p.tenant_id is not null
+      and (p_mercaderista is null or p.id = p_mercaderista)
+      and (p_tenant is null or p.tenant_id = p_tenant)
+  loop
+    perform app.calcular_puntaje_merchandiser(v_id, p_tipo, p_inicio);
+    v_ids := v_ids || v_id;
+  end loop;
+
+  -- Se acumulan los ids en vez de repetir el `where` del bucle: un solo dueño de
+  -- "a quién se le pasó". Y una sola consulta al final, no una por mercaderista.
+  return query
+  select
+    cardinality(v_ids),
+    (select count(*)::integer
+     from public.puntaje_merchandiser pm
+     where pm.tipo = p_tipo
+       and pm.periodo_inicio = p_inicio
+       and pm.mercaderista_id = any(v_ids)
+       and pm.cierre_bloqueado);
+end;
+$$;
+
+comment on function public.recalcular_puntaje_merchandiser(public.periodo_puntaje, date, uuid, uuid) is
+  'Recalcula el puntaje del plan de lealtad de un periodo, acotado a un cliente y/o a un mercaderista (sin acotar: todos). Solo staff. Devuelve cuántos procesó y cuántos quedaron sin cerrar por el guardarraíl de verificación de fotos; los periodos ya cerrados no se tocan. El panel SIEMPRE pasa `p_tenant`: el cálculo sella periodos vencidos, y sellar los de otro cliente es irreversible.';
+
+revoke execute on function public.recalcular_puntaje_merchandiser(public.periodo_puntaje, date, uuid, uuid) from public;
+revoke execute on function public.recalcular_puntaje_merchandiser(public.periodo_puntaje, date, uuid, uuid) from anon;
+grant execute on function public.recalcular_puntaje_merchandiser(public.periodo_puntaje, date, uuid, uuid)
+  to authenticated, service_role;
