@@ -2476,6 +2476,24 @@ export type Database = {
         }
         Returns: Json
       }
+      paradas_del_periodo_merchandiser: {
+        Args: {
+          p_inicio: string
+          p_mercaderista: string
+          p_tipo: Database["public"]["Enums"]["periodo_puntaje"]
+        }
+        Returns: {
+          asistencia: Database["public"]["Enums"]["asistencia_parada"]
+          check_in_at: string
+          fecha: string
+          hora_planificada: string
+          minutos_desvio: number
+          parada_id: string
+          puntos: number
+          tienda_id: string
+          tienda_nombre: string
+        }[]
+      }
       pase_intento_fallido: { Args: { p_profile_id: string }; Returns: number }
       perfect_store_agregado: {
         Args: {
@@ -2594,10 +2612,38 @@ export type Database = {
           tienda_id: string
         }[]
       }
+      ranking_merchandiser: {
+        Args: {
+          p_inicio: string
+          p_tenant: string
+          p_tipo: Database["public"]["Enums"]["periodo_puntaje"]
+        }
+        Returns: {
+          activo: boolean
+          asistencia_pct: number
+          calculado_at: string
+          calidad_pct: number
+          cerrado: boolean
+          cierre_bloqueado: boolean
+          config_distinta: boolean
+          hay_empate: boolean
+          herramientas_pct: number
+          mercaderista_id: string
+          nivel_bono: string
+          nivel_bono_monto: number
+          nombre: string
+          posicion: number
+          posicion_anterior: number
+          puntualidad_pct: number
+          total_anterior: number
+          total_pct: number
+        }[]
+      }
       recalcular_puntaje_merchandiser: {
         Args: {
           p_inicio: string
           p_mercaderista?: string
+          p_tenant?: string
           p_tipo: Database["public"]["Enums"]["periodo_puntaje"]
         }
         Returns: {

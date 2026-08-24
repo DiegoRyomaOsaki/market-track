@@ -45,6 +45,17 @@ describe("itemActivo", () => {
     expect(itemActivo("/admin/metricas")?.label).toBe("Métricas y bonos");
   });
 
+  it("el ranking resuelve en las dos áreas, también en su detalle", () => {
+    expect(itemActivo("/admin/ranking")?.label).toBe("Ranking");
+    expect(itemActivo("/supervisor/ranking")?.area).toBe("supervisor");
+    // El detalle de un mercaderista sigue siendo la sección Ranking: el header
+    // la titula y el `?` enseña su ayuda.
+    expect(
+      itemActivo("/supervisor/ranking/44444444-4444-4444-4444-444444444444")
+        ?.href,
+    ).toBe("/supervisor/ranking");
+  });
+
   it("todo item de NAV tiene título y ayuda contextual", () => {
     // Ninguna sección puede quedarse sin su texto de ayuda (`?`): el popover lo
     // lee de aquí, que es la fuente única.
