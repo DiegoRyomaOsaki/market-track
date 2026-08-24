@@ -100,3 +100,39 @@ streams:
       # renderiza el wizard). Las versiones borrador no salen del panel.
       - SELECT * FROM formulario_levantamiento WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND activo = true
       - SELECT * FROM formulario_version WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND publicada = true
+
+      # Su plan de lealtad: SOLO la fila propia. El cliente lo decidió en la
+      # reunión del 3 ago 2026 —"que tú veas tu puntaje y tu posición, tú solo"—
+      # y esa decisión se cumple AQUÍ, no en la RLS: PowerSync replica con un rol
+      # BYPASSRLS, así que lo que no se acote en esta línea llega al teléfono de
+      # cada compañero y sobrevive al robo del dispositivo.
+      #
+      # La POSICIÓN viaja guardada. El teléfono tiene una fila y no puede
+      # calcular un rango; recalcularla aquí dejaría que el panel dijese "2.º" y
+      # el móvil "3.º" del mismo periodo, y de ese número sale un bono. La
+      # calcula `app.posicionar_merchandiser` sobre el cliente entero.
+      #
+      # Sin cota de fecha, como `visita`: son ~12 filas al año por persona y son
+      # la fuente de la evolución que la pantalla dibuja.
+      #
+      # Columnas EXPLÍCITAS y no `SELECT *`, a propósito. `nivel_bono_id` apunta
+      # a la escalera de bonos: el monto no se le baja al teléfono, el ticket no
+      # lo pide, y un id suelto sin su escalera no resuelve a nada. `config_id`,
+      # `cierre_bloqueado` y los contadores de salud del pipeline de fotos son
+      # de operación, no del mercaderista. `tiempo_efectivo_pct` es siempre NULL.
+      - SELECT id, mercaderista_id, tenant_id, tipo, periodo_inicio, total_pct, puntualidad_pct, asistencia_pct, calidad_pct, herramientas_pct, posicion, mercaderistas_evaluados, hay_empate, paradas_evaluables, paradas_asistidas, paradas_con_hora, paradas_puntuales, campos_obligatorios, campos_respondidos, fotos_esperadas, fotos_presentes, items_checklist, items_cumplidos, calculado_at, cerrado_at FROM puntaje_merchandiser WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND mercaderista_id = auth.user_id()
+
+      # El Perfect Store de SUS levantamientos: es lo que deja a "Mi día" decir
+      # "la última vez esta tienda quedó en 78". Acotado por el levantamiento de
+      # una visita propia, igual que `levantamiento_sku` y `exhibicion`.
+      #
+      # `levantamiento_id AS id` porque la clave primaria de esta tabla ES el
+      # levantamiento (1:1) y PowerSync identifica cada fila por `id`.
+      - SELECT levantamiento_id AS id, tenant_id, levantamiento_id, total_pct, calculado_at FROM puntaje_perfect_store WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND levantamiento_id IN (SELECT id FROM levantamiento WHERE visita_id IN (SELECT id FROM visita WHERE mercaderista_id = auth.user_id()))
+
+      # La PERIODICIDAD del plan, y solo eso: sin ella el móvil tendría que
+      # adivinar qué `tipo` mirar cuando conviven filas mensuales y anuales —el
+      # 1 de enero es inicio de las tres—, y esa heurística es exactamente el
+      # "el panel dice T3 y el móvil dice enero" que este stream viene a evitar.
+      # Los PESOS no bajan: son la política laboral del cliente, no del teléfono.
+      - SELECT id, tenant_id, periodicidad, vigente_desde FROM config_perfect_merchandiser WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant)

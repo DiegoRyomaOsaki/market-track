@@ -3,9 +3,12 @@ import { notFound } from "next/navigation";
 import { z } from "zod";
 
 import { DetalleMercaderista } from "@/components/panel/ranking/detalle-mercaderista";
-import { periodoPuntajeSchema } from "@market-track/shared";
+import {
+  esFechaISO,
+  inicioDePeriodo,
+  periodoPuntajeSchema,
+} from "@market-track/shared";
 import { diaEnLima } from "@/lib/fecha-lima";
-import { esFechaISO, inicioDePeriodo } from "@/lib/ranking/ranking";
 
 export const metadata: Metadata = {
   title: "Detalle del ranking — Market Track",

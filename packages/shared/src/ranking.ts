@@ -1,7 +1,14 @@
-import type { PeriodoPuntaje } from "@market-track/shared";
+import type { PeriodoPuntaje } from "./schemas/perfect-merchandiser";
 
 // La aritmética de periodos y los textos del ranking, puros a propósito: sin
-// React y sin Supabase, que es lo que permite probarlos rama a rama. La
+// React y sin Supabase, que es lo que permite probarlos rama a rama.
+//
+// Viven aquí y no en el panel porque los DOS frentes los usan: el panel pinta
+// el ranking entero y el móvil solo la fila propia, pero el periodo y la
+// posición tienen que llamarse igual en los dos. Con dos copias, el panel diría
+// «Julio» y el teléfono «Junio» del mismo número — y de ese número sale un bono.
+//
+// La
 // aritmética va sobre el string ISO (año, mes, día como enteros), nunca sobre
 // `Date`: un `new Date("2026-07-01")` se interpreta en UTC y en Lima todavía
 // es 30 de junio.

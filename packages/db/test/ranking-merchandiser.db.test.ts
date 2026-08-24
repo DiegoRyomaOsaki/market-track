@@ -88,7 +88,18 @@ async function conMercaderista(
   return usuario;
 }
 
-/** Un puntaje sembrado a mano: aquí se prueba el ranking, no el motor. */
+/**
+ * Un puntaje sembrado a mano: aquí se prueba el ranking, no el motor.
+ *
+ * Y se RECOLOCA al terminar, porque el ranking ya no calcula la posición: la
+ * lee de la columna que escribe `app.posicionar_merchandiser`. Es lo mismo que
+ * hace producción —el motor escribe la fila y su llamante recoloca el cliente—,
+ * así que sembrar sin recolocar probaría un estado que nunca existe.
+ *
+ * `sinRecolocar` lo salta a propósito: es la única forma de demostrar que el
+ * ranking LEE en vez de recalcular (se siembra una posición imposible y se
+ * comprueba que sale tal cual).
+ */
 async function conPuntaje(
   c: Client,
   mercaderista: string,
@@ -100,6 +111,7 @@ async function conPuntaje(
     configId?: string;
     cerrado?: boolean;
     bloqueado?: boolean;
+    sinRecolocar?: boolean;
   } = {},
 ): Promise<void> {
   await c.query("set local role postgres");
@@ -122,6 +134,12 @@ async function conPuntaje(
       opciones.bloqueado ?? false,
     ],
   );
+  if (!opciones.sinRecolocar) {
+    await c.query(
+      `select app.posicionar_merchandiser($1, $2::public.periodo_puntaje, $3)`,
+      [TENANTS.maracumango, opciones.tipo ?? "mensual", inicio],
+    );
+  }
   await c.query("set local role authenticated");
 }
 
@@ -568,6 +586,281 @@ describe("el detalle: los hechos y la MISMA rampa que el motor", () => {
            '${USUARIOS.mercaderistaMaracumango}', 'mensual', '2026-07-01')`,
       );
       expect(codigo).toBe("42501");
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// La posición GUARDADA
+//
+// El teléfono del mercaderista recibe una sola fila y no puede calcular un
+// rango, así que la posición viaja guardada. Eso convierte a la columna en el
+// único dueño del número: el panel la lee. Estos tests fijan las dos mitades —
+// que `app.posicionar_merchandiser` la escribe bien, y que el ranking la LEE en
+// vez de recalcularla.
+// ---------------------------------------------------------------------------
+describe("la posición guardada", () => {
+  type FilaPuntaje = {
+    posicion: number | null;
+    hay_empate: boolean;
+    mercaderistas_evaluados: number;
+    total_pct: string | null;
+    calculado_at: string;
+    cerrado_at: string | null;
+    nivel_bono_id: string | null;
+  };
+
+  async function puntajeDe(
+    c: Client,
+    mercaderista: string,
+    inicio = "2026-07-01",
+    tipo = "mensual",
+  ): Promise<FilaPuntaje> {
+    const r = await c.query<FilaPuntaje>(
+      `select posicion, hay_empate, mercaderistas_evaluados, total_pct,
+              calculado_at, cerrado_at, nivel_bono_id
+         from public.puntaje_merchandiser
+        where mercaderista_id = $1 and tipo = $2::public.periodo_puntaje
+          and periodo_inicio = $3`,
+      [mercaderista, tipo, inicio],
+    );
+    return r.rows[0]!;
+  }
+
+  async function recolocar(
+    c: Client,
+    inicio = "2026-07-01",
+    tipo = "mensual",
+    tenant: string = TENANTS.maracumango,
+  ): Promise<number> {
+    await c.query("set local role postgres");
+    const r = await c.query<{ movidas: number }>(
+      `select app.posicionar_merchandiser($1, $2::public.periodo_puntaje, $3) as movidas`,
+      [tenant, tipo, inicio],
+    );
+    await c.query("set local role authenticated");
+    return r.rows[0]!.movidas;
+  }
+
+  it("escribe el rango de competición y el empate en la propia fila", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const a = await conMercaderista(c, "40", USUARIOS.supervisor);
+      const b = await conMercaderista(c, "41", USUARIOS.supervisor);
+      const d = await conMercaderista(c, "42", USUARIOS.supervisor);
+      const e = await conMercaderista(c, "43", USUARIOS.supervisor);
+      await conPuntaje(c, a, "2026-07-01", 91);
+      await conPuntaje(c, b, "2026-07-01", 88);
+      await conPuntaje(c, d, "2026-07-01", 88);
+      await conPuntaje(c, e, "2026-07-01", 74);
+
+      expect((await puntajeDe(c, a)).posicion).toBe(1);
+      expect((await puntajeDe(c, b)).posicion).toBe(2);
+      expect((await puntajeDe(c, d)).posicion).toBe(2);
+      // Competición y no denso: tras dos segundos viene el CUARTO.
+      expect((await puntajeDe(c, e)).posicion).toBe(4);
+
+      expect((await puntajeDe(c, b)).hay_empate).toBe(true);
+      expect((await puntajeDe(c, d)).hay_empate).toBe(true);
+      expect((await puntajeDe(c, a)).hay_empate).toBe(false);
+    });
+  });
+
+  it("un total NULL se queda sin posición y no desplaza a nadie", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const conDatos = await conMercaderista(c, "44", USUARIOS.supervisor);
+      const sinDatos = await conMercaderista(c, "45", USUARIOS.supervisor);
+      const segundo = await conMercaderista(c, "46", USUARIOS.supervisor);
+      await conPuntaje(c, conDatos, "2026-07-01", 90);
+      await conPuntaje(c, sinDatos, "2026-07-01", null);
+      await conPuntaje(c, segundo, "2026-07-01", 80);
+
+      const nulo = await puntajeDe(c, sinDatos);
+      expect(nulo.posicion).toBeNull();
+      expect(nulo.hay_empate).toBe(false);
+      // El que va detrás sigue siendo el 2.º: el sin-datos no ocupa un puesto.
+      expect((await puntajeDe(c, segundo)).posicion).toBe(2);
+    });
+  });
+
+  it("`mercaderistas_evaluados` cuenta los evaluados y vale igual en todas las filas", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const a = await conMercaderista(c, "47", USUARIOS.supervisor);
+      const b = await conMercaderista(c, "48", USUARIOS.supervisor);
+      const sin = await conMercaderista(c, "49", USUARIOS.supervisor);
+      await conPuntaje(c, a, "2026-07-01", 90);
+      await conPuntaje(c, b, "2026-07-01", 80);
+      await conPuntaje(c, sin, "2026-07-01", null);
+
+      // Dos evaluados, no tres: el sin-datos no cuenta para el "de N".
+      expect((await puntajeDe(c, a)).mercaderistas_evaluados).toBe(2);
+      expect((await puntajeDe(c, b)).mercaderistas_evaluados).toBe(2);
+      expect((await puntajeDe(c, sin)).mercaderistas_evaluados).toBe(2);
+    });
+  });
+
+  it("recolocar un cliente NO toca las filas de otro", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const propio = await conMercaderista(c, "50", USUARIOS.supervisor);
+      await conPuntaje(c, propio, "2026-07-01", 90);
+
+      // Una fila del cliente rival, en el MISMO tipo y periodo.
+      await c.query("set local role postgres");
+      await c.query(
+        `insert into public.puntaje_merchandiser
+           (mercaderista_id, tipo, periodo_inicio, tenant_id, config_id,
+            total_pct, posicion, mercaderistas_evaluados)
+         values ($1, 'mensual', '2026-07-01', $2,
+                 (select id from public.config_perfect_merchandiser
+                   where tenant_id = $2 limit 1), 55, 7, 9)`,
+        [USUARIOS.mercaderistaRival, TENANTS.rival],
+      );
+      await c.query("set local role authenticated");
+
+      await recolocar(c);
+
+      const rival = await puntajeDe(c, USUARIOS.mercaderistaRival);
+      // Intactas: valores imposibles que solo sobreviven si nadie los tocó.
+      expect(rival.posicion).toBe(7);
+      expect(rival.mercaderistas_evaluados).toBe(9);
+    });
+  });
+
+  it("recolocar es idempotente y NO mueve `calculado_at`", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const a = await conMercaderista(c, "51", USUARIOS.supervisor);
+      const b = await conMercaderista(c, "52", USUARIOS.supervisor);
+      await conPuntaje(c, a, "2026-07-01", 90);
+      await conPuntaje(c, b, "2026-07-01", 80);
+
+      const antes = await puntajeDe(c, a);
+      // La primera ya la hizo `conPuntaje`: esta no debe mover ni una fila.
+      expect(await recolocar(c)).toBe(0);
+      const despues = await puntajeDe(c, a);
+
+      expect(despues.posicion).toBe(antes.posicion);
+      expect(despues.calculado_at).toEqual(antes.calculado_at);
+    });
+  });
+
+  // 🔑 La invariante del dinero. El bono sale de un umbral sobre `total_pct`
+  // (`app.nivel_bono_aplicable`), NUNCA de la posición: recolocar a alguien de
+  // un periodo cerrado no puede mover un sol. Y congelar la posición sería peor
+  // —dejaría al 2.º marcado como 2.º cuando el compañero que sincronizó tarde
+  // ya lo pasó—, así que se recoloca a propósito.
+  it("`cerrado_at` congela el PUNTAJE, no la POSICIÓN", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const cerrado = await conMercaderista(c, "53", USUARIOS.supervisor);
+      const abierto = await conMercaderista(c, "54", USUARIOS.supervisor);
+      await conPuntaje(c, cerrado, "2026-07-01", 90, {
+        cerrado: true,
+        nivelId: NIVEL_PLATA,
+      });
+      await conPuntaje(c, abierto, "2026-07-01", 80);
+
+      const antes = await puntajeDe(c, cerrado);
+      expect(antes.posicion).toBe(1);
+
+      // El compañero abierto lo adelanta.
+      await c.query("set local role postgres");
+      await c.query(
+        `update public.puntaje_merchandiser set total_pct = 95
+          where mercaderista_id = $1 and periodo_inicio = '2026-07-01'`,
+        [abierto],
+      );
+      await c.query("set local role authenticated");
+      await recolocar(c);
+
+      const despues = await puntajeDe(c, cerrado);
+      // La posición SÍ se mueve...
+      expect(despues.posicion).toBe(2);
+      // ...y todo lo que paga un bono NO.
+      expect(despues.total_pct).toEqual(antes.total_pct);
+      expect(despues.nivel_bono_id).toEqual(antes.nivel_bono_id);
+      expect(despues.cerrado_at).toEqual(antes.cerrado_at);
+    });
+  });
+
+  // 🔑 La única forma de demostrar que la ventana `rank()` ya no vive dentro
+  // del RPC: se siembra una posición imposible y tiene que salir tal cual.
+  it("el ranking LEE la posición guardada, no la recalcula", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const solo = await conMercaderista(c, "55", USUARIOS.supervisor);
+      await conPuntaje(c, solo, "2026-07-01", 90, { sinRecolocar: true });
+      await c.query("set local role postgres");
+      await c.query(
+        `update public.puntaje_merchandiser
+            set posicion = 99, hay_empate = true, mercaderistas_evaluados = 42
+          where mercaderista_id = $1 and periodo_inicio = '2026-07-01'`,
+        [solo],
+      );
+      await c.query("set local role authenticated");
+
+      const fila = (await ranking(c)).find((f) => f.mercaderista_id === solo);
+      // Recalculando sería 1: es el único con puntaje del periodo.
+      expect(fila?.posicion).toBe(99);
+      expect(fila?.hay_empate).toBe(true);
+    });
+  });
+
+  it("`posicion_anterior` también sale de la columna del periodo anterior", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const merca = await conMercaderista(c, "56", USUARIOS.supervisor);
+      await conPuntaje(c, merca, "2026-06-01", 70, { sinRecolocar: true });
+      await conPuntaje(c, merca, "2026-07-01", 90);
+      await c.query("set local role postgres");
+      await c.query(
+        `update public.puntaje_merchandiser set posicion = 88
+          where mercaderista_id = $1 and periodo_inicio = '2026-06-01'`,
+        [merca],
+      );
+      await c.query("set local role authenticated");
+
+      const fila = (await ranking(c)).find((f) => f.mercaderista_id === merca);
+      expect(fila?.posicion_anterior).toBe(88);
+    });
+  });
+
+  // La regla del proyecto: una función que ramifica sobre un enum se prueba con
+  // CADA valor. `app.inicio_periodo_anterior` alimenta `posicion_anterior`.
+  it.each([
+    ["mensual", "2026-06-01", "2026-07-01", "57"],
+    ["trimestral", "2026-01-01", "2026-04-01", "58"],
+    ["anual", "2025-01-01", "2026-01-01", "59"],
+  ] as const)(
+    "la evolución encuentra el periodo anterior en %s",
+    async (tipo, anterior, actual, sufijo) => {
+      await comoUsuario(db, USUARIOS.admin, async (c) => {
+        const merca = await conMercaderista(c, sufijo, USUARIOS.supervisor);
+        await conPuntaje(c, merca, anterior, 70, { tipo });
+        await conPuntaje(c, merca, actual, 90, { tipo });
+
+        const fila = (await ranking(c, actual, tipo)).find(
+          (f) => f.mercaderista_id === merca,
+        );
+        expect(fila?.posicion).toBe(1);
+        expect(fila?.posicion_anterior).toBe(1);
+        expect(Number(fila?.total_anterior)).toBe(70);
+      });
+    },
+  );
+
+  it("tras un recálculo no queda ningún puntaje con total y sin posición", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await c.query(
+        `select * from public.recalcular_puntaje_merchandiser(
+           'mensual', '2026-07-01', null, $1)`,
+        [TENANTS.maracumango],
+      );
+
+      const r = await c.query<{ huerfanas: string }>(
+        `select count(*) as huerfanas
+           from public.puntaje_merchandiser
+          where tenant_id = $1 and tipo = 'mensual'
+            and periodo_inicio = '2026-07-01'
+            and total_pct is not null and posicion is null`,
+        [TENANTS.maracumango],
+      );
+      expect(Number(r.rows[0]!.huerfanas)).toBe(0);
     });
   });
 });
