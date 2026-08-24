@@ -1,49 +1,80 @@
 import Link from "next/link";
 
 import { botonPrimario, enlaceTabla } from "@/components/panel/estilos";
+import { Paginacion } from "@/components/panel/paginacion";
 import { Aviso, Pastilla, Tarjeta, TD, TH } from "@/components/panel/tabla";
 import { soles } from "@/lib/formato";
-import { acotar, TOPE_CONSULTA } from "@/lib/comercial/listado";
+import { paginar, rangoDe } from "@/lib/panel/listado";
+import { tenantActivo } from "@/lib/panel/tenant-activo";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
-import { AvisoTope } from "./aviso-tope";
-
-// Las promociones con su vigencia.
+// Las promociones del cliente activo, con su vigencia.
 //
 // Ordenadas por fecha de inicio descendente: lo que se consulta es lo que está
-// vigente o a punto de empezar, no lo de hace seis meses.
+// vigente o a punto de empezar, no lo de hace seis meses. Acotadas al cliente
+// del header por lo mismo que los precios: sin el `eq`, el índice por
+// `(tenant_id, fecha_inicio)` no puede servir el orden.
 
-export async function VistaPromociones() {
+const RUTA = "/admin/precios?vista=promociones";
+
+export async function VistaPromociones({ pagina }: { pagina: number }) {
+  const tenant = await tenantActivo();
+
+  const barra = (
+    <div className="flex flex-wrap items-center gap-3">
+      <div className="flex-1" />
+      <Link href="/admin/precios/promociones/nueva" className={botonPrimario}>
+        + Nueva promoción
+      </Link>
+    </div>
+  );
+
+  if (!tenant) {
+    return (
+      <div className="flex flex-col gap-4">
+        {barra}
+        <Aviso>No hay ningún cliente activo del que mostrar promociones.</Aviso>
+      </div>
+    );
+  }
+
   const supabase = await createServerSupabaseClient();
+  const [desde, hasta] = rangoDe(pagina);
   const { data, error } = await supabase
     .from("promocion")
     .select(
       "id, precio_promo, fecha_inicio, fecha_fin, clusters, comunicada, sku:promocion_sku_fk(codigo, nombre)",
     )
+    .eq("tenant_id", tenant.id)
     .order("fecha_inicio", { ascending: false })
-    .limit(TOPE_CONSULTA);
+    .order("id")
+    .range(desde, hasta);
 
-  const { filas, hayMas } = acotar(data ?? []);
+  const { filas, hayAnterior, haySiguiente, vaciaFueraDeRango } = paginar(
+    data ?? [],
+    pagina,
+  );
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex-1" />
-        <Link href="/admin/precios/promociones/nueva" className={botonPrimario}>
-          + Nueva promoción
-        </Link>
-      </div>
+      {barra}
 
       {error ? (
         <Aviso>No se pudieron cargar las promociones.</Aviso>
+      ) : vaciaFueraDeRango ? (
+        <Aviso>
+          Esta página está vacía.{" "}
+          <Link href={RUTA} className={enlaceTabla}>
+            Volver a la primera
+          </Link>
+        </Aviso>
       ) : filas.length === 0 ? (
         <Aviso>
-          Aún no hay promociones. El motor de alertas las compara contra lo que
-          el mercaderista levanta en góndola.
+          Aún no hay promociones de {tenant.nombre}. El motor de alertas las
+          compara contra lo que el mercaderista levanta en góndola.
         </Aviso>
       ) : (
         <>
-          <AvisoTope hayMas={hayMas} />
           <Tarjeta>
             <thead>
               <tr className="border-b border-border bg-muted/40">
@@ -118,6 +149,12 @@ export async function VistaPromociones() {
               ))}
             </tbody>
           </Tarjeta>
+          <Paginacion
+            pagina={pagina}
+            hayAnterior={hayAnterior}
+            haySiguiente={haySiguiente}
+            href={(p) => `${RUTA}&p=${p}`}
+          />
         </>
       )}
     </div>

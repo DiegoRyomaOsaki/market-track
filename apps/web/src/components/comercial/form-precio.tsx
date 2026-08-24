@@ -5,16 +5,25 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
 import { campo, Errores, etiqueta, Pie } from "@/components/panel/campos";
+import {
+  BuscadorOpcion,
+  type OpcionBusqueda,
+} from "@/components/panel/buscador-opcion";
 import { crearPrecio, editarPrecio } from "@/lib/comercial/acciones";
+import { buscarSkus } from "@/lib/comercial/buscar-opciones";
 import { leerCampo } from "@/lib/formulario";
 
-import { SIN_CATALOGO, type OpcionCadena, type OpcionSku } from "./opciones";
+import { SIN_CATALOGO, type OpcionCadena } from "./opciones";
 
 // Alta y edición del precio regular de un SKU en una cadena.
 //
-// El cliente no se elige: lo trae el SKU. Un selector aparte podría no coincidir
-// con el del SKU y la FK compuesta `(sku_id, tenant_id)` rechazaría la escritura
-// con un mensaje que no le dice nada al operador.
+// El catálogo llega acotado al cliente activo del header, y el SKU se BUSCA en
+// vez de precargarse: un cliente puede tener 5.000 y un <select> con todos era
+// la pantalla más pesada del panel.
+//
+// El cliente de la fila no se elige: lo trae el SKU elegido. La cookie del
+// header solo decide qué catálogo se ofrece; la autoridad es la FK compuesta
+// `(sku_id, tenant_id)`, que rechaza cualquier mezcla.
 
 type Precio = {
   id: string;
@@ -29,33 +38,23 @@ const VOLVER = "/admin/precios";
 
 export function FormPrecio({
   precio,
-  skus,
+  tenantId,
+  skuInicial = null,
   cadenas,
 }: {
   precio?: Precio;
-  skus: OpcionSku[];
+  /** El cliente cuyo catálogo se ofrece: el activo al crear, el del precio al editar. */
+  tenantId: string;
+  /** El SKU ya guardado, resuelto por id por la página (edición). */
+  skuInicial?: OpcionBusqueda | null;
   cadenas: OpcionCadena[];
 }) {
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
-  const [skuId, setSkuId] = useState(precio?.sku_id ?? skus[0]?.id ?? "");
-  const [cadenaId, setCadenaId] = useState(precio?.cadena_id ?? "");
-  const router = useRouter();
-
-  const skuElegido = skus.find((s) => s.id === skuId);
-  // Solo las cadenas del mismo cliente: la FK es compuesta y la base rechazaría
-  // el resto. Filtrarlo aquí es UX; quien lo impide de verdad es la base.
-  const cadenasDelCliente = cadenas.filter(
-    (c) => c.tenant_id === skuElegido?.tenant_id,
+  const [skuElegido, setSkuElegido] = useState<OpcionBusqueda | null>(
+    skuInicial,
   );
-
-  function elegirSku(nuevoSkuId: string) {
-    setSkuId(nuevoSkuId);
-    // La cadena se limpia con el SKU. Un `<select>` no controlado cuya opción
-    // desaparece de la lista lo sustituye EN SILENCIO por el primero de la
-    // nueva: el operador enviaría una cadena que nunca eligió.
-    setCadenaId("");
-  }
+  const router = useRouter();
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -85,7 +84,7 @@ export function FormPrecio({
     router.refresh();
   }
 
-  if (skus.length === 0 || cadenas.length === 0) {
+  if (cadenas.length === 0) {
     return <p className={SIN_CATALOGO.clase}>{SIN_CATALOGO.precio}</p>;
   }
 
@@ -95,47 +94,33 @@ export function FormPrecio({
       className="flex max-w-xl flex-col gap-4 rounded-xl border border-border bg-background p-6"
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <label className="flex flex-col gap-1.5">
-          <span className={etiqueta}>SKU</span>
-          <select
-            name="sku_id"
-            required
-            value={skuId}
-            onChange={(e) => elegirSku(e.target.value)}
-            className={campo}
-          >
-            {skus.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.codigo} · {s.nombre} ({s.cliente})
-              </option>
-            ))}
-          </select>
-        </label>
+        <BuscadorOpcion
+          etiqueta="SKU"
+          nombreCampo="sku_id"
+          placeholder="Busca por código o nombre…"
+          buscar={buscarSkus}
+          tenantId={tenantId}
+          valorInicial={skuInicial}
+          alElegir={setSkuElegido}
+        />
 
         <label className="flex flex-col gap-1.5">
           <span className={etiqueta}>Cadena</span>
           <select
             name="cadena_id"
             required
-            value={cadenaId}
-            onChange={(e) => setCadenaId(e.target.value)}
+            defaultValue={precio?.cadena_id ?? ""}
             className={campo}
           >
             <option value="" disabled>
               Elige una cadena…
             </option>
-            {cadenasDelCliente.map((c) => (
+            {cadenas.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.nombre}
               </option>
             ))}
           </select>
-          {cadenasDelCliente.length === 0 && (
-            <span className="text-[12px] text-muted-foreground">
-              {skuElegido?.cliente ?? "Este cliente"} no tiene cadenas en el
-              catálogo todavía.
-            </span>
-          )}
         </label>
 
         <label className="flex flex-col gap-1.5">

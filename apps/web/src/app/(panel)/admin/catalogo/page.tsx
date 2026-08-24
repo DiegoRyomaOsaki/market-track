@@ -5,6 +5,7 @@ import { VistaCodificados } from "@/components/catalogo/vista-codificados";
 import { VistaSkus } from "@/components/catalogo/vista-skus";
 import { VistaTiendas } from "@/components/catalogo/vista-tiendas";
 import { Pestanas } from "@/components/panel/pestanas";
+import { leerPagina } from "@/lib/panel/listado";
 
 export const metadata: Metadata = { title: "Catálogo — Market Track" };
 
@@ -36,6 +37,8 @@ export default async function CatalogoPage({
     vista?: string | string[];
     q?: string | string[];
     tienda?: string | string[];
+    p?: string | string[];
+    pc?: string | string[];
   }>;
 }) {
   const params = await searchParams;
@@ -43,6 +46,8 @@ export default async function CatalogoPage({
   const vista: Vista = esVista(vistaParam) ? vistaParam : "tiendas";
   const busqueda = (primero(params.q) ?? "").trim();
   const tienda = primero(params.tienda);
+  const pagina = leerPagina(params.p);
+  const paginaCadenas = leerPagina(params.pc);
 
   return (
     <div className="flex flex-col gap-4">
@@ -53,9 +58,17 @@ export default async function CatalogoPage({
         etiqueta="Sección del catálogo"
       />
 
-      {vista === "tiendas" && <VistaTiendas busqueda={busqueda} />}
-      {vista === "skus" && <VistaSkus busqueda={busqueda} />}
-      {vista === "categorias" && <VistaCategorias busqueda={busqueda} />}
+      {vista === "tiendas" && (
+        <VistaTiendas
+          busqueda={busqueda}
+          pagina={pagina}
+          paginaCadenas={paginaCadenas}
+        />
+      )}
+      {vista === "skus" && <VistaSkus busqueda={busqueda} pagina={pagina} />}
+      {vista === "categorias" && (
+        <VistaCategorias busqueda={busqueda} pagina={pagina} />
+      )}
       {vista === "codificados" && <VistaCodificados tiendaId={tienda} />}
     </div>
   );

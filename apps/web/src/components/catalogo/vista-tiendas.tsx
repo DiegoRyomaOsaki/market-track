@@ -6,6 +6,7 @@ import {
   buscador,
   enlaceTabla,
 } from "@/components/panel/estilos";
+import { Paginacion } from "@/components/panel/paginacion";
 import {
   Avatar,
   Aviso,
@@ -14,9 +15,24 @@ import {
   TD,
   TH,
 } from "@/components/panel/tabla";
+import { escaparPatronIlike, paginar, rangoDe } from "@/lib/panel/listado";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
-export function VistaTiendas({ busqueda }: { busqueda: string }) {
+// Cada tabla pagina con su propio parámetro (`p` tiendas, `pc` cadenas): al
+// avanzar una, la otra conserva su página.
+function hrefTiendas(busqueda: string, p: number, pc: number) {
+  return `/admin/catalogo?vista=tiendas&q=${encodeURIComponent(busqueda)}&p=${p}&pc=${pc}`;
+}
+
+export function VistaTiendas({
+  busqueda,
+  pagina,
+  paginaCadenas,
+}: {
+  busqueda: string;
+  pagina: number;
+  paginaCadenas: number;
+}) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -39,13 +55,29 @@ export function VistaTiendas({ busqueda }: { busqueda: string }) {
         </Link>
       </div>
 
-      <TablaTiendas busqueda={busqueda} />
-      <TablaCadenas busqueda={busqueda} />
+      <TablaTiendas
+        busqueda={busqueda}
+        pagina={pagina}
+        paginaCadenas={paginaCadenas}
+      />
+      <TablaCadenas
+        busqueda={busqueda}
+        pagina={pagina}
+        paginaCadenas={paginaCadenas}
+      />
     </div>
   );
 }
 
-async function TablaTiendas({ busqueda }: { busqueda: string }) {
+async function TablaTiendas({
+  busqueda,
+  pagina,
+  paginaCadenas,
+}: {
+  busqueda: string;
+  pagina: number;
+  paginaCadenas: number;
+}) {
   const supabase = await createServerSupabaseClient();
   // lat/lon son columnas generadas: se leen, nunca se escriben.
   //
@@ -58,13 +90,32 @@ async function TablaTiendas({ busqueda }: { busqueda: string }) {
     .select(
       "id, nombre, direccion, cluster, codigo_externo, radio_geocerca_m, lat, lon, activo, cadena:tienda_cadena_fk(nombre), tenant:tenant_id(nombre)",
     )
-    .order("nombre");
-  if (busqueda) query = query.ilike("nombre", `%${busqueda}%`);
+    .order("nombre")
+    .order("id")
+    .range(...rangoDe(pagina));
+  if (busqueda)
+    query = query.ilike("nombre", `%${escaparPatronIlike(busqueda)}%`);
 
   const { data, error } = await query;
   if (error) return <Aviso>No se pudieron cargar las tiendas.</Aviso>;
 
-  const filas = data ?? [];
+  const { filas, hayAnterior, haySiguiente, vaciaFueraDeRango } = paginar(
+    data ?? [],
+    pagina,
+  );
+  if (vaciaFueraDeRango) {
+    return (
+      <Aviso>
+        Esta página está vacía.{" "}
+        <Link
+          href={hrefTiendas(busqueda, 1, paginaCadenas)}
+          className={enlaceTabla}
+        >
+          Volver a la primera
+        </Link>
+      </Aviso>
+    );
+  }
   if (filas.length === 0) {
     return (
       <Aviso>
@@ -76,92 +127,124 @@ async function TablaTiendas({ busqueda }: { busqueda: string }) {
   }
 
   return (
-    <Tarjeta>
-      <thead>
-        <tr className="border-b border-border bg-muted/40">
-          <th scope="col" className={TH}>
-            TIENDA
-          </th>
-          <th scope="col" className={TH}>
-            CADENA
-          </th>
-          <th scope="col" className={TH}>
-            CLIENTE
-          </th>
-          <th scope="col" className={TH}>
-            GEOCERCA
-          </th>
-          <th scope="col" className={TH}>
-            UBICACIÓN
-          </th>
-          <th scope="col" className={TH}>
-            ESTADO
-          </th>
-          <th scope="col" className={TH}>
-            <span className="sr-only">Acciones</span>
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {filas.map((t) => (
-          <tr key={t.id} className="border-b border-border last:border-0">
-            <td className={TD}>
-              <div className="flex items-center gap-2.5">
-                <Avatar nombre={t.nombre} />
-                <div className="flex flex-col">
-                  <span className="font-semibold">{t.nombre}</span>
-                  {t.direccion && (
-                    <span className="text-[12px] text-muted-foreground">
-                      {t.direccion}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </td>
-            <td className={`${TD} text-muted-foreground`}>
-              {t.cadena?.nombre ?? "—"}
-            </td>
-            <td className={`${TD} text-muted-foreground`}>
-              {t.tenant?.nombre ?? "—"}
-            </td>
-            <td className={`${TD} font-mono`}>{t.radio_geocerca_m} m</td>
-            <td className={`${TD} font-mono text-muted-foreground`}>
-              {t.lat !== null && t.lon !== null
-                ? `${t.lat.toFixed(4)}, ${t.lon.toFixed(4)}`
-                : "sin ubicar"}
-            </td>
-            <td className={TD}>
-              <Estado activo={t.activo} />
-            </td>
-            <td className={`${TD} text-right`}>
-              <Link
-                href={`/admin/catalogo/tiendas/${t.id}`}
-                className={enlaceTabla}
-              >
-                Editar<span className="sr-only"> la tienda {t.nombre}</span>
-              </Link>
-            </td>
+    <>
+      <Tarjeta>
+        <thead>
+          <tr className="border-b border-border bg-muted/40">
+            <th scope="col" className={TH}>
+              TIENDA
+            </th>
+            <th scope="col" className={TH}>
+              CADENA
+            </th>
+            <th scope="col" className={TH}>
+              CLIENTE
+            </th>
+            <th scope="col" className={TH}>
+              GEOCERCA
+            </th>
+            <th scope="col" className={TH}>
+              UBICACIÓN
+            </th>
+            <th scope="col" className={TH}>
+              ESTADO
+            </th>
+            <th scope="col" className={TH}>
+              <span className="sr-only">Acciones</span>
+            </th>
           </tr>
-        ))}
-      </tbody>
-    </Tarjeta>
+        </thead>
+        <tbody>
+          {filas.map((t) => (
+            <tr key={t.id} className="border-b border-border last:border-0">
+              <td className={TD}>
+                <div className="flex items-center gap-2.5">
+                  <Avatar nombre={t.nombre} />
+                  <div className="flex flex-col">
+                    <span className="font-semibold">{t.nombre}</span>
+                    {t.direccion && (
+                      <span className="text-[12px] text-muted-foreground">
+                        {t.direccion}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </td>
+              <td className={`${TD} text-muted-foreground`}>
+                {t.cadena?.nombre ?? "—"}
+              </td>
+              <td className={`${TD} text-muted-foreground`}>
+                {t.tenant?.nombre ?? "—"}
+              </td>
+              <td className={`${TD} font-mono`}>{t.radio_geocerca_m} m</td>
+              <td className={`${TD} font-mono text-muted-foreground`}>
+                {t.lat !== null && t.lon !== null
+                  ? `${t.lat.toFixed(4)}, ${t.lon.toFixed(4)}`
+                  : "sin ubicar"}
+              </td>
+              <td className={TD}>
+                <Estado activo={t.activo} />
+              </td>
+              <td className={`${TD} text-right`}>
+                <Link
+                  href={`/admin/catalogo/tiendas/${t.id}`}
+                  className={enlaceTabla}
+                >
+                  Editar<span className="sr-only"> la tienda {t.nombre}</span>
+                </Link>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </Tarjeta>
+      <Paginacion
+        pagina={pagina}
+        hayAnterior={hayAnterior}
+        haySiguiente={haySiguiente}
+        href={(p) => hrefTiendas(busqueda, p, paginaCadenas)}
+      />
+    </>
   );
 }
 
-async function TablaCadenas({ busqueda }: { busqueda: string }) {
+async function TablaCadenas({
+  busqueda,
+  pagina,
+  paginaCadenas,
+}: {
+  busqueda: string;
+  pagina: number;
+  paginaCadenas: number;
+}) {
   const supabase = await createServerSupabaseClient();
   let query = supabase
     .from("cadena")
     .select(
       "id, nombre, tipo_tienda, codigo_externo, activo, tenant:tenant_id(nombre), tienda:tienda_cadena_fk(count)",
     )
-    .order("nombre");
-  if (busqueda) query = query.ilike("nombre", `%${busqueda}%`);
+    .order("nombre")
+    .order("id")
+    .range(...rangoDe(paginaCadenas));
+  if (busqueda)
+    query = query.ilike("nombre", `%${escaparPatronIlike(busqueda)}%`);
 
   const { data, error } = await query;
   if (error) return <Aviso>No se pudieron cargar las cadenas.</Aviso>;
 
-  const filas = data ?? [];
+  const { filas, hayAnterior, haySiguiente, vaciaFueraDeRango } = paginar(
+    data ?? [],
+    paginaCadenas,
+  );
+  if (vaciaFueraDeRango) {
+    return (
+      <Aviso>
+        Esta página de cadenas está vacía.{" "}
+        <Link href={hrefTiendas(busqueda, pagina, 1)} className={enlaceTabla}>
+          Volver a la primera
+        </Link>
+      </Aviso>
+    );
+  }
   if (filas.length === 0) {
     return (
       <Aviso>
@@ -231,6 +314,12 @@ async function TablaCadenas({ busqueda }: { busqueda: string }) {
           ))}
         </tbody>
       </Tarjeta>
+      <Paginacion
+        pagina={paginaCadenas}
+        hayAnterior={hayAnterior}
+        haySiguiente={haySiguiente}
+        href={(pc) => hrefTiendas(busqueda, pagina, pc)}
+      />
     </section>
   );
 }

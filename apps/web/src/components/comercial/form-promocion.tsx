@@ -4,14 +4,18 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
 import { campo, Errores, etiqueta, Pie } from "@/components/panel/campos";
+import {
+  BuscadorOpcion,
+  type OpcionBusqueda,
+} from "@/components/panel/buscador-opcion";
 import { crearPromocion, editarPromocion } from "@/lib/comercial/acciones";
+import { buscarSkus } from "@/lib/comercial/buscar-opciones";
 import { leerCampo, leerCasilla } from "@/lib/formulario";
-
-import { SIN_CATALOGO, type OpcionSku } from "./opciones";
 
 // Alta y edición de una promoción con vigencia.
 //
-// Los clusters se eligen de los que YA existen en las tiendas del cliente, no se
+// El SKU se busca en el catálogo del cliente activo, no se precarga. Los
+// clusters se eligen de los que YA existen en las tiendas de ese cliente, no se
 // teclean: `tienda.cluster` es texto libre y un cluster con una errata no
 // acotaría nada — la promo saldría en todas las tiendas sin que nadie lo note.
 // El catálogo de clusters como entidad propia es otro ticket.
@@ -30,33 +34,25 @@ const VOLVER = "/admin/precios?vista=promociones";
 
 export function FormPromocion({
   promocion,
-  skus,
-  clustersPorCliente,
+  tenantId,
+  skuInicial = null,
+  clusters,
 }: {
   promocion?: Promocion;
-  skus: OpcionSku[];
-  /** Los clusters que existen en las tiendas de cada cliente, por `tenant_id`. */
-  clustersPorCliente: Record<string, string[]>;
+  /** El cliente cuyo catálogo se ofrece: el activo al crear, el de la promo al editar. */
+  tenantId: string;
+  /** El SKU ya guardado, resuelto por id por la página (edición). */
+  skuInicial?: OpcionBusqueda | null;
+  /** Los clusters que existen en las tiendas de ESE cliente. */
+  clusters: string[];
 }) {
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
-  const [skuId, setSkuId] = useState(promocion?.sku_id ?? skus[0]?.id ?? "");
+  const [skuElegido, setSkuElegido] = useState<OpcionBusqueda | null>(
+    skuInicial,
+  );
   const [elegidos, setElegidos] = useState<string[]>(promocion?.clusters ?? []);
   const router = useRouter();
-
-  const skuElegido = skus.find((s) => s.id === skuId);
-
-  function elegirSku(nuevoSkuId: string) {
-    const anterior = skus.find((s) => s.id === skuId)?.tenant_id;
-    setSkuId(nuevoSkuId);
-    // Solo si CAMBIA de cliente: dentro del mismo, los clusters marcados siguen
-    // siendo válidos y borrarlos sería perder el trabajo del operador. Al cambiar
-    // de cliente, en cambio, dejan de verse pero seguirían viajando en el envío
-    // —y acotarían la promo a un cluster que ese cliente no tiene, o sea a
-    // ninguna tienda—.
-    const nuevo = skus.find((s) => s.id === nuevoSkuId)?.tenant_id;
-    if (anterior !== nuevo) setElegidos([]);
-  }
 
   function alternarCluster(cluster: string) {
     setElegidos((previos) =>
@@ -95,39 +91,21 @@ export function FormPromocion({
     router.refresh();
   }
 
-  if (skus.length === 0) {
-    return <p className={SIN_CATALOGO.clase}>{SIN_CATALOGO.promocion}</p>;
-  }
-
-  // Los del cliente del SKU elegido: un cluster de otro cliente no acotaría
-  // ninguna tienda de esta promo.
-  const clustersDelCliente =
-    skuElegido === undefined
-      ? []
-      : (clustersPorCliente[skuElegido.tenant_id] ?? []);
-
   return (
     <form
       onSubmit={(e) => void onSubmit(e)}
       className="flex max-w-xl flex-col gap-4 rounded-xl border border-border bg-background p-6"
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <label className="flex flex-col gap-1.5">
-          <span className={etiqueta}>SKU en promoción</span>
-          <select
-            name="sku_id"
-            required
-            value={skuId}
-            onChange={(e) => elegirSku(e.target.value)}
-            className={campo}
-          >
-            {skus.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.codigo} · {s.nombre} ({s.cliente})
-              </option>
-            ))}
-          </select>
-        </label>
+        <BuscadorOpcion
+          etiqueta="SKU en promoción"
+          nombreCampo="sku_id"
+          placeholder="Busca por código o nombre…"
+          buscar={buscarSkus}
+          tenantId={tenantId}
+          valorInicial={skuInicial}
+          alElegir={setSkuElegido}
+        />
 
         <label className="flex flex-col gap-1.5">
           <span className={etiqueta}>Precio promocional (S/)</span>
@@ -167,7 +145,7 @@ export function FormPromocion({
 
       <fieldset className="flex flex-col gap-2">
         <legend className={etiqueta}>Clusters de tienda</legend>
-        {clustersDelCliente.length === 0 ? (
+        {clusters.length === 0 ? (
           <p className="text-[12px] text-muted-foreground">
             Ninguna tienda tiene cluster asignado, así que la promoción aplica a
             todas.
@@ -175,7 +153,7 @@ export function FormPromocion({
         ) : (
           <>
             <div className="flex flex-wrap gap-2">
-              {clustersDelCliente.map((c) => (
+              {clusters.map((c) => (
                 <label
                   key={c}
                   className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-[12.5px]"

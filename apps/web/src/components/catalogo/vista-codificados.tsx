@@ -1,16 +1,15 @@
+import { BuscadorOpcion } from "@/components/panel/buscador-opcion";
 import { Aviso } from "@/components/panel/tabla";
+import { buscarTiendas } from "@/lib/comercial/buscar-opciones";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 import { type FilaCodificado, MatrizCodificados } from "./matriz-codificados";
 
-const selector =
-  "h-[38px] rounded-[9px] border border-border bg-background px-3 text-[13px]";
-
 /**
  * La matriz de codificados de UNA tienda. Nunca se cargan todas las tiendas ×
- * todos los SKU a la vez: se elige una tienda y se traen solo sus SKU
- * (opcionalmente los de una marca). El grueso lo pone la importación del Excel;
- * esta pantalla es para correcciones.
+ * todos los SKU a la vez: la tienda se BUSCA (el catálogo es cross-tenant y con
+ * varios clientes son cientos de opciones) y se traen solo sus SKU. El grueso
+ * lo pone la importación del Excel; esta pantalla es para correcciones.
  */
 export async function VistaCodificados({
   tiendaId,
@@ -19,38 +18,42 @@ export async function VistaCodificados({
 }) {
   const supabase = await createServerSupabaseClient();
 
-  const { data: tiendas } = await supabase
-    .from("tienda")
-    .select("id, nombre, tenant_id, cadena:tienda_cadena_fk(nombre)")
-    .eq("activo", true)
-    .order("nombre");
+  // Solo la tienda elegida, resuelta por id — no la lista entera.
+  const { data: tienda } = tiendaId
+    ? await supabase
+        .from("tienda")
+        .select(
+          "id, nombre, tenant_id, activo, cadena:tienda_cadena_fk(nombre)",
+        )
+        .eq("id", tiendaId)
+        .maybeSingle()
+    : { data: null };
 
-  const tienda = tiendas?.find((t) => t.id === tiendaId);
+  const valorInicial = tienda
+    ? {
+        id: tienda.id,
+        etiqueta:
+          (tienda.cadena?.nombre ? `${tienda.cadena.nombre} · ` : "") +
+          tienda.nombre +
+          (tienda.activo ? "" : " (inactiva)"),
+        tenant_id: tienda.tenant_id,
+      }
+    : null;
 
   return (
     <div className="flex flex-col gap-4">
-      <form
-        action="/admin/catalogo"
-        className="flex flex-wrap items-center gap-3"
-      >
+      <form action="/admin/catalogo" className="flex flex-wrap items-end gap-3">
         <input type="hidden" name="vista" value="codificados" />
-        <label className="flex items-center gap-2 text-[13px] font-semibold">
-          Tienda
-          <select
-            name="tienda"
-            defaultValue={tiendaId ?? ""}
-            className={selector}
-            aria-label="Elegir tienda"
-          >
-            <option value="">Elige una tienda…</option>
-            {(tiendas ?? []).map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.cadena?.nombre ? `${t.cadena.nombre} · ` : ""}
-                {t.nombre}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="w-[280px]">
+          <BuscadorOpcion
+            etiqueta="Tienda"
+            nombreCampo="tienda"
+            placeholder="Busca por nombre…"
+            buscar={buscarTiendas}
+            tenantId={null}
+            valorInicial={valorInicial}
+          />
+        </div>
         <button
           type="submit"
           className="flex h-[38px] items-center rounded-[9px] border border-border bg-background px-4 text-[13px] font-semibold hover:bg-muted"

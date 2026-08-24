@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { clustersPorCliente, skusActivos } from "./opciones-datos";
+import { cadenasActivas, clustersDe, marcasActivas } from "./opciones-datos";
 
 // Lo que se prueba de este módulo es lo que sus consultas EXCLUYEN.
 //
-// Si se cae el `.eq("activo", true)`, los formularios vuelven a ofrecer un SKU
-// dado de baja y se negocia una cabecera para un producto descontinuado — un
-// error que nadie ve hasta que el mercaderista lo busca en góndola.
+// Si se cae el `.eq("activo", true)`, los formularios vuelven a ofrecer una
+// cadena dada de baja. Y si se cae el `.eq("tenant_id", ...)`, cada formulario
+// vuelve a precargar el catálogo de TODOS los clientes para ofrecer el de uno
+// — invisible en una base de desarrollo con un solo cliente, que es justo por
+// lo que se fija aquí.
 
 type Filtro = [string, unknown];
 
@@ -38,99 +40,53 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 const MARACUMANGO = "aaaaaaaa-0000-0000-0000-000000000001";
-const RIVAL = "bbbbbbbb-0000-0000-0000-000000000002";
 
 beforeEach(() => {
   consulta.data = [];
   consulta.filtros = [];
 });
 
-describe("skusActivos", () => {
-  it("pide SOLO los activos: un SKU de baja no se puede referenciar", async () => {
-    consulta.data = [
-      {
-        id: "s1",
-        codigo: "MRC-001",
-        nombre: "Néctar 1L",
-        tenant_id: MARACUMANGO,
-        tenant: { nombre: "Maracumango" },
-      },
-    ];
-
-    await skusActivos();
+describe("cadenasActivas", () => {
+  it("pide SOLO las activas y SOLO las del cliente", async () => {
+    await cadenasActivas(MARACUMANGO);
 
     expect(consulta.filtros).toContainEqual(["activo", true]);
-  });
-
-  it("aplana el nombre del cliente para que el desplegable lo pueda mostrar", async () => {
-    consulta.data = [
-      {
-        id: "s1",
-        codigo: "MRC-001",
-        nombre: "Néctar 1L",
-        tenant_id: MARACUMANGO,
-        tenant: { nombre: "Maracumango" },
-      },
-    ];
-
-    expect(await skusActivos()).toEqual([
-      {
-        id: "s1",
-        codigo: "MRC-001",
-        nombre: "Néctar 1L",
-        tenant_id: MARACUMANGO,
-        cliente: "Maracumango",
-      },
-    ]);
-  });
-
-  it("un SKU sin cliente resoluble no rompe la lista", async () => {
-    consulta.data = [
-      {
-        id: "s1",
-        codigo: "MRC-001",
-        nombre: "Néctar 1L",
-        tenant_id: MARACUMANGO,
-        tenant: null,
-      },
-    ];
-
-    expect((await skusActivos())[0]?.cliente).toBe("—");
+    expect(consulta.filtros).toContainEqual(["tenant_id", MARACUMANGO]);
   });
 });
 
-describe("clustersPorCliente", () => {
-  it("cada cluster aparece UNA vez aunque lo tengan veinte tiendas", async () => {
-    consulta.data = [
-      { tenant_id: MARACUMANGO, cluster: "Lima Norte" },
-      { tenant_id: MARACUMANGO, cluster: "Lima Norte" },
-      { tenant_id: MARACUMANGO, cluster: "Lima Sur" },
-    ];
+describe("marcasActivas", () => {
+  it("pide SOLO las activas y SOLO las del cliente", async () => {
+    await marcasActivas(MARACUMANGO);
 
-    expect(await clustersPorCliente()).toEqual({
-      [MARACUMANGO]: ["Lima Norte", "Lima Sur"],
-    });
+    expect(consulta.filtros).toContainEqual(["activo", true]);
+    expect(consulta.filtros).toContainEqual(["tenant_id", MARACUMANGO]);
+  });
+});
+
+describe("clustersDe", () => {
+  it("acota la lectura al cliente que se pide", async () => {
+    // Sin el filtro, se leen las tiendas de TODO el sistema para sacar cuatro
+    // etiquetas — la consulta más cara del formulario de promociones.
+    await clustersDe(MARACUMANGO);
+
+    expect(consulta.filtros).toContainEqual(["tenant_id", MARACUMANGO]);
+    expect(consulta.filtros).toContainEqual(["activo", true]);
   });
 
-  it("no mezcla los clusters de un cliente con los de otro", async () => {
-    // Ofrecer el cluster de otro cliente acotaría la promo a cero tiendas.
+  it("cada cluster aparece UNA vez aunque lo tengan veinte tiendas", async () => {
     consulta.data = [
-      { tenant_id: MARACUMANGO, cluster: "Lima Norte" },
-      { tenant_id: RIVAL, cluster: "Arequipa" },
+      { cluster: "Lima Norte" },
+      { cluster: "Lima Norte" },
+      { cluster: "Lima Sur" },
     ];
 
-    expect(await clustersPorCliente()).toEqual({
-      [MARACUMANGO]: ["Lima Norte"],
-      [RIVAL]: ["Arequipa"],
-    });
+    expect(await clustersDe(MARACUMANGO)).toEqual(["Lima Norte", "Lima Sur"]);
   });
 
   it("una cadena vacía no cuenta como cluster", async () => {
-    consulta.data = [
-      { tenant_id: MARACUMANGO, cluster: "" },
-      { tenant_id: MARACUMANGO, cluster: null },
-    ];
+    consulta.data = [{ cluster: "" }, { cluster: null }];
 
-    expect(await clustersPorCliente()).toEqual({});
+    expect(await clustersDe(MARACUMANGO)).toEqual([]);
   });
 });

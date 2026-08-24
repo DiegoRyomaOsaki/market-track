@@ -14,6 +14,13 @@ import {
   PestanasUsuarios,
   type TabUsuarios,
 } from "@/components/usuarios/pestanas";
+import { Paginacion } from "@/components/panel/paginacion";
+import {
+  escaparPatronIlike,
+  leerPagina,
+  paginar,
+  rangoDe,
+} from "@/lib/panel/listado";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Usuarios — Market Track" };
@@ -28,12 +35,14 @@ export default async function UsuariosPage({
   searchParams: Promise<{
     tab?: string | string[];
     q?: string | string[];
+    p?: string | string[];
   }>;
 }) {
   const params = await searchParams;
   const tabParam = primero(params.tab);
   const tab: TabUsuarios = esTab(tabParam) ? tabParam : "mercaderistas";
   const busqueda = (primero(params.q) ?? "").trim();
+  const pagina = leerPagina(params.p);
 
   const supabase = await createServerSupabaseClient();
 
@@ -60,7 +69,12 @@ export default async function UsuariosPage({
         </Link>
       </div>
 
-      <TablaPersonas supabase={supabase} tab={tab} busqueda={busqueda} />
+      <TablaPersonas
+        supabase={supabase}
+        tab={tab}
+        busqueda={busqueda}
+        pagina={pagina}
+      />
     </div>
   );
 }
@@ -71,11 +85,15 @@ async function TablaPersonas({
   supabase,
   tab,
   busqueda,
+  pagina,
 }: {
   supabase: Supabase;
   tab: TabUsuarios;
   busqueda: string;
+  pagina: number;
 }) {
+  const href = (p: number) =>
+    `/admin/usuarios?tab=${tab}&q=${encodeURIComponent(busqueda)}&p=${p}`;
   const rol =
     tab === "mercaderistas"
       ? "mercaderista"
@@ -89,12 +107,31 @@ async function TablaPersonas({
       "id, nombre, dni, telefono, activo, sctr_vigente_hasta, supervisor:supervisor_id(nombre), tenant:tenant_id(nombre)",
     )
     .eq("rol", rol)
-    .order("nombre");
-  if (busqueda) query = query.ilike("nombre", `%${busqueda}%`);
+    .order("nombre")
+    .order("id")
+    .range(...rangoDe(pagina));
+  if (busqueda)
+    query = query.ilike("nombre", `%${escaparPatronIlike(busqueda)}%`);
 
   const { data, error } = await query;
   if (error) return <Aviso>No se pudieron cargar los usuarios.</Aviso>;
-  const filas = data ?? [];
+  const { filas, hayAnterior, haySiguiente, vaciaFueraDeRango } = paginar(
+    data ?? [],
+    pagina,
+  );
+  if (vaciaFueraDeRango) {
+    return (
+      <Aviso>
+        Esta página está vacía.{" "}
+        <Link
+          href={href(1)}
+          className="text-[13px] font-semibold text-primary hover:underline"
+        >
+          Volver a la primera
+        </Link>
+      </Aviso>
+    );
+  }
   if (filas.length === 0) {
     return (
       <Aviso>
@@ -107,83 +144,91 @@ async function TablaPersonas({
   const esCliente = tab === "clientes";
 
   return (
-    <Tarjeta>
-      <thead>
-        <tr className="border-b border-border bg-muted/40">
-          <th scope="col" className={TH}>
-            {esMerc ? "MERCADERISTA" : esCliente ? "CLIENTE" : "SUPERVISOR"}
-          </th>
-          <th scope="col" className={TH}>
-            DNI
-          </th>
-          <th scope="col" className={TH}>
-            TELÉFONO
-          </th>
-          {esMerc && (
+    <>
+      <Tarjeta>
+        <thead>
+          <tr className="border-b border-border bg-muted/40">
             <th scope="col" className={TH}>
-              SUPERVISOR
+              {esMerc ? "MERCADERISTA" : esCliente ? "CLIENTE" : "SUPERVISOR"}
             </th>
-          )}
-          {esMerc && (
             <th scope="col" className={TH}>
-              SCTR
+              DNI
             </th>
-          )}
-          {esCliente && (
             <th scope="col" className={TH}>
-              CLIENTE-MARCA
+              TELÉFONO
             </th>
-          )}
-          <th scope="col" className={TH}>
-            ESTADO
-          </th>
-          {esMerc && (
-            <th scope="col" className={TH}>
-              <span className="sr-only">Acceso</span>
-            </th>
-          )}
-        </tr>
-      </thead>
-      <tbody>
-        {filas.map((f) => (
-          <tr key={f.id} className="border-b border-border last:border-0">
-            <td className={TD}>
-              <div className="flex items-center gap-2.5">
-                <Avatar nombre={f.nombre} />
-                <span className="font-semibold">{f.nombre}</span>
-              </div>
-            </td>
-            <td className={`${TD} font-mono`}>{f.dni ?? "—"}</td>
-            <td className={`${TD} font-mono`}>{f.telefono ?? "—"}</td>
             {esMerc && (
-              <td className={`${TD} text-muted-foreground`}>
-                {f.supervisor?.nombre ?? "—"}
-              </td>
+              <th scope="col" className={TH}>
+                SUPERVISOR
+              </th>
             )}
             {esMerc && (
-              <td className={`${TD} font-mono`}>
-                {f.sctr_vigente_hasta ?? "—"}
-              </td>
+              <th scope="col" className={TH}>
+                SCTR
+              </th>
             )}
-            {esCliente && <td className={TD}>{f.tenant?.nombre ?? "—"}</td>}
-            <td className={TD}>
-              <Estado activo={f.activo} />
-            </td>
-            {/* La entrada al pase de acceso desde la persona, que es donde surge
-                la necesidad: el mercaderista llama porque no le llega el código. */}
+            {esCliente && (
+              <th scope="col" className={TH}>
+                CLIENTE-MARCA
+              </th>
+            )}
+            <th scope="col" className={TH}>
+              ESTADO
+            </th>
             {esMerc && (
-              <td className={TD}>
-                <Link
-                  href="/admin/acceso"
-                  className="text-[12px] font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                >
-                  Acceso
-                </Link>
-              </td>
+              <th scope="col" className={TH}>
+                <span className="sr-only">Acceso</span>
+              </th>
             )}
           </tr>
-        ))}
-      </tbody>
-    </Tarjeta>
+        </thead>
+        <tbody>
+          {filas.map((f) => (
+            <tr key={f.id} className="border-b border-border last:border-0">
+              <td className={TD}>
+                <div className="flex items-center gap-2.5">
+                  <Avatar nombre={f.nombre} />
+                  <span className="font-semibold">{f.nombre}</span>
+                </div>
+              </td>
+              <td className={`${TD} font-mono`}>{f.dni ?? "—"}</td>
+              <td className={`${TD} font-mono`}>{f.telefono ?? "—"}</td>
+              {esMerc && (
+                <td className={`${TD} text-muted-foreground`}>
+                  {f.supervisor?.nombre ?? "—"}
+                </td>
+              )}
+              {esMerc && (
+                <td className={`${TD} font-mono`}>
+                  {f.sctr_vigente_hasta ?? "—"}
+                </td>
+              )}
+              {esCliente && <td className={TD}>{f.tenant?.nombre ?? "—"}</td>}
+              <td className={TD}>
+                <Estado activo={f.activo} />
+              </td>
+              {/* La entrada al pase de acceso desde la persona, que es donde surge
+                la necesidad: el mercaderista llama porque no le llega el código. */}
+              {esMerc && (
+                <td className={TD}>
+                  <Link
+                    href="/admin/acceso"
+                    className="text-[12px] font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  >
+                    Acceso
+                  </Link>
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </Tarjeta>
+      <Paginacion
+        pagina={pagina}
+        hayAnterior={hayAnterior}
+        haySiguiente={haySiguiente}
+        href={href}
+      />
+    </>
   );
 }

@@ -14,6 +14,13 @@ import {
   TD,
   TH,
 } from "@/components/panel/tabla";
+import { Paginacion } from "@/components/panel/paginacion";
+import {
+  escaparPatronIlike,
+  leerPagina,
+  paginar,
+  rangoDe,
+} from "@/lib/panel/listado";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Formularios — Market Track" };
@@ -49,10 +56,13 @@ function estadoDeVersiones(versiones: Version[]): string {
 export default async function FormulariosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string | string[] }>;
+  searchParams: Promise<{ q?: string | string[]; p?: string | string[] }>;
 }) {
   const params = await searchParams;
   const busqueda = (primero(params.q) ?? "").trim();
+  const pagina = leerPagina(params.p);
+  const href = (p: number) =>
+    `/admin/formularios?q=${encodeURIComponent(busqueda)}&p=${p}`;
 
   const supabase = await createServerSupabaseClient();
   let query = supabase
@@ -60,10 +70,17 @@ export default async function FormulariosPage({
     .select(
       "id, nombre, activo, ambito, tenant:tenant_id(nombre), marca:marca_id(nombre), versiones:formulario_version(version, publicada)",
     )
-    .order("creado_at", { ascending: false });
-  if (busqueda) query = query.ilike("nombre", `%${busqueda}%`);
+    .order("creado_at", { ascending: false })
+    .order("id")
+    .range(...rangoDe(pagina));
+  if (busqueda)
+    query = query.ilike("nombre", `%${escaparPatronIlike(busqueda)}%`);
 
   const { data, error } = await query;
+  const { filas, hayAnterior, haySiguiente, vaciaFueraDeRango } = paginar(
+    data ?? [],
+    pagina,
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -85,76 +102,92 @@ export default async function FormulariosPage({
 
       {error ? (
         <Aviso>No se pudieron cargar los formularios.</Aviso>
-      ) : (data?.length ?? 0) === 0 ? (
+      ) : vaciaFueraDeRango ? (
+        <Aviso>
+          Esta página está vacía.{" "}
+          <Link href={href(1)} className={enlaceTabla}>
+            Volver a la primera
+          </Link>
+        </Aviso>
+      ) : filas.length === 0 ? (
         <Aviso>
           {busqueda
             ? "Ningún formulario coincide con la búsqueda."
             : "Aún no hay formularios. Crea uno para configurar qué campos captura el mercaderista."}
         </Aviso>
       ) : (
-        <Tarjeta>
-          <thead>
-            <tr className="border-b border-border bg-muted/40">
-              <th scope="col" className={TH}>
-                FORMULARIO
-              </th>
-              <th scope="col" className={TH}>
-                CLIENTE
-              </th>
-              <th scope="col" className={TH}>
-                MARCA
-              </th>
-              <th scope="col" className={TH}>
-                ÁMBITO
-              </th>
-              <th scope="col" className={TH}>
-                VERSIÓN
-              </th>
-              <th scope="col" className={TH}>
-                ESTADO
-              </th>
-              <th scope="col" className={TH}>
-                <span className="sr-only">Acciones</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {(data ?? []).map((f) => (
-              <tr key={f.id} className="border-b border-border last:border-0">
-                <td className={TD}>
-                  <div className="flex items-center gap-2.5">
-                    <Avatar nombre={f.nombre} />
-                    <span className="font-semibold">{f.nombre}</span>
-                  </div>
-                </td>
-                <td className={`${TD} text-muted-foreground`}>
-                  {f.tenant?.nombre ?? "—"}
-                </td>
-                <td className={`${TD} text-muted-foreground`}>
-                  {f.marca?.nombre ?? (f.ambito === "check_in" ? "—" : "Todas")}
-                </td>
-                <td className={`${TD} text-muted-foreground`}>
-                  {f.ambito === "check_in" ? "Check-in" : "Levantamiento"}
-                </td>
-                <td className={`${TD} text-muted-foreground`}>
-                  {estadoDeVersiones(f.versiones ?? [])}
-                </td>
-                <td className={TD}>
-                  <Estado activo={f.activo} />
-                </td>
-                <td className={`${TD} text-right`}>
-                  <Link
-                    href={`/admin/formularios/${f.id}`}
-                    className={enlaceTabla}
-                  >
-                    Editar
-                    <span className="sr-only"> el formulario {f.nombre}</span>
-                  </Link>
-                </td>
+        <>
+          <Tarjeta>
+            <thead>
+              <tr className="border-b border-border bg-muted/40">
+                <th scope="col" className={TH}>
+                  FORMULARIO
+                </th>
+                <th scope="col" className={TH}>
+                  CLIENTE
+                </th>
+                <th scope="col" className={TH}>
+                  MARCA
+                </th>
+                <th scope="col" className={TH}>
+                  ÁMBITO
+                </th>
+                <th scope="col" className={TH}>
+                  VERSIÓN
+                </th>
+                <th scope="col" className={TH}>
+                  ESTADO
+                </th>
+                <th scope="col" className={TH}>
+                  <span className="sr-only">Acciones</span>
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </Tarjeta>
+            </thead>
+            <tbody>
+              {filas.map((f) => (
+                <tr key={f.id} className="border-b border-border last:border-0">
+                  <td className={TD}>
+                    <div className="flex items-center gap-2.5">
+                      <Avatar nombre={f.nombre} />
+                      <span className="font-semibold">{f.nombre}</span>
+                    </div>
+                  </td>
+                  <td className={`${TD} text-muted-foreground`}>
+                    {f.tenant?.nombre ?? "—"}
+                  </td>
+                  <td className={`${TD} text-muted-foreground`}>
+                    {f.marca?.nombre ??
+                      (f.ambito === "check_in" ? "—" : "Todas")}
+                  </td>
+                  <td className={`${TD} text-muted-foreground`}>
+                    {f.ambito === "check_in" ? "Check-in" : "Levantamiento"}
+                  </td>
+                  <td className={`${TD} text-muted-foreground`}>
+                    {estadoDeVersiones(f.versiones ?? [])}
+                  </td>
+                  <td className={TD}>
+                    <Estado activo={f.activo} />
+                  </td>
+                  <td className={`${TD} text-right`}>
+                    <Link
+                      href={`/admin/formularios/${f.id}`}
+                      className={enlaceTabla}
+                    >
+                      Editar
+                      <span className="sr-only"> el formulario {f.nombre}</span>
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Tarjeta>
+          <Paginacion
+            pagina={pagina}
+            hayAnterior={hayAnterior}
+            haySiguiente={haySiguiente}
+            href={href}
+          />
+        </>
       )}
     </div>
   );

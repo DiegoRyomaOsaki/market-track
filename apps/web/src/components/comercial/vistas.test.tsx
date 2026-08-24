@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { TOPE_LISTADO } from "@/lib/comercial/listado";
+import { TAMANO_PAGINA } from "@/lib/panel/listado";
 
 import { VistaExhibiciones } from "./vista-exhibiciones";
 import { VistaPrecios } from "./vista-precios";
@@ -19,15 +19,20 @@ const { consulta } = vi.hoisted(() => ({
   },
 }));
 
+vi.mock("@/lib/panel/tenant-activo", () => ({
+  tenantActivo: () => Promise.resolve({ id: "t1", nombre: "Maracumango" }),
+}));
+
 vi.mock("@/lib/supabase/server", () => ({
-  createServerSupabaseClient: () =>
-    Promise.resolve({
-      from: () => ({
-        select: () => ({
-          order: () => ({ limit: () => Promise.resolve(consulta) }),
-        }),
-      }),
-    }),
+  createServerSupabaseClient: () => {
+    const encadenable = {
+      select: () => encadenable,
+      eq: () => encadenable,
+      order: () => encadenable,
+      range: () => Promise.resolve(consulta),
+    };
+    return Promise.resolve({ from: () => encadenable });
+  },
 }));
 
 beforeEach(() => {
@@ -48,20 +53,20 @@ describe("VistaPrecios", () => {
   it("un precio sin tipo de tienda se lee como «Toda la cadena»", async () => {
     // Un guion dejaría en duda si falta el dato o si aplica a todos los formatos.
     consulta.data = [PRECIO];
-    render(await VistaPrecios());
+    render(await VistaPrecios({ pagina: 1 }));
 
     expect(screen.getByText("Toda la cadena")).toBeInTheDocument();
   });
 
   it("el importe lleva su símbolo y sus dos decimales", async () => {
     consulta.data = [PRECIO];
-    render(await VistaPrecios());
+    render(await VistaPrecios({ pagina: 1 }));
 
     expect(screen.getByText("S/ 6.90")).toBeInTheDocument();
   });
 
   it("sin precios explica por dónde entran, no solo que no hay", async () => {
-    render(await VistaPrecios());
+    render(await VistaPrecios({ pagina: 1 }));
 
     expect(screen.getByText(/importación del Excel/i)).toBeInTheDocument();
   });
@@ -69,31 +74,57 @@ describe("VistaPrecios", () => {
   it("un fallo de la consulta se dice, no se pinta una tabla vacía", async () => {
     consulta.data = null;
     consulta.error = { message: "permission denied" };
-    render(await VistaPrecios());
+    render(await VistaPrecios({ pagina: 1 }));
 
     expect(screen.getByText(/No se pudieron cargar/i)).toBeInTheDocument();
   });
 
-  it("cuando recorta el listado lo DICE", async () => {
-    // Un corte silencioso se lee como "esto es todo lo que hay", y la cuenta que
-    // alguien saque de la pantalla no cuadrará con la de la base.
-    consulta.data = Array.from({ length: TOPE_LISTADO + 1 }, (_, i) => ({
+  it("con más filas que una página, ofrece la siguiente y no pinta la sonda", async () => {
+    // La fila de más existe solo para saber que hay otra página: mostrarla
+    // duplicaría la primera fila de la página siguiente.
+    consulta.data = Array.from({ length: TAMANO_PAGINA + 1 }, (_, i) => ({
       ...PRECIO,
       id: `p${i}`,
     }));
-    render(await VistaPrecios());
+    render(await VistaPrecios({ pagina: 1 }));
 
-    expect(
-      screen.getByText(/todavía no tiene paginación/i),
-    ).toBeInTheDocument();
-    expect(screen.getAllByRole("row")).toHaveLength(TOPE_LISTADO + 1); // + cabecera
+    expect(screen.getByRole("link", { name: /Siguiente/ })).toHaveAttribute(
+      "href",
+      "/admin/precios?p=2",
+    );
+    expect(screen.getAllByRole("row")).toHaveLength(TAMANO_PAGINA + 1); // + cabecera
   });
 
-  it("por debajo del tope no avisa de nada", async () => {
-    consulta.data = [PRECIO];
-    render(await VistaPrecios());
+  it("una página exactamente llena NO ofrece siguiente", async () => {
+    // El off-by-one que haría que un listado completo pareciera recortado.
+    consulta.data = Array.from({ length: TAMANO_PAGINA }, (_, i) => ({
+      ...PRECIO,
+      id: `p${i}`,
+    }));
+    render(await VistaPrecios({ pagina: 1 }));
 
-    expect(screen.queryByText(/paginación/i)).toBeNull();
+    expect(screen.queryByRole("link", { name: /Siguiente/ })).toBeNull();
+  });
+
+  it("una página fuera de rango lo dice, no finge que no hay datos", async () => {
+    consulta.data = [];
+    render(await VistaPrecios({ pagina: 3 }));
+
+    expect(screen.getByText(/Esta página está vacía/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Volver a la primera/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/importación del Excel/i)).toBeNull();
+  });
+
+  it("en una página intermedia se puede volver atrás", async () => {
+    consulta.data = [PRECIO];
+    render(await VistaPrecios({ pagina: 2 }));
+
+    expect(screen.getByRole("link", { name: /Anterior/ })).toHaveAttribute(
+      "href",
+      "/admin/precios?p=1",
+    );
   });
 });
 
@@ -111,21 +142,21 @@ describe("VistaPromociones", () => {
   it("sin clusters se lee como «Todas las tiendas»", async () => {
     // Es el caso normal y el más fácil de malinterpretar como "ninguna".
     consulta.data = [PROMO];
-    render(await VistaPromociones());
+    render(await VistaPromociones({ pagina: 1 }));
 
     expect(screen.getByText("Todas las tiendas")).toBeInTheDocument();
   });
 
   it("con clusters los enumera", async () => {
     consulta.data = [{ ...PROMO, clusters: ["Lima Norte", "Lima Sur"] }];
-    render(await VistaPromociones());
+    render(await VistaPromociones({ pagina: 1 }));
 
     expect(screen.getByText("Lima Norte, Lima Sur")).toBeInTheDocument();
   });
 
   it("si está comunicada o no lo dice con TEXTO, no solo con color", async () => {
     consulta.data = [PROMO];
-    render(await VistaPromociones());
+    render(await VistaPromociones({ pagina: 1 }));
 
     expect(screen.getByText("Sin comunicar")).toBeInTheDocument();
   });
@@ -133,9 +164,23 @@ describe("VistaPromociones", () => {
   it("un fallo de la consulta se dice", async () => {
     consulta.data = null;
     consulta.error = { message: "permission denied" };
-    render(await VistaPromociones());
+    render(await VistaPromociones({ pagina: 1 }));
 
     expect(screen.getByText(/No se pudieron cargar/i)).toBeInTheDocument();
+  });
+
+  it("la página siguiente conserva la pestaña de promociones", async () => {
+    // Sin `vista=promociones` en el href, avanzar de página saltaría a precios.
+    consulta.data = Array.from({ length: TAMANO_PAGINA + 1 }, (_, i) => ({
+      ...PROMO,
+      id: `pr${i}`,
+    }));
+    render(await VistaPromociones({ pagina: 1 }));
+
+    expect(screen.getByRole("link", { name: /Siguiente/ })).toHaveAttribute(
+      "href",
+      "/admin/precios?vista=promociones&p=2",
+    );
   });
 });
 
@@ -154,21 +199,21 @@ describe("VistaExhibiciones", () => {
   it("un espacio todavía sin SKUs se lee «Sin definir», no «0»", async () => {
     // Cero SKUs pactados y "aún no decidido" son cosas distintas.
     consulta.data = [EXHIBICION];
-    render(await VistaExhibiciones());
+    render(await VistaExhibiciones({ pagina: 1 }));
 
     expect(screen.getByText("Sin definir")).toBeInTheDocument();
   });
 
   it("cuenta los SKUs en vez de listarlos: una cabecera puede llevar veinte", async () => {
     consulta.data = [{ ...EXHIBICION, sku_ids: ["a", "b", "c"] }];
-    render(await VistaExhibiciones());
+    render(await VistaExhibiciones({ pagina: 1 }));
 
     expect(screen.getByText("3")).toBeInTheDocument();
   });
 
   it("nombra la tienda y la marca que negoció el espacio", async () => {
     consulta.data = [EXHIBICION];
-    render(await VistaExhibiciones());
+    render(await VistaExhibiciones({ pagina: 1 }));
 
     expect(screen.getByText("Plaza Vea Angamos")).toBeInTheDocument();
     expect(screen.getByText("Maracumango")).toBeInTheDocument();
@@ -177,7 +222,7 @@ describe("VistaExhibiciones", () => {
   it("un fallo de la consulta se dice", async () => {
     consulta.data = null;
     consulta.error = { message: "permission denied" };
-    render(await VistaExhibiciones());
+    render(await VistaExhibiciones({ pagina: 1 }));
 
     expect(screen.getByText(/No se pudieron cargar/i)).toBeInTheDocument();
   });
