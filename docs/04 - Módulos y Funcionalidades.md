@@ -139,7 +139,7 @@ por tipo tienda"*.
 | 1 | **Distribución / disponibilidad** | % de SKUs presentes vs. el surtido ideal de esa tienda | ✅ |
 | 2 | **Visibilidad** | share of shelf real vs. objetivo, 0–100 con tope en 100 | ✅ |
 | 3 | **Precio y promoción** | SKUs dentro de tolerancia / evaluados × 100 | ✅ |
-| 4 | **Material POP y activación** | presencia y estado de lo comprometido | 🟡 |
+| 4 | **Material POP y activación** | presencia y estado de lo comprometido, más lo conseguido en tienda | ✅ |
 | 5 | **Orden y limpieza** | escala cualitativa de 3 niveles **con foto** | 🟡 |
 
 Las tres primeras se calculan sobre datos que **ya se capturan** hoy en el
@@ -172,7 +172,7 @@ levantamiento — *"las tres primeras ya las tenemos"*.
 | 7 | **Motor Perfect Merchandiser** | ✅ nuevo al piloto | puntaje por mercaderista y periodo · niveles de bono |
 | 8 | **Portal: Perfect Store con drill-down** y evolución | ✅ nuevo al piloto | portal cliente |
 | 9 | **docs de esta revisión** | ✅ | este documento · `03` · ADR-0011 |
-| 10 | **Material POP y activación** ampliados | 🟡 | `exhibicion` ampliada · 4ª variable |
+| 10 | **Material POP y activación** ampliados | ✅ | `tipo_exhibicion` ampliado · 4ª variable |
 | 11 | **Orden y limpieza** con escala cualitativa | 🟡 | paso configurable + foto · 5ª variable |
 | 12 | **Panel: configurar** Perfect Store y niveles de bono | 🟡 | panel admin |
 | 13 | **Panel: ranking** de mercaderistas con desglose | 🟡 | panel |
@@ -223,6 +223,11 @@ No se inventa una fórmula: hace falta acordarla.
 tener 100 puntos de perfect store y esto te suma y te lleva a 110."* Se define
 **con cada marca**, así que el modelo lo soporta como configuración
 (`dentro_del_tope` | `bonus_sobre_100`) y no se fija aquí una respuesta.
+**Implementado**: el motor aplica la política de la marca. Con `dentro_del_tope`
+el POP pondera como una variable más y el techo sigue siendo 100; con
+`bonus_sobre_100` sale del promedio y su cumplimiento se suma por encima, con
+techo `100 + peso_pop`. El total del levantamiento acepta hasta 200 por eso; los
+agregados del portal promedian lo que haya.
 
 **La unidad del share of shelf.** Frentes o centímetros — *"ahí se mide por
 frentes o se mide por distancia real"*. También es configuración por marca.

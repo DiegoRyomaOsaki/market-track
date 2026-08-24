@@ -78,6 +78,25 @@ export const pesosPerfectStoreSchema = z
  * configuración es insertar otra con una `vigente_desde` nueva. No existe un
  * schema de edición porque no existe la edición.
  */
+/**
+ * Lo que la vista previa del panel manda al servidor: los pesos y la POLÍTICA.
+ *
+ * La política viaja aunque no se esté guardando nada, porque decide la forma del
+ * número: con `bonus_sobre_100` el material POP sale del promedio y se suma por
+ * encima. Sin ella, la previa de una marca con bonus saldría hasta `peso_pop`
+ * puntos por debajo del total que el motor produce después — una previa que
+ * miente sobre el efecto de los pesos que el admin está a punto de publicar.
+ *
+ * Opcional a propósito: la fila que arma `jsonb_populate_record` en la base es
+ * efímera y su columna admite el default, así que una previa sin política sigue
+ * siendo válida y cae al modo de tope.
+ */
+export const previaPerfectStoreSchema = pesosPerfectStoreSchema.and(
+  z.object({ politica_pop: politicaPopSchema.optional() }),
+);
+
+export type PreviaPerfectStore = z.infer<typeof previaPerfectStoreSchema>;
+
 export const altaConfigPerfectStoreSchema = z
   .object({
     tenant_id: z.guid("Elige un cliente"),

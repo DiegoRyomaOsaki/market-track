@@ -161,7 +161,12 @@ insert into public.promocion (id, tenant_id, sku_id, precio_promo, fecha_inicio,
 
 insert into public.exhibicion_negociada (id, tenant_id, tienda_id, marca_id, tipo, fecha_inicio, fecha_fin) values
   ('a0000007-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'a0000002-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-000000000001', 'cabecera', '2026-07-01', '2026-07-31'),
-  ('b0000007-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0000-000000000002', 'b0000002-0000-0000-0000-000000000002', 'dddddddd-0000-0000-0000-000000000001', 'isla', '2026-07-01', '2026-07-31');
+  ('b0000007-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0000-000000000002', 'b0000002-0000-0000-0000-000000000002', 'dddddddd-0000-0000-0000-000000000001', 'isla', '2026-07-01', '2026-07-31'),
+  -- Material POP y activación (MAR-97), para que el wizard tenga qué enseñar en
+  -- dev. Con fechas amplias a propósito: las de arriba caducaron en julio y el
+  -- paso de exhibiciones del móvil todavía no filtra por vigencia.
+  ('a0000007-0000-0000-0000-000000000003', 'aaaaaaaa-0000-0000-0000-000000000001', 'a0000002-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-000000000001', 'jalavista', '2026-01-01', '2026-12-31'),
+  ('a0000007-0000-0000-0000-000000000004', 'aaaaaaaa-0000-0000-0000-000000000001', 'a0000002-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-000000000001', 'activacion', '2026-01-01', '2026-12-31');
 
 insert into public.rutero (id, tenant_id, mercaderista_id, fecha) values
   ('a0000008-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', '44444444-4444-4444-4444-444444444444', '2026-07-14'),
