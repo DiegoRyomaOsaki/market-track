@@ -108,6 +108,21 @@ begin
     return new;
   end if;
 
+  -- Mover una parada de un rutero a OTRO se rechaza SIEMPRE, y esto es un agujero
+  -- que venía de antes: el estado se resuelve con `coalesce(new.rutero_id,
+  -- old.rutero_id)`, que en un UPDATE es siempre el rutero de DESTINO. Sin esta
+  -- guarda bastaba con apuntar la parada a un rutero en borrador para sacarla de
+  -- uno `completado` —o `en_curso`— sin auditoría, sin la verja de la visita y
+  -- sin la del día pasado. Verificado en vivo antes de escribir esto.
+  --
+  -- No es un caso contemplado: quitar y volver a añadir es el camino, y ese sí
+  -- deja rastro.
+  if tg_op = 'UPDATE' and new.rutero_id is distinct from old.rutero_id then
+    raise exception
+      'Una parada no se mueve de un rutero a otro: quítala y añádela donde toque'
+      using errcode = '55000';
+  end if;
+
   select estado into v_estado from public.rutero where id = v_rutero;
 
   -- Sin fila padre es un borrado en cascada del rutero entero: no es replanificar.

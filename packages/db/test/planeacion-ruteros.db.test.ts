@@ -830,3 +830,37 @@ describe("planeacion_ruteros.tiene_visita", () => {
     });
   });
 });
+
+describe("una parada no se muda de rutero", () => {
+  // El agujero que este PR cierra, y que venía de antes: el trigger resuelve el
+  // estado con `coalesce(new.rutero_id, old.rutero_id)`, que en un UPDATE es
+  // siempre el rutero de DESTINO. Bastaba con apuntar la parada a un rutero en
+  // borrador para sacarla de uno `completado` sin auditoría, sin la verja de la
+  // visita y sin la del día pasado. Verificado en vivo antes de escribir la
+  // guarda.
+  it.each(["borrador", "publicado", "en_curso", "completado"] as const)(
+    "mover una parada desde un rutero en %s se rechaza",
+    async (estado) => {
+      await comoUsuario(db, USUARIOS.supervisor, async (c) => {
+        const parada = await paradaLibre(c);
+        await conRutero(c, estado);
+
+        await c.query("set local role postgres");
+        await c.query(
+          `insert into public.rutero (id, tenant_id, mercaderista_id, fecha, estado)
+           values ('e1000000-0000-0000-0000-000000000001', $1, $2,
+                   app.hoy_lima() + 1, 'borrador')`,
+          [TENANTS.maracumango, USUARIOS.mercaderistaMaracumango],
+        );
+        await c.query("set local role authenticated");
+
+        const codigo = await codigoDeError(
+          c,
+          `update public.rutero_parada set rutero_id = $1 where id = $2`,
+          ["e1000000-0000-0000-0000-000000000001", parada],
+        );
+        expect(codigo).toBe("55000");
+      });
+    },
+  );
+});

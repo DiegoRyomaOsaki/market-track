@@ -17,6 +17,7 @@ import {
   type DiaPlaneado,
   type FilaPlaneacion,
   type Parada,
+  vecinoParaFoco,
 } from "./ruteros";
 
 function fila(over: Partial<FilaPlaneacion> = {}): FilaPlaneacion {
@@ -380,5 +381,32 @@ describe("permisos por parada", () => {
 
   it("la hora sí se edita en borrador", () => {
     expect(sePuedeEditarHora(diaCon("borrador")).puede).toBe(true);
+  });
+});
+
+describe("vecinoParaFoco", () => {
+  // A dónde salta el foco cuando una fila desaparece del DOM. Sin esto el
+  // navegador lo manda a `<body>` y quien navega con teclado pierde el sitio.
+  const paradas: Parada[] = ["a", "b", "c"].map((id, i) => ({
+    id,
+    orden: i + 1,
+    tiendaId: `t${i}`,
+    tiendaNombre: `Tienda ${id}`,
+    hora: null,
+    tieneVisita: false,
+  }));
+
+  it("salta al vecino de ARRIBA cuando lo hay", () => {
+    expect(vecinoParaFoco(paradas, 1)).toBe("a");
+    expect(vecinoParaFoco(paradas, 2)).toBe("b");
+  });
+
+  it("quitando la PRIMERA salta al de abajo", () => {
+    expect(vecinoParaFoco(paradas, 0)).toBe("b");
+  });
+
+  it("si era la única no hay vecino: lo resuelve el título del día", () => {
+    expect(vecinoParaFoco([paradas[0]!], 0)).toBeNull();
+    expect(vecinoParaFoco([], 0)).toBeNull();
   });
 });

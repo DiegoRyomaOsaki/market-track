@@ -18,6 +18,7 @@ import {
   sePuedePublicar,
   sePuedeQuitarParada,
   sePuedeReordenar,
+  vecinoParaFoco,
   type DiaPlaneado,
 } from "@/lib/panel/ruteros";
 
@@ -92,7 +93,10 @@ export function DiaRutero({
   const [abierto, setAbierto] = useState(!compacto);
   const [enEdicion, setEnEdicion] = useState<string | null>(null);
   const selectorTienda = useRef<HTMLSelectElement>(null);
-  const tituloRef = useRef<HTMLHeadingElement>(null);
+  // Sirve a las DOS variantes del título: `<h3>` en la vista semanal y `<button>`
+  // en la mensual. Con una ref tipada a `<h3>`, quitar la última parada en la
+  // vista mensual dejaba el foco en `<body>`.
+  const tituloRef = useRef<HTMLElement | null>(null);
   // Los botones "Editar" de cada fila, para devolverles el foco al cerrar el
   // editor y para dárselo al vecino cuando una fila desaparece del DOM.
   const botonesEditar = useRef(new Map<string, HTMLButtonElement | null>());
@@ -135,8 +139,8 @@ export function DiaRutero({
    * habría mandado el foco a `<body>`.
    */
   function moverFocoTrasQuitar(indice: number) {
-    const vecino = dia.paradas[indice - 1] ?? dia.paradas[indice + 1];
-    const boton = vecino ? botonesEditar.current.get(vecino.id) : null;
+    const vecino = vecinoParaFoco(dia.paradas, indice);
+    const boton = vecino ? botonesEditar.current.get(vecino) : null;
     if (boton) {
       boton.focus();
       return;
@@ -153,6 +157,9 @@ export function DiaRutero({
       <div className="flex items-center justify-between gap-2">
         {compacto ? (
           <button
+            ref={(el) => {
+              tituloRef.current = el;
+            }}
             type="button"
             onClick={() => setAbierto((v) => !v)}
             aria-expanded={abierto}
@@ -168,7 +175,9 @@ export function DiaRutero({
           // recibir el foco por código cuando se quita la última parada y no
           // queda ningún vecino al que saltar.
           <h3
-            ref={tituloRef}
+            ref={(el) => {
+              tituloRef.current = el;
+            }}
             tabIndex={-1}
             className="text-[12.5px] font-bold capitalize focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
@@ -369,16 +378,30 @@ function ParadaFila({
   onMover: (direccion: -1 | 1) => void;
   onQuitar: () => void;
 }) {
-  const primerControl = useRef<HTMLInputElement>(null);
+  const campoHora = useRef<HTMLInputElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
   const motivoQuitarId = `motivo-quitar-${parada.id}`;
   const motivoHoraId = `motivo-hora-${parada.id}`;
 
+  // El borrador de la hora vive AQUÍ y no dentro del campo, y esa es la
+  // diferencia entre que "Cancelar" cancele o mienta. Con la escritura colgada
+  // del `blur`, pulsar "Cancelar" la disparaba —el clic saca el foco del campo
+  // ANTES de que corra el `onClick`— y el cambio se guardaba igual mientras el
+  // anuncio decía "edición cancelada". Ahora escribe "Guardar", que es lo que el
+  // botón promete; el motivo original de no escribir por tecla se conserva.
+  const [horaBorrador, setHoraBorrador] = useState(parada.hora ?? "");
+  const horaCambio = horaBorrador !== (parada.hora ?? "");
+
   // Al abrir el editor el foco entra en él. Sin esto, quien navega con teclado
   // pulsa "Editar" y se queda donde estaba, con controles nuevos que no sabe que
-  // aparecieron.
+  // aparecieron. El campo de hora es el destino natural, pero fuera del borrador
+  // no se renderiza —justo el caso que este ticket abre—, así que el contenedor
+  // del editor hace de respaldo en vez de dejar caer el foco a `<body>`.
   useEffect(() => {
-    if (editando) primerControl.current?.focus();
-  }, [editando]);
+    if (!editando) return;
+    setHoraBorrador(parada.hora ?? "");
+    (campoHora.current ?? editorRef.current)?.focus();
+  }, [editando, parada.hora]);
 
   return (
     <li className="rounded-lg bg-muted px-2 py-1">
@@ -414,22 +437,29 @@ function ParadaFila({
       </div>
 
       {editando ? (
-        <div className="flex flex-col gap-2 pb-1 pt-2">
+        <div
+          ref={editorRef}
+          tabIndex={-1}
+          className="flex flex-col gap-2 pb-1 pt-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
           <div className="flex flex-wrap items-center gap-1.5">
             {permisoHora.puede ? (
               <HoraParada
-                ref={primerControl}
+                ref={campoHora}
                 parada={parada}
                 posicion={posicion}
                 inactivo={pendiente}
-                onGuardar={onHora}
+                valor={horaBorrador}
+                onCambio={setHoraBorrador}
               />
             ) : (
               <span className="shrink-0 text-[11px] text-muted-foreground">
                 <span className="tabular-nums">
                   {parada.hora ?? "Sin hora esperada"}
                 </span>{" "}
-                <span id={motivoHoraId}>· {permisoHora.motivo}</span>
+                <span id={motivoHoraId} className="text-foreground">
+                  · {permisoHora.motivo}
+                </span>
               </span>
             )}
 
@@ -473,7 +503,11 @@ function ParadaFila({
               {!permisoQuitar.puede ? (
                 <span
                   id={motivoQuitarId}
-                  className="text-[11px] text-muted-foreground"
+                  // `text-foreground` y no `text-muted-foreground`: sobre
+                  // `bg-muted` ese token da 4,40:1, por debajo del 4,5:1 que
+                  // pide WCAG AA. Y esto es justo el texto que explica por qué
+                  // no se puede — la razón de ser de este modo de edición.
+                  className="text-[11px] text-foreground"
                 >
                   {permisoQuitar.motivo}
                 </span>
@@ -490,7 +524,10 @@ function ParadaFila({
               </button>
               <button
                 type="button"
-                onClick={onCerrar}
+                onClick={() => {
+                  if (horaCambio) onHora(horaBorrador);
+                  onCerrar();
+                }}
                 className="min-h-11 rounded-lg bg-primary px-3 text-[12px] font-semibold text-primary-foreground hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
                 Guardar
@@ -506,22 +543,21 @@ function ParadaFila({
 /**
  * La hora esperada de una parada. Es la base de la puntualidad del mercaderista.
  *
- * Escribe al SALIR del campo, no en cada cambio: un `input[type=time]` emite
- * `change` en cada tecla y en cada flecha del reloj, así que colgar el guardado
- * del `onChange` mandaría una escritura por pulsación —y guardaría las horas a
- * medio teclear por el camino. Es la misma razón por la que el selector de tienda
- * de abajo separa elegir de confirmar.
+ * NO escribe: un `input[type=time]` emite `change` en cada tecla y en cada flecha
+ * del reloj, así que guardar ahí mandaría una escritura por pulsación —y horas a
+ * medio teclear por el camino. Quien escribe es "Guardar". Es la misma razón por
+ * la que el selector de tienda separa elegir de confirmar.
  *
- * El valor se lleva en estado local para que el campo no se quede pegado al valor
- * viejo mientras la revalidación viaja. Y por eso "Guardar" no tiene que hacer
- * nada: el `blur` que provoca pulsarlo ya escribió.
+ * El borrador NO vive aquí: lo lleva la fila, para que "Cancelar" pueda
+ * descartarlo y "Guardar" sea quien escriba. El campo solo pinta y avisa.
  */
 function HoraParada({
   ref,
   parada,
   posicion,
   inactivo,
-  onGuardar,
+  valor,
+  onCambio,
 }: {
   ref?: React.Ref<HTMLInputElement>;
   parada: Parada;
@@ -529,10 +565,9 @@ function HoraParada({
    *  y entonces dos campos se llamarían igual. */
   posicion: number;
   inactivo: boolean;
-  onGuardar: (hora: string) => void;
+  valor: string;
+  onCambio: (hora: string) => void;
 }) {
-  const [valor, setValor] = useState(parada.hora ?? "");
-
   return (
     <label className="shrink-0">
       <span className="sr-only">
@@ -543,11 +578,7 @@ function HoraParada({
         type="time"
         value={valor}
         disabled={inactivo}
-        onChange={(e) => setValor(e.target.value)}
-        onBlur={() => {
-          if (valor === (parada.hora ?? "")) return;
-          onGuardar(valor);
-        }}
+        onChange={(e) => onCambio(e.target.value)}
         className="min-h-11 rounded-lg border border-border bg-background px-1.5 text-[11px] tabular-nums focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       />
     </label>

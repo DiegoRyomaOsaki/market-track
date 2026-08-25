@@ -287,3 +287,20 @@ export function sePuedeEditarHora(dia: DiaPlaneado): Permiso {
   }
   return PUEDE;
 }
+
+/**
+ * A qué parada salta el foco cuando la de `indice` desaparece de la lista.
+ *
+ * Al vecino de arriba, y si no lo hay al de abajo; `null` cuando era la única y
+ * hay que recurrir al título del día. Vive aquí y no en el componente porque es
+ * una regla, no marcado: dentro del `.tsx` solo se podría ejercer a través del
+ * DOM, y el camino "quito la primera y salto a la segunda" se quedaría sin
+ * nombre propio.
+ */
+export function vecinoParaFoco(
+  paradas: readonly Parada[],
+  indice: number,
+): string | null {
+  const vecino = paradas[indice - 1] ?? paradas[indice + 1];
+  return vecino?.id ?? null;
+}

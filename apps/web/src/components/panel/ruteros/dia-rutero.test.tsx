@@ -304,10 +304,12 @@ describe("DiaRutero", () => {
 });
 
 describe("hora esperada de una parada", () => {
-  it("se guarda al SALIR del campo, no en cada tecla", async () => {
+  it("se guarda al pulsar Guardar, no en cada tecla", async () => {
     // Un `input[type=time]` emite `change` en cada pulsación: colgar el guardado
     // del `onChange` mandaría una escritura por tecla y guardaría horas a medio
-    // teclear por el camino.
+    // teclear por el camino. Y tampoco cuelga del `blur`, que es lo que hacía
+    // que "Cancelar" escribiera igual: el clic saca el foco del campo antes de
+    // que corra su `onClick`.
     acciones.fijarHoraParada.mockResolvedValue({ ok: true });
     render(
       <DiaRutero
@@ -325,7 +327,7 @@ describe("hora esperada de una parada", () => {
     fireEvent.change(campo, { target: { value: "08:30" } });
     expect(acciones.fijarHoraParada).not.toHaveBeenCalled();
 
-    fireEvent.blur(campo);
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
     await waitFor(() =>
       expect(acciones.fijarHoraParada).toHaveBeenCalledWith({
         paradaId: "a",
@@ -390,7 +392,7 @@ describe("hora esperada de una parada", () => {
       /Hora esperada, parada 1, Plaza Vea Surco/,
     );
     fireEvent.change(campo, { target: { value: "" } });
-    fireEvent.blur(campo);
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
 
     await waitFor(() =>
       expect(acciones.fijarHoraParada).toHaveBeenCalledWith({
@@ -454,7 +456,7 @@ describe("la hora cuando la base falla", () => {
     abrirPrimerEditor();
     const campo = screen.getByLabelText(/Hora esperada, parada 1/);
     fireEvent.change(campo, { target: { value: "08:30" } });
-    fireEvent.blur(campo);
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
 
     expect(
       await screen.findByText("No se pudo guardar el cambio"),
@@ -716,5 +718,92 @@ describe("modo de edición por parada", () => {
     expect(
       await screen.findByText("Editando Plaza Vea Surco"),
     ).toBeInTheDocument();
+  });
+});
+
+describe("Guardar guarda y Cancelar cancela", () => {
+  // El orden real del navegador al pulsar un botón teniendo el foco en el campo
+  // es `mousedown` → `blur` del campo → `click`. `fireEvent.click` NO mueve el
+  // foco en jsdom, así que un test que solo haga clic pasa en verde aunque en un
+  // navegador el `blur` hubiera escrito ya. Por eso el `blur` va explícito.
+  it("cancelar NO escribe la hora que se estaba tecleando", async () => {
+    acciones.fijarHoraParada.mockResolvedValue({ ok: true });
+    pintar(dia());
+    abrirPrimerEditor();
+
+    const campo = screen.getByLabelText(/Hora esperada, parada 1/);
+    fireEvent.change(campo, { target: { value: "09:45" } });
+    fireEvent.blur(campo);
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    await waitFor(() =>
+      expect(acciones.fijarHoraParada).not.toHaveBeenCalled(),
+    );
+  });
+
+  it("guardar SÍ escribe la hora tecleada", async () => {
+    acciones.fijarHoraParada.mockResolvedValue({ ok: true });
+    pintar(dia());
+    abrirPrimerEditor();
+
+    const campo = screen.getByLabelText(/Hora esperada, parada 1/);
+    fireEvent.change(campo, { target: { value: "09:45" } });
+    fireEvent.blur(campo);
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() =>
+      expect(acciones.fijarHoraParada).toHaveBeenCalledWith({
+        paradaId: "a",
+        hora: "09:45",
+      }),
+    );
+  });
+
+  it("guardar sin haber tocado la hora no escribe nada", async () => {
+    pintar(dia());
+    abrirPrimerEditor();
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() =>
+      expect(acciones.fijarHoraParada).not.toHaveBeenCalled(),
+    );
+  });
+
+  it("cuando la hora NO es editable, el foco entra igual en el editor", () => {
+    // El caso central del ticket: en un rutero publicado el campo de hora no se
+    // renderiza, y sin un respaldo el foco caía a `<body>`.
+    pintar(dia({ estado: "publicado" }));
+    abrirEditor("Plaza Vea Surco");
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
+  it("en vista MENSUAL, quitar la última parada manda el foco al título", () => {
+    // El título compacto es un `<button>`, no el `<h3>`: con la ref atada solo al
+    // `<h3>` el foco caía a `<body>` justo en la vista de 31 tarjetas.
+    acciones.quitarParada.mockResolvedValue({ ok: true });
+    pintar(
+      dia({
+        paradas: [
+          {
+            id: "a",
+            orden: 1,
+            tiendaId: "t1",
+            tiendaNombre: "Plaza Vea Surco",
+            hora: null,
+            tieneVisita: false,
+          },
+        ],
+      }),
+      true,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /lun 3/ }));
+    abrirEditor("Plaza Vea Surco");
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Eliminar Plaza Vea Surco de la ruta",
+      }),
+    );
+
+    expect(screen.getByRole("button", { name: /lun 3/ })).toHaveFocus();
   });
 });
