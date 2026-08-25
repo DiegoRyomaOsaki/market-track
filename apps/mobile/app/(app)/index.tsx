@@ -11,8 +11,16 @@ import {
 
 import { diaEnLima, etiquetaDePeriodo } from "@market-track/shared";
 
-import { TarjetaDesempeno } from "@/componentes/tarjeta-desempeno";
-import { fechaCorta, formatearPct, useMiDesempeno } from "@/lib/desempeno";
+import {
+  etiquetaDeDesempeno,
+  TarjetaDesempeno,
+} from "@/componentes/tarjeta-desempeno";
+import {
+  fechaCorta,
+  formatearPct,
+  textoDeMiPosicion,
+  useMiDesempeno,
+} from "@/lib/desempeno";
 import { supabase } from "@/lib/supabase";
 import { olvidarDispositivo } from "@/lib/recordar-dispositivo";
 import {
@@ -56,7 +64,12 @@ export default function MiDia() {
   const router = useRouter();
   const { paradas, cargando, fecha } = useRuteroDeHoy();
   const rechazos = useRechazosRecientes();
-  const ultimasVisitas = useUltimaVisitaPorTienda();
+  const { visitas: ultimasVisitas } = useUltimaVisitaPorTienda(
+    // Acotada a las tiendas de HOY: `visita` se replica sin cota de fecha y
+    // barrer el historial entero en SQLite, en cada render, crece con los años
+    // de servicio del mercaderista.
+    useMemo(() => paradas.map((p) => p.tienda_id), [paradas]),
+  );
   const hoyLima = useMemo(() => diaEnLima(new Date()), []);
   const desempeno = useMiDesempeno(hoyLima);
   const [transitoDesde, setTransitoDesde] = useState<string | null>(null);
@@ -96,11 +109,37 @@ export default function MiDia() {
 
       {/* Lo primero que el cliente describió: "yo entro a mi sesión, veo mi
           puntaje, veo mi ruta con las tiendas que tengo que visitar". Por eso
-          va en la portada y no solo detrás de un toque. */}
-      {desempeno.actual ? (
+          va en la portada y no solo detrás de un toque.
+
+          Un fallo de la consulta local NO se calla: sin este aviso, la tarjeta
+          simplemente no se pinta y eso se lee como "todavía no tienes puntaje",
+          que es justo la conclusión equivocada. */}
+      {desempeno.error ? (
+        <Text style={e.avisoDesempeno} accessibilityRole="alert">
+          No se pudo leer tu puntaje. Vuelve a abrir la app.
+        </Text>
+      ) : desempeno.actual ? (
         <Link href="/mi-desempeno" asChild>
           <Pressable
             accessibilityRole="button"
+            // La etiqueta va AQUÍ y la tarjeta cede la suya: dos nodos accesibles
+            // anidados se comportan distinto en TalkBack y en VoiceOver — uno se
+            // traga al de dentro (y se pierden el puntaje y la posición) y el
+            // otro obliga a un gesto extra para entrar en el grupo.
+            accessibilityLabel={etiquetaDeDesempeno({
+              etiquetaPeriodo: etiquetaDePeriodo(
+                desempeno.tipo,
+                desempeno.actual.periodo_inicio,
+              ),
+              totalPct: desempeno.actual.total_pct,
+              puesto: textoDeMiPosicion(
+                desempeno.actual.posicion,
+                desempeno.actual.mercaderistas_evaluados,
+                desempeno.actual.hay_empate === 1,
+              ),
+              estado:
+                desempeno.actual.cerrado_at !== null ? "Cerrado" : "En curso",
+            })}
             accessibilityHint="Abre el detalle de tu puntaje"
             style={({ pressed }) => [
               e.enlaceDesempeno,
@@ -109,6 +148,7 @@ export default function MiDia() {
           >
             <TarjetaDesempeno
               compacta
+              dentroDeUnBoton
               etiquetaPeriodo={etiquetaDePeriodo(
                 desempeno.tipo,
                 desempeno.actual.periodo_inicio,
@@ -334,6 +374,12 @@ function Semaforo({ estado }: { estado: EstadoVisual }) {
 const e = StyleSheet.create({
   pantalla: { flex: 1, backgroundColor: colores.fondo },
   enlaceDesempeno: { paddingHorizontal: espacio.m, paddingTop: espacio.s },
+  avisoDesempeno: {
+    color: colores.alertaTexto,
+    fontSize: 13,
+    paddingHorizontal: espacio.m,
+    paddingTop: espacio.s,
+  },
   historial: { color: colores.textoSuave, fontSize: 12, marginTop: 2 },
   encabezado: {
     flexDirection: "row",

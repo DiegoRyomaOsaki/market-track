@@ -129,31 +129,56 @@ export type UltimaVisita = {
   perfect_store_pct: number | null;
 };
 
-const SQL_ULTIMA_VISITA = `
-  WITH ordenadas AS (
-    SELECT v.id, v.tienda_id, v.rutero_parada_id, v.check_out_at,
-           -- Desempate por id: dos visitas con el mismo instante devolverían dos
-           -- filas por tienda con un MAX() + join por igualdad.
-           ROW_NUMBER() OVER (PARTITION BY v.tienda_id
-                              ORDER BY v.check_out_at DESC, v.id DESC) AS n
-    FROM visita v
-    WHERE v.estado = 'completada' AND v.check_out_at IS NOT NULL
-  )
-  SELECT o.tienda_id, o.rutero_parada_id, o.check_out_at,
-         -- AVG ignora los nulos, igual que en Postgres: un levantamiento sin
-         -- puntuar no arrastra la visita a cero. Si TODOS son nulos, sale nulo.
-         ROUND(AVG(p.total_pct), 2) AS perfect_store_pct
-  FROM ordenadas o
-  LEFT JOIN levantamiento l ON l.visita_id = o.id
-  -- El id de PowerSync de puntaje_perfect_store ES el levantamiento (1:1).
-  LEFT JOIN puntaje_perfect_store p ON p.id = l.id
-  WHERE o.n = 1
-  GROUP BY o.tienda_id, o.rutero_parada_id, o.check_out_at
-`;
+/**
+ * La consulta se ACOTA a las tiendas del rutero de hoy, no barre el historial.
+ *
+ * `visita` se replica sin cota de fecha, así que crece durante toda la vida
+ * laboral del mercaderista: unas 1.500 filas al año, y un veterano de tres años
+ * ronda las cinco mil. Sin el `IN`, la ventana `PARTITION BY tienda_id` las
+ * recorrería TODAS, en SQLite, en un Android de gama media, cada vez que se
+ * pinta "Mi día". Y la pantalla solo necesita las diez tiendas de hoy.
+ */
+function sqlUltimaVisita(cuantasTiendas: number): string {
+  const marcadores = Array.from({ length: cuantasTiendas }, () => "?").join(
+    ",",
+  );
+  return `
+    WITH ordenadas AS (
+      SELECT v.id, v.tienda_id, v.rutero_parada_id, v.check_out_at,
+             -- Desempate por id: dos visitas con el mismo instante devolverían
+             -- dos filas por tienda con un MAX() + join por igualdad.
+             ROW_NUMBER() OVER (PARTITION BY v.tienda_id
+                                ORDER BY v.check_out_at DESC, v.id DESC) AS n
+      FROM visita v
+      WHERE v.estado = 'completada' AND v.check_out_at IS NOT NULL
+        AND v.tienda_id IN (${marcadores})
+    )
+    SELECT o.tienda_id, o.rutero_parada_id, o.check_out_at,
+           -- AVG ignora los nulos, igual que en Postgres: un levantamiento sin
+           -- puntuar no arrastra la visita a cero. Si TODOS son nulos, sale nulo.
+           ROUND(AVG(p.total_pct), 2) AS perfect_store_pct
+    FROM ordenadas o
+    LEFT JOIN levantamiento l ON l.visita_id = o.id
+    -- El id de PowerSync de puntaje_perfect_store ES el levantamiento (1:1).
+    LEFT JOIN puntaje_perfect_store p ON p.id = l.id
+    WHERE o.n = 1
+    GROUP BY o.tienda_id, o.rutero_parada_id, o.check_out_at
+  `;
+}
 
-export function useUltimaVisitaPorTienda(): UltimaVisita[] {
-  const { data } = useQuery<UltimaVisita>(SQL_ULTIMA_VISITA);
-  return data ?? [];
+/** Una consulta que no devuelve nada, para cuando aún no hay paradas. */
+const SQL_SIN_TIENDAS = "SELECT NULL AS tienda_id WHERE 0";
+
+export function useUltimaVisitaPorTienda(tiendaIds: readonly string[]): {
+  visitas: UltimaVisita[];
+  error: Error | undefined;
+} {
+  const hayTiendas = tiendaIds.length > 0;
+  const { data, error } = useQuery<UltimaVisita>(
+    hayTiendas ? sqlUltimaVisita(tiendaIds.length) : SQL_SIN_TIENDAS,
+    hayTiendas ? [...tiendaIds] : [],
+  );
+  return { visitas: hayTiendas ? (data ?? []) : [], error };
 }
 
 /**

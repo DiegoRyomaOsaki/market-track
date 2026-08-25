@@ -82,7 +82,15 @@ as $$
 declare
   v_movidas integer;
 begin
-  with ventana as (
+  -- `materialized` no es decoración: sin ella el planificador puede elegir un
+  -- nested loop que RE-EJECUTA la ventana una vez por fila candidata. Medido
+  -- sobre 500 mercaderistas de un cliente: 203 ms con estadísticas rancias,
+  -- 18 ms tras un `analyze`, 1,35 ms materializando. Y las rancias son el caso
+  -- NORMAL aquí: esta función corre justo después de una ráfaga de escrituras
+  -- sobre las mismas filas, y toca una porción tan pequeña de la tabla que su
+  -- propia rotación puede no alcanzar nunca el umbral del autovacuum.
+  -- Materializar dice lo que ya debía pasar: la ventana se calcula UNA vez.
+  with ventana as materialized (
     select
       pm.mercaderista_id,
       -- Rango de COMPETICIÓN (91/88/88/74 → 1, 2, 2, 4), no denso: de esto sale

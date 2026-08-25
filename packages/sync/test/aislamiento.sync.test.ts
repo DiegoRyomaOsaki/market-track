@@ -30,6 +30,11 @@ const TABLAS = [
   "visita",
   "revision_visita",
   "foto",
+  // El plan de lealtad entra en esta lista a propósito: el gate `aal2` vive en
+  // el CTE `mi_tenant`, y si alguien sacara esta query a un stream nuevo sin ese
+  // gate, una sesión sin segundo factor bajaría el puntaje y nadie se enteraría
+  // — la RLS no interviene en la bajada.
+  "puntaje_merchandiser",
 ] as const;
 
 describe("aislamiento de las sync rules", () => {

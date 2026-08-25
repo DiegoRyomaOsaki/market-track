@@ -1,6 +1,8 @@
+import { useRouter } from "expo-router";
 import { useMemo } from "react";
 import {
   ActivityIndicator,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -30,14 +32,32 @@ import { colores, espacio, radio } from "@/tema";
  * `lib/desempeno.ts`, que es donde se prueban — este workspace no tiene tests de
  * componente, así que lo que viva aquí queda sin cubrir por construcción.
  */
+function Volver({ onPress }: { onPress: () => void }) {
+  // La misma affordance que las otras seis pantallas de `(app)`: el stack va
+  // con `headerShown: false`, así que sin esto solo queda el gesto del sistema —
+  // y este se usa de pie, con una mano, a veces con guantes.
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={8}
+      accessibilityRole="button"
+      style={e.volver}
+    >
+      <Text style={e.volverTexto}>‹ Mi día</Text>
+    </Pressable>
+  );
+}
+
 export default function MiDesempeno() {
+  const router = useRouter();
   const hoy = useMemo(() => diaEnLima(new Date()), []);
   const { tipo, actual, evolucion, cargando, error } = useMiDesempeno(hoy);
   const { conectado, ultimaSync } = useEstadoSync();
 
   if (cargando) {
     return (
-      <View style={[e.pantalla, e.centro]}>
+      <View style={[e.pantalla, e.centroConVolver]}>
+        <Volver onPress={() => router.back()} />
         <ActivityIndicator color={colores.marca} />
       </View>
     );
@@ -47,7 +67,8 @@ export default function MiDesempeno() {
   // consulta rota, y una pantalla vacía se lee como "aún no tienes puntaje".
   if (error) {
     return (
-      <View style={[e.pantalla, e.centro]}>
+      <View style={[e.pantalla, e.centroConVolver]}>
+        <Volver onPress={() => router.back()} />
         <Text style={e.vacioTitulo}>No se pudo leer tu puntaje</Text>
         <Text style={e.vacioNota}>
           Vuelve a abrir la app. Si sigue igual, avísale a tu supervisor.
@@ -58,7 +79,8 @@ export default function MiDesempeno() {
 
   if (actual === null) {
     return (
-      <View style={[e.pantalla, e.centro]}>
+      <View style={[e.pantalla, e.centroConVolver]}>
+        <Volver onPress={() => router.back()} />
         <Text style={e.vacioTitulo}>Todavía no tienes puntaje</Text>
         <Text style={e.vacioNota}>
           Aparecerá aquí en cuanto se calcule tu primer periodo.
@@ -71,6 +93,7 @@ export default function MiDesempeno() {
 
   return (
     <ScrollView style={e.pantalla} contentContainerStyle={e.contenido}>
+      <Volver onPress={() => router.back()} />
       <Text style={e.titulo}>Mi desempeño</Text>
 
       <TarjetaDesempeno
@@ -126,11 +149,12 @@ export default function MiDesempeno() {
 const e = StyleSheet.create({
   pantalla: { flex: 1, backgroundColor: colores.fondo },
   contenido: { padding: espacio.m, gap: espacio.s },
-  centro: {
-    alignItems: "center",
-    justifyContent: "center",
-    padding: espacio.l,
-  },
+  // Los estados que no son "éxito" también llevan el control de vuelta, así que
+  // no pueden centrar su contenido en el eje transversal: el "‹ Mi día" quedaría
+  // en medio de la pantalla en vez de arriba a la izquierda.
+  centroConVolver: { padding: espacio.m, justifyContent: "center" },
+  volver: { paddingVertical: espacio.s },
+  volverTexto: { color: colores.textoSuave, fontSize: 15, fontWeight: "600" },
   titulo: {
     color: colores.texto,
     fontSize: 24,

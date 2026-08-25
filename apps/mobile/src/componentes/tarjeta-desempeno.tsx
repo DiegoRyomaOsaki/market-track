@@ -10,6 +10,26 @@ import { colores, espacio, radio } from "@/tema";
 // No decide nada: recibe números ya resueltos por el servidor y los pinta. La
 // posición no se calcula aquí ni podría — el teléfono solo tiene su propia fila.
 
+/**
+ * La tarjeta dicha como una frase, para el lector de pantalla. Vive aquí —y no
+ * repetida en cada consumidor— porque la usan la propia tarjeta y el `Pressable`
+ * que la envuelve en la portada, y dos redacciones distintas del mismo dato es
+ * exactamente lo que este componente existe para evitar.
+ */
+export function etiquetaDeDesempeno({
+  etiquetaPeriodo,
+  totalPct,
+  puesto,
+  estado,
+}: {
+  etiquetaPeriodo: string;
+  totalPct: number | null;
+  puesto: string;
+  estado: string;
+}): string {
+  return `Mi puntaje de ${etiquetaPeriodo}: ${formatearPct(totalPct)} sobre 100. Posición: ${puesto}. Periodo ${estado.toLowerCase()}.`;
+}
+
 export function TarjetaDesempeno({
   etiquetaPeriodo,
   totalPct,
@@ -18,6 +38,7 @@ export function TarjetaDesempeno({
   hayEmpate,
   cerrado,
   compacta = false,
+  dentroDeUnBoton = false,
 }: {
   etiquetaPeriodo: string;
   totalPct: number | null;
@@ -27,6 +48,14 @@ export function TarjetaDesempeno({
   cerrado: boolean;
   /** En la portada la tarjeta es un resumen; en su pantalla, la cabecera. */
   compacta?: boolean;
+  /**
+   * Cuando la tarjeta va DENTRO de un `Pressable`, cede su accesibilidad al
+   * envoltorio. Dos nodos accesibles anidados se comportan distinto en TalkBack
+   * y en VoiceOver: uno se traga al de dentro —y se pierden el puntaje y la
+   * posición— y el otro obliga a un gesto extra para entrar en el grupo. Quien
+   * envuelve compone la etiqueta con `etiquetaDeDesempeno`.
+   */
+  dentroDeUnBoton?: boolean;
 }) {
   const puesto = textoDeMiPosicion(posicion, evaluados, hayEmpate);
   const estado = cerrado ? "Cerrado" : "En curso";
@@ -34,10 +63,20 @@ export function TarjetaDesempeno({
   return (
     <View
       style={[e.tarjeta, compacta && e.compacta]}
-      accessibilityRole="summary"
+      accessible={!dentroDeUnBoton}
+      accessibilityRole={dentroDeUnBoton ? undefined : "summary"}
       // Con lector de pantalla, los tres números sueltos se leen sin relación.
       // Aquí se dicen como una frase, incluido el "de N" y el estado del periodo.
-      accessibilityLabel={`Mi puntaje de ${etiquetaPeriodo}: ${formatearPct(totalPct)} sobre 100. Posición: ${puesto}. Periodo ${estado.toLowerCase()}.`}
+      accessibilityLabel={
+        dentroDeUnBoton
+          ? undefined
+          : etiquetaDeDesempeno({
+              etiquetaPeriodo,
+              totalPct,
+              puesto,
+              estado,
+            })
+      }
     >
       <View style={e.fila}>
         <Text style={e.periodo}>{etiquetaPeriodo}</Text>
