@@ -490,29 +490,32 @@ describe("el trigger de planeación, en los cuatro estados", () => {
     });
   });
 
-  it.each(ESTADOS)("la hora y el estado de la parada pasan en %s", async (estado) => {
-    // La salida temprana del trigger: `estado` avanza con la jornada y la hora
-    // tiene su propia RPC con su propia regla. Relajar el resto no la rompió.
-    await comoUsuario(db, USUARIOS.supervisor, async (c) => {
-      const parada = await paradaLibre(c);
-      await conRutero(c, estado);
+  it.each(ESTADOS)(
+    "la hora y el estado de la parada pasan en %s",
+    async (estado) => {
+      // La salida temprana del trigger: `estado` avanza con la jornada y la hora
+      // tiene su propia RPC con su propia regla. Relajar el resto no la rompió.
+      await comoUsuario(db, USUARIOS.supervisor, async (c) => {
+        const parada = await paradaLibre(c);
+        await conRutero(c, estado);
 
-      expect(
-        await codigoDeError(
-          c,
-          `update public.rutero_parada set hora_planificada = '08:30' where id = $1`,
-          [parada],
-        ),
-      ).toBe("");
-      expect(
-        await codigoDeError(
-          c,
-          `update public.rutero_parada set estado = 'completada' where id = $1`,
-          [parada],
-        ),
-      ).toBe("");
-    });
-  });
+        expect(
+          await codigoDeError(
+            c,
+            `update public.rutero_parada set hora_planificada = '08:30' where id = $1`,
+            [parada],
+          ),
+        ).toBe("");
+        expect(
+          await codigoDeError(
+            c,
+            `update public.rutero_parada set estado = 'completada' where id = $1`,
+            [parada],
+          ),
+        ).toBe("");
+      });
+    },
+  );
 
   it("añadir una tienda a un rutero PUBLICADO se sigue rechazando", async () => {
     // Es el caso simétrico y no se pidió: la relajación no puede llevárselo por
@@ -559,8 +562,11 @@ describe("el trigger de planeación, en los cuatro estados", () => {
         // sea que la única salida que hoy tiene el supervisor —tirar el día—
         // deja de funcionar en cuanto alguien ficha. Aquí se prueba la salida
         // del trigger, que es otra cosa; la verja de la FK tiene su test aparte.
-        await c.query(`delete from public.visita where rutero_parada_id in
-          (select id from public.rutero_parada where rutero_id = $1)`, [RUTERO_MRC]);
+        await c.query(
+          `delete from public.visita where rutero_parada_id in
+          (select id from public.rutero_parada where rutero_id = $1)`,
+          [RUTERO_MRC],
+        );
         await c.query(`delete from public.rutero where id = $1`, [RUTERO_MRC]);
         await c.query("set local role authenticated");
 
@@ -582,8 +588,18 @@ describe("quitar_parada_rutero", () => {
     ]);
   }
 
-  async function auditoria(c: Client) {
-    const r = await c.query(
+  type FilaRetirada = {
+    rutero_id: string;
+    tienda_id: string;
+    orden: number;
+    estado_rutero: string;
+    retirada_por: string;
+    motivo: string | null;
+    fecha: Date;
+  };
+
+  async function auditoria(c: Client): Promise<FilaRetirada[]> {
+    const r = await c.query<FilaRetirada>(
       `select rutero_id, tienda_id, orden, estado_rutero, retirada_por, motivo, fecha
          from public.rutero_parada_retirada where rutero_id = $1`,
       [RUTERO_MRC],
@@ -792,13 +808,18 @@ describe("planeacion_ruteros.tiene_visita", () => {
   it("un día con rutero y CERO paradas no inventa un `tiene_visita` verdadero", async () => {
     await comoUsuario(db, USUARIOS.supervisor, async (c) => {
       await c.query("set local role postgres");
-      await c.query(`delete from public.visita where rutero_parada_id is not null`);
+      await c.query(
+        `delete from public.visita where rutero_parada_id is not null`,
+      );
       await c.query(`delete from public.rutero_parada where rutero_id = $1`, [
         RUTERO_MRC,
       ]);
       await c.query("set local role authenticated");
 
-      const r = await c.query<{ parada_id: string | null; tiene_visita: boolean }>(
+      const r = await c.query<{
+        parada_id: string | null;
+        tiene_visita: boolean;
+      }>(
         `select parada_id, tiene_visita
            from public.planeacion_ruteros($1, '2026-01-01', '2027-12-31')`,
         [USUARIOS.mercaderistaMaracumango],

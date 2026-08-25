@@ -78,6 +78,7 @@ export default async function RuterosPage({
       mercaderistas={mercaderistas}
       tiendas={tiendasRes.data ?? []}
       dias={agruparPorDia(planeacion?.data ?? [], desde, hasta)}
+      hoyLima={diaEnLima(new Date())}
     />
   );
 }

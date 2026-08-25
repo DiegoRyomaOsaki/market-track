@@ -19,9 +19,34 @@ const SIN_PERMISO = "No encontrado o sin permiso";
 const id = z.guid();
 const fecha = z.iso.date();
 
-function fallo(operacion: string, error: { message: string }): ResultadoAccion {
+/**
+ * Qué se le dice al supervisor según por qué falló la base.
+ *
+ * Se traduce por CÓDIGO y nunca se devuelve `error.message`: los mensajes de un
+ * driver concatenan el cuerpo de la respuesta y no son seguros para pintarlos
+ * tal cual. Y los tres casos son acciones distintas para quien está delante —
+ * recargar, elegir otra tienda o rendirse—, así que un genérico no vale.
+ */
+const MENSAJE_POR_CODIGO: Record<string, string> = {
+  // La parada ya tiene una visita: la levanta la RPC y, si el check-in entra
+  // justo entre la comprobación y el borrado, la propia FK `visita_parada_fk`.
+  "23503":
+    "Esa tienda ya tiene una visita registrada: no se puede quitar de la ruta.",
+  // El rutero salió de la ventana editable entre el render y el clic.
+  "55000":
+    "Ese día ya no admite cambios de ruta. Recarga la pantalla para ver su estado.",
+  // Otro supervisor la quitó primero.
+  P0002: "Esa parada ya no existe. Recarga la pantalla.",
+  "42501": SIN_PERMISO,
+};
+
+function fallo(
+  operacion: string,
+  error: { message: string; code?: string },
+): ResultadoAccion {
   console.error(`[ruteros] ${operacion}`, error.message.slice(0, 200));
-  return { ok: false, error: "No se pudo guardar el cambio" };
+  const traducido = error.code ? MENSAJE_POR_CODIGO[error.code] : undefined;
+  return { ok: false, error: traducido ?? "No se pudo guardar el cambio" };
 }
 
 const agregarSchema = z.object({
@@ -89,22 +114,35 @@ export async function fijarHoraParada(
   return { ok: true };
 }
 
-/** Quita una parada. El hueco de orden que deja lo cierra el siguiente reorden. */
+const quitarSchema = z.object({ paradaId: id });
+
+/**
+ * Quita una parada de la ruta. El hueco de orden que deja lo cierra el siguiente
+ * reorden.
+ *
+ * Va por RPC y no por un `delete` de PostgREST porque hacen falta tres cosas en
+ * la MISMA transacción: comprobar el estado con bloqueo, dejar el rastro de
+ * quién la quitó y borrar. Con el delete suelto, la auditoría sería una
+ * escritura aparte que puede quedarse sin su borrado.
+ */
 export async function quitarParada(datos: unknown): Promise<ResultadoAccion> {
-  const parsed = z.object({ paradaId: id }).safeParse(datos);
+  const parsed = quitarSchema.safeParse(datos);
   if (!parsed.success) return { ok: false, error: "Datos inválidos" };
 
   const sesion = await sesionDeStaff();
   if (!sesion) return { ok: false, error: SIN_PERMISO };
-  const { supabase } = sesion;
+  const { supabase, perfil } = sesion;
 
-  const { data, error } = await supabase
-    .from("rutero_parada")
-    .delete()
-    .eq("id", parsed.data.paradaId)
-    .select("id");
+  const { error } = await supabase.rpc("quitar_parada_rutero", {
+    p_parada: parsed.data.paradaId,
+  });
   if (error) return fallo("quitarParada", error);
-  if (data.length === 0) return { ok: false, error: SIN_PERMISO };
+
+  // La fila de auditoría es el registro de negocio; esto es la traza de
+  // operación, que es lo que se mira cuando algo va mal y aún no se sabe qué.
+  console.info(
+    `[ruteros] parada_retirada parada=${parsed.data.paradaId} por=${perfil.id}`,
+  );
 
   revalidatePath(SECCION);
   return { ok: true };

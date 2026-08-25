@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 
 import { Pastilla } from "@/components/panel/tabla";
 import {
@@ -13,11 +13,22 @@ import {
 import {
   moverParada,
   type Parada,
+  type Permiso,
+  sePuedeEditarHora,
   sePuedePublicar,
+  sePuedeQuitarParada,
+  sePuedeReordenar,
   type DiaPlaneado,
 } from "@/lib/panel/ruteros";
 
 // Un día del calendario de planeación: sus paradas en orden, con qué hacerles.
+//
+// Cada parada se toca desde UN botón "Editar", el mismo en los cuatro estados
+// del rutero. Antes los controles (↑ ↓ ×) desaparecían del DOM en cuanto el
+// rutero salía del borrador, y el supervisor no podía distinguir «no se puede»
+// de «no está» — la única salida para quitar una tienda mal puesta era borrar el
+// rutero entero. El modo de edición existe sobre todo por eso: es un sitio donde
+// EXPLICAR por qué algo no se puede, en vez de esconderlo.
 //
 // Reordenar es con botones ↑/↓ y no arrastrando: una lista arrastrable no se
 // puede recorrer con teclado sin escribir un segundo mecanismo entero, y una
@@ -57,11 +68,20 @@ export function DiaRutero({
   dia,
   mercaderistaId,
   tiendas,
+  hoyLima,
   compacto = false,
 }: {
   dia: DiaPlaneado;
   mercaderistaId: string;
   tiendas: Tienda[];
+  /**
+   * El día de hoy en Lima, resuelto en el SERVIDOR. Se pasa como prop en vez de
+   * calcularlo aquí porque un `new Date()` en el cliente daría un valor distinto
+   * al del render del servidor justo alrededor de medianoche, y React avisaría
+   * de un desajuste de hidratación por algo que además es del negocio, no del
+   * reloj del navegador.
+   */
+  hoyLima: string;
   /** La vista mensual muestra 31 días: ahí el detalle se abre bajo demanda. */
   compacto?: boolean;
 }) {
@@ -70,11 +90,16 @@ export function DiaRutero({
   const [aAgregar, setAAgregar] = useState("");
   const [pendiente, iniciar] = useTransition();
   const [abierto, setAbierto] = useState(!compacto);
+  const [enEdicion, setEnEdicion] = useState<string | null>(null);
   const selectorTienda = useRef<HTMLSelectElement>(null);
+  const tituloRef = useRef<HTMLHeadingElement>(null);
+  // Los botones "Editar" de cada fila, para devolverles el foco al cerrar el
+  // editor y para dárselo al vecino cuando una fila desaparece del DOM.
+  const botonesEditar = useRef(new Map<string, HTMLButtonElement | null>());
 
-  // Un rutero que ya empezó no se replanifica desde aquí: el mercaderista está
-  // en la calle con él. El servidor lo exige también — esto es solo la UX.
-  const editable = dia.estado === null || dia.estado === "borrador";
+  // Añadir una tienda sigue siendo cosa del borrador: el caso simétrico —colgar
+  // una tienda de un rutero ya publicado— no se pidió, y la base lo rechaza.
+  const sePuedeAgregar = dia.estado === null || dia.estado === "borrador";
 
   /**
    * Lanza una acción y cuenta cómo fue. El `anuncio` es la única señal de éxito
@@ -94,7 +119,34 @@ export function DiaRutero({
     });
   }
 
+  /** Cierra el editor y devuelve el foco al "Editar" de esa misma fila. */
+  function cerrarEditor(paradaId: string, anuncioAlCerrar?: string) {
+    setEnEdicion(null);
+    if (anuncioAlCerrar) setAnuncio(anuncioAlCerrar);
+    // En el siguiente frame la fila ya volvió a su forma plegada y el botón
+    // existe otra vez.
+    requestAnimationFrame(() => botonesEditar.current.get(paradaId)?.focus());
+  }
+
+  /**
+   * A dónde va el foco cuando la fila `indice` desaparece del DOM: al vecino de
+   * arriba, si no al de abajo, y si era la única al título del día. Se llama
+   * ANTES de disparar la acción — después, el elemento ya no está y el navegador
+   * habría mandado el foco a `<body>`.
+   */
+  function moverFocoTrasQuitar(indice: number) {
+    const vecino = dia.paradas[indice - 1] ?? dia.paradas[indice + 1];
+    const boton = vecino ? botonesEditar.current.get(vecino.id) : null;
+    if (boton) {
+      boton.focus();
+      return;
+    }
+    tituloRef.current?.focus();
+  }
+
   const titulo = NOMBRE_DIA.format(new Date(`${dia.fecha}T12:00:00Z`));
+  const permisoReordenar = sePuedeReordenar(dia);
+  const permisoHora = sePuedeEditarHora(dia);
 
   return (
     <section className="flex flex-col gap-2 rounded-xl border border-border bg-background p-3">
@@ -112,7 +164,16 @@ export function DiaRutero({
             </span>
           </button>
         ) : (
-          <h3 className="text-[12.5px] font-bold capitalize">{titulo}</h3>
+          // `tabIndex={-1}`: no entra en el recorrido de tabulación, pero puede
+          // recibir el foco por código cuando se quita la última parada y no
+          // queda ningún vecino al que saltar.
+          <h3
+            ref={tituloRef}
+            tabIndex={-1}
+            className="text-[12.5px] font-bold capitalize focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            {titulo}
+          </h3>
         )}
         {dia.estado ? (
           <Pastilla tono={ESTILO_ESTADO[dia.estado]}>
@@ -128,94 +189,63 @@ export function DiaRutero({
           ) : (
             <ol className="flex flex-col gap-1">
               {dia.paradas.map((p, i) => (
-                <li
+                <ParadaFila
                   key={p.id}
-                  className="flex flex-wrap items-center gap-x-1.5 gap-y-1 rounded-lg bg-muted px-2 py-1"
-                >
-                  <span className="w-4 shrink-0 text-[11px] tabular-nums text-muted-foreground">
-                    {i + 1}
-                  </span>
-                  <span className="min-w-0 flex-1 basis-[8rem] truncate text-[12px]">
-                    {p.tiendaNombre}
-                  </span>
-                  {editable ? (
-                    <HoraParada
-                      parada={p}
-                      posicion={i + 1}
-                      inactivo={pendiente}
-                      onGuardar={(hora) =>
-                        ejecutar(
-                          () => fijarHoraParada({ paradaId: p.id, hora }),
-                          hora === ""
-                            ? `${p.tiendaNombre} se queda sin hora esperada`
-                            : `${p.tiendaNombre} se espera a las ${hora}`,
-                        )
-                      }
-                    />
-                  ) : p.hora ? (
-                    <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
-                      {/* Sin esto, un lector de pantalla lee "08:30" a secas
-                          después del nombre de la tienda y no dice de qué hora
-                          habla: en pantalla lo dice la posición, que no se oye. */}
-                      <span className="sr-only">Hora esperada: </span>
-                      {p.hora}
-                    </span>
-                  ) : null}
-                  {editable ? (
-                    <span className="flex shrink-0 gap-1">
-                      <BotonOrden
-                        etiqueta={`Subir ${p.tiendaNombre}`}
-                        simbolo="↑"
-                        inactivo={pendiente || i === 0}
-                        onClick={() =>
-                          ejecutar(
-                            () =>
-                              reordenarParadas({
-                                ruteroId: dia.ruteroId,
-                                paradas: moverParada(dia.paradas, p.id, -1),
-                              }),
-                            `${p.tiendaNombre} sube a la posición ${i}`,
-                          )
-                        }
-                      />
-                      <BotonOrden
-                        etiqueta={`Bajar ${p.tiendaNombre}`}
-                        simbolo="↓"
-                        inactivo={pendiente || i === dia.paradas.length - 1}
-                        onClick={() =>
-                          ejecutar(
-                            () =>
-                              reordenarParadas({
-                                ruteroId: dia.ruteroId,
-                                paradas: moverParada(dia.paradas, p.id, 1),
-                              }),
-                            `${p.tiendaNombre} baja a la posición ${i + 2}`,
-                          )
-                        }
-                      />
-                      <BotonOrden
-                        etiqueta={`Quitar ${p.tiendaNombre}`}
-                        simbolo="×"
-                        inactivo={pendiente}
-                        onClick={() => {
-                          // La fila entera —y con ella este botón— desaparece del
-                          // DOM. Sin mover el foco a mano, el navegador lo manda a
-                          // `<body>` y quien navega con teclado pierde el sitio.
-                          selectorTienda.current?.focus();
-                          ejecutar(
-                            () => quitarParada({ paradaId: p.id }),
-                            `${p.tiendaNombre} quitada de la ruta`,
-                          );
-                        }}
-                      />
-                    </span>
-                  ) : null}
-                </li>
+                  parada={p}
+                  posicion={i + 1}
+                  esPrimera={i === 0}
+                  esUltima={i === dia.paradas.length - 1}
+                  editando={enEdicion === p.id}
+                  pendiente={pendiente}
+                  permisoQuitar={sePuedeQuitarParada(dia, p, hoyLima)}
+                  permisoReordenar={permisoReordenar}
+                  permisoHora={permisoHora}
+                  refBotonEditar={(el) => botonesEditar.current.set(p.id, el)}
+                  onEditar={() => {
+                    setEnEdicion(p.id);
+                    setAnuncio(`Editando ${p.tiendaNombre}`);
+                  }}
+                  onCerrar={() => cerrarEditor(p.id)}
+                  onCancelar={() =>
+                    cerrarEditor(p.id, `Edición de ${p.tiendaNombre} cancelada`)
+                  }
+                  onHora={(hora) =>
+                    ejecutar(
+                      () => fijarHoraParada({ paradaId: p.id, hora }),
+                      hora === ""
+                        ? `${p.tiendaNombre} se queda sin hora esperada`
+                        : `${p.tiendaNombre} se espera a las ${hora}`,
+                    )
+                  }
+                  onMover={(direccion) =>
+                    ejecutar(
+                      () =>
+                        reordenarParadas({
+                          ruteroId: dia.ruteroId,
+                          paradas: moverParada(dia.paradas, p.id, direccion),
+                        }),
+                      direccion === -1
+                        ? `${p.tiendaNombre} sube a la posición ${i}`
+                        : `${p.tiendaNombre} baja a la posición ${i + 2}`,
+                    )
+                  }
+                  onQuitar={() => {
+                    // El foco se coloca ANTES: la fila entera —y con ella este
+                    // botón— desaparece del DOM, y el navegador lo mandaría a
+                    // `<body>`.
+                    moverFocoTrasQuitar(i);
+                    setEnEdicion(null);
+                    ejecutar(
+                      () => quitarParada({ paradaId: p.id }),
+                      `${p.tiendaNombre} quitada de la ruta`,
+                    );
+                  }}
+                />
               ))}
             </ol>
           )}
 
-          {editable ? (
+          {sePuedeAgregar ? (
             // Elegir y confirmar van separados a propósito. Un `<select>` cerrado
             // emite `change` en CADA flecha del teclado, no solo al confirmar: con
             // la escritura colgada del `onChange`, recorrer la lista de tiendas
@@ -284,13 +314,192 @@ export function DiaRutero({
             </p>
           ) : null}
 
-          {/* El éxito es invisible para quien no ve la lista cambiar. */}
+          {/* El éxito es invisible para quien no ve la lista cambiar. La región
+              se monta desde el primer render y solo cambia su TEXTO: montarla
+              junto con el mensaje lo anunciaría en el mismo instante en que se
+              inserta, y algunos lectores se lo pierden. */}
           <p aria-live="polite" className="sr-only">
             {anuncio}
           </p>
         </>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * Una parada: plegada enseña su nombre, su hora y un botón "Editar"; desplegada,
+ * los controles.
+ *
+ * El botón es el MISMO en los cuatro estados del rutero. Lo que cambia es qué
+ * hay dentro y qué se puede hacer — y cuando no se puede, por qué.
+ */
+function ParadaFila({
+  parada,
+  posicion,
+  esPrimera,
+  esUltima,
+  editando,
+  pendiente,
+  permisoQuitar,
+  permisoReordenar,
+  permisoHora,
+  refBotonEditar,
+  onEditar,
+  onCerrar,
+  onCancelar,
+  onHora,
+  onMover,
+  onQuitar,
+}: {
+  parada: Parada;
+  posicion: number;
+  esPrimera: boolean;
+  esUltima: boolean;
+  editando: boolean;
+  pendiente: boolean;
+  permisoQuitar: Permiso;
+  permisoReordenar: Permiso;
+  permisoHora: Permiso;
+  refBotonEditar: (el: HTMLButtonElement | null) => void;
+  onEditar: () => void;
+  onCerrar: () => void;
+  onCancelar: () => void;
+  onHora: (hora: string) => void;
+  onMover: (direccion: -1 | 1) => void;
+  onQuitar: () => void;
+}) {
+  const primerControl = useRef<HTMLInputElement>(null);
+  const motivoQuitarId = `motivo-quitar-${parada.id}`;
+  const motivoHoraId = `motivo-hora-${parada.id}`;
+
+  // Al abrir el editor el foco entra en él. Sin esto, quien navega con teclado
+  // pulsa "Editar" y se queda donde estaba, con controles nuevos que no sabe que
+  // aparecieron.
+  useEffect(() => {
+    if (editando) primerControl.current?.focus();
+  }, [editando]);
+
+  return (
+    <li className="rounded-lg bg-muted px-2 py-1">
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+        <span className="w-4 shrink-0 text-[11px] tabular-nums text-muted-foreground">
+          {posicion}
+        </span>
+        <span className="min-w-0 flex-1 basis-[8rem] truncate text-[12px]">
+          {parada.tiendaNombre}
+        </span>
+
+        {!editando && parada.hora ? (
+          <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+            {/* Sin esto, un lector de pantalla lee "08:30" a secas después del
+                nombre de la tienda y no dice de qué hora habla: en pantalla lo
+                dice la posición, que no se oye. */}
+            <span className="sr-only">Hora esperada: </span>
+            {parada.hora}
+          </span>
+        ) : null}
+
+        {!editando ? (
+          <button
+            ref={refBotonEditar}
+            type="button"
+            onClick={onEditar}
+            aria-label={`Editar ${parada.tiendaNombre}`}
+            className="min-h-11 shrink-0 rounded-lg border border-border px-3 text-[12px] font-semibold hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            Editar
+          </button>
+        ) : null}
+      </div>
+
+      {editando ? (
+        <div className="flex flex-col gap-2 pb-1 pt-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {permisoHora.puede ? (
+              <HoraParada
+                ref={primerControl}
+                parada={parada}
+                posicion={posicion}
+                inactivo={pendiente}
+                onGuardar={onHora}
+              />
+            ) : (
+              <span className="shrink-0 text-[11px] text-muted-foreground">
+                <span className="tabular-nums">
+                  {parada.hora ?? "Sin hora esperada"}
+                </span>{" "}
+                <span id={motivoHoraId}>· {permisoHora.motivo}</span>
+              </span>
+            )}
+
+            <BotonOrden
+              etiqueta={`Subir ${parada.tiendaNombre}`}
+              simbolo="↑"
+              inactivo={pendiente || esPrimera || !permisoReordenar.puede}
+              onClick={() => onMover(-1)}
+            />
+            <BotonOrden
+              etiqueta={`Bajar ${parada.tiendaNombre}`}
+              simbolo="↓"
+              inactivo={pendiente || esUltima || !permisoReordenar.puede}
+              onClick={() => onMover(1)}
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-1.5">
+            <span className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!permisoQuitar.puede || pendiente) return;
+                  onQuitar();
+                }}
+                // `aria-disabled` y no `disabled`: el botón sigue enfocable y se
+                // anuncia como no disponible, que es la única forma de que su
+                // motivo llegue a quien navega con lector de pantalla. Con el
+                // `disabled` nativo el motivo existiría y nadie lo oiría.
+                aria-disabled={!permisoQuitar.puede || pendiente}
+                aria-label={`Eliminar ${parada.tiendaNombre} de la ruta`}
+                aria-describedby={
+                  permisoQuitar.puede ? undefined : motivoQuitarId
+                }
+                className="min-h-11 rounded-lg border border-alerta-texto px-3 text-[12px] font-semibold text-alerta-texto hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-disabled:cursor-default aria-disabled:border-border aria-disabled:text-muted-foreground aria-disabled:opacity-60 aria-disabled:hover:bg-transparent"
+              >
+                Eliminar
+              </button>
+              {/* El motivo se ESCRIBE, no se insinúa con un color: es todo el
+                  valor de este modo de edición frente a esconder el botón. */}
+              {!permisoQuitar.puede ? (
+                <span
+                  id={motivoQuitarId}
+                  className="text-[11px] text-muted-foreground"
+                >
+                  {permisoQuitar.motivo}
+                </span>
+              ) : null}
+            </span>
+
+            <span className="flex gap-1.5">
+              <button
+                type="button"
+                onClick={onCancelar}
+                className="min-h-11 rounded-lg border border-border px-3 text-[12px] hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={onCerrar}
+                className="min-h-11 rounded-lg bg-primary px-3 text-[12px] font-semibold text-primary-foreground hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                Guardar
+              </button>
+            </span>
+          </div>
+        </div>
+      ) : null}
+    </li>
   );
 }
 
@@ -304,14 +513,17 @@ export function DiaRutero({
  * de abajo separa elegir de confirmar.
  *
  * El valor se lleva en estado local para que el campo no se quede pegado al valor
- * viejo mientras la revalidación viaja.
+ * viejo mientras la revalidación viaja. Y por eso "Guardar" no tiene que hacer
+ * nada: el `blur` que provoca pulsarlo ya escribió.
  */
 function HoraParada({
+  ref,
   parada,
   posicion,
   inactivo,
   onGuardar,
 }: {
+  ref?: React.Ref<HTMLInputElement>;
   parada: Parada;
   /** Va en la etiqueta: nada impide dos paradas en la MISMA tienda el mismo día,
    *  y entonces dos campos se llamarían igual. */
@@ -327,6 +539,7 @@ function HoraParada({
         Hora esperada, parada {posicion}, {parada.tiendaNombre}
       </span>
       <input
+        ref={ref}
         type="time"
         value={valor}
         disabled={inactivo}
