@@ -505,9 +505,16 @@ categoría, tipo de tienda y periodo. Dos invariantes:
   una escalera nueva **reemplaza la anterior entera**, en una transacción.
 - **`puntaje_merchandiser`** — clave `(mercaderista_id, tipo, periodo_inicio)`,
   con los cinco porcentajes, el total, diez contadores de cobertura que explican
-  el número, el `config_id` que lo produjo y `cerrado_at`.
+  el número, el `config_id` que lo produjo y `cerrado_at`. Guarda además la
+  **posición** del ranking (`posicion`, `mercaderistas_evaluados`, `hay_empate`)
+  y una clave sustituta `id`: el móvil replica una sola fila y con una fila no se
+  puede calcular un rango, así que la posición viaja calculada. El `id` no es
+  cosmético — PowerSync identifica cada fila replicada por esa columna y la clave
+  real es compuesta; sin ella, todos los periodos de una persona colapsarían en
+  una sola fila local. La tabla lleva `replica identity using index` sobre ese
+  `id` para que los borrados del motor lleguen mapeados.
 
-Cuatro invariantes:
+Cinco invariantes:
 
 - **El puntaje guarda con qué configuración se calculó.** Cambiar los pesos no
   reescribe la historia (ADR-0011).
@@ -519,6 +526,14 @@ Cuatro invariantes:
 - **La política es del motor; el hecho, de `puntualidad_paradas`.** El motor usa
   `minutos_desvio` y aplica su propia tolerancia versionada, nunca la editable de
   `tenant.tolerancia_puntualidad_min`.
+- **`cerrado_at` congela el PUNTAJE, no la POSICIÓN.** El bono sale de un umbral
+  sobre `total_pct` (`app.nivel_bono_aplicable`), nunca de la posición, así que
+  recolocar a alguien de un periodo cerrado no mueve un sol. Y congelarla sería
+  peor: dejaría al 2.º marcado como 2.º cuando el compañero cuyo teléfono
+  sincronizó tarde ya lo pasó. La escribe un solo dueño,
+  `app.posicionar_merchandiser`, sobre el cliente y el periodo enteros; el
+  ranking del panel la LEE en vez de recalcularla, para que el panel y el
+  teléfono no puedan decir puestos distintos del mismo periodo.
 
 **El ranking del panel** — implementado (MAR-102). Lo sirve
 `public.ranking_merchandiser(tenant, tipo, inicio)`: posición por **rango de
@@ -537,6 +552,23 @@ los bonos de todos los clientes por PostgREST. El detalle parada a parada lo da
 `public.paradas_del_periodo_merchandiser`, con los puntos de
 **`app.puntaje_de_parada`** — la rampa extraída del motor, que ahora la promedia
 desde el mismo único dueño que el detalle enseña.
+
+**El puntaje en el teléfono** — implementado (MAR-103). El mercaderista ve **su**
+puntaje y **su** posición, nunca el de un compañero: fue una decisión explícita
+del cliente el 3 ago 2026, y se cumple en las **sync rules**, no en la RLS —
+PowerSync replica con un rol `BYPASSRLS`, así que un test de RLS aquí daría un
+falso verde. El stream `mercaderista` baja `puntaje_merchandiser` acotado por
+`mercaderista_id = auth.user_id()`, con **columnas explícitas**: el
+`nivel_bono_id` y los contadores de salud del pipeline de fotos NO salen del
+panel. Baja además `puntaje_perfect_store` de los levantamientos propios —de ahí
+sale el «la última vez esta tienda quedó en 78» de Mi día— y la `periodicidad` de
+la configuración, sin los pesos.
+
+La posición viaja **guardada** porque el teléfono recibe una sola fila y con una
+fila no hay rango que calcular. Ese es el motivo de que
+`app.posicionar_merchandiser` sea el único dueño del número y de que el ranking
+del panel lo lea: dos calculadoras darían «2.º» en el panel y «3.º» en el
+teléfono para el mismo periodo, y de ese número sale un bono.
 
 El **tiempo efectivo de atención** existe como columna pero llega **apagado**: su
 peso está fijado a 0 por CHECK y su porcentaje es siempre NULL. No hay fórmula

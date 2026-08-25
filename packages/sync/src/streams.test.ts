@@ -166,7 +166,11 @@ describe("streams.yaml — el plan de lealtad en el teléfono", () => {
     // El teléfono tiene UNA fila: sin estas tres columnas no puede enseñar la
     // posición, y recalcularla en el móvil es justo lo que se descartó.
     const proyeccion = proyeccionDe("puntaje_merchandiser");
-    for (const columna of ["posicion", "mercaderistas_evaluados", "hay_empate"]) {
+    for (const columna of [
+      "posicion",
+      "mercaderistas_evaluados",
+      "hay_empate",
+    ]) {
       expect(proyeccion).toContain(columna);
     }
   });

@@ -1,23 +1,10 @@
-// El calendario del negocio es el de Lima, no el de UTC.
+// Las utilidades de fecha del panel.
 //
-// `new Date().toISOString().slice(0,10)` da la fecha UTC: entre las 19:00 y
-// medianoche de Lima ya rodó al día siguiente, así que un dashboard, un rutero o
-// un KPI calculados así se saltan las últimas cinco horas de la jornada — justo
-// el turno de cierre de tienda. Toda ventana de fechas se resuelve aquí.
-//
-// Perú es UTC-5 fijo, pero se deja a `Intl` por si algún día cambia.
+// `diaEnLima` NO vive aquí: es la regla que el móvil también necesita para
+// resolver su periodo, así que su dueño es `packages/shared`. Se reexporta para
+// que los consumidores del panel sigan importándola de este módulo.
 
-const FORMATO_DIA = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "America/Lima",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
-
-/** El día de calendario en Lima, `YYYY-MM-DD`. */
-export function diaEnLima(ref: Date): string {
-  return FORMATO_DIA.format(ref);
-}
+export { diaEnLima } from "@market-track/shared";
 
 const DIA_MS = 86_400_000;
 

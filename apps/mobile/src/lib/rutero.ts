@@ -103,3 +103,88 @@ export function useParada(paradaId: string) {
   const { data, isLoading } = useQuery<ParadaDeHoy>(SQL_PARADA, [paradaId]);
   return { parada: data?.[0] ?? null, cargando: isLoading };
 }
+
+// ---------------------------------------------------------------------------
+// El historial por tienda: "la última vez esta tienda quedó en 78"
+//
+// Es lo que el cliente pidió literalmente: "Plaza Vea Higuereta, fecha de última
+// visita, puntaje de la última visita… ah, la última vez no estuvo tan bien,
+// entonces hoy voy y la dejo perfecta".
+//
+// El móvil NO calcula Perfect Store: lo calcula la base, una sola vez, por
+// levantamiento (`app.calcular_puntaje_perfect_store`), y ese sigue siendo su
+// único dueño. Lo de aquí es AGREGAR varias filas ya derivadas —una visita tiene
+// un levantamiento por marca— con el mismo `avg(total_pct)` con el que el panel
+// agrega en `public.perfect_store_agregado`. Y va respaldado por
+// `promedioPerfectStore`, su gemelo puro: la consulta la resuelve SQLite, la
+// función la resuelve en TypeScript y un test afirma que dicen lo mismo.
+// ---------------------------------------------------------------------------
+
+export type UltimaVisita = {
+  tienda_id: string;
+  /** La parada de aquella visita — sirve para descartar la de hoy. */
+  rutero_parada_id: string | null;
+  check_out_at: string;
+  /** Null cuando ningún levantamiento de esa visita llegó a puntuar. */
+  perfect_store_pct: number | null;
+};
+
+const SQL_ULTIMA_VISITA = `
+  WITH ordenadas AS (
+    SELECT v.id, v.tienda_id, v.rutero_parada_id, v.check_out_at,
+           -- Desempate por id: dos visitas con el mismo instante devolverían dos
+           -- filas por tienda con un MAX() + join por igualdad.
+           ROW_NUMBER() OVER (PARTITION BY v.tienda_id
+                              ORDER BY v.check_out_at DESC, v.id DESC) AS n
+    FROM visita v
+    WHERE v.estado = 'completada' AND v.check_out_at IS NOT NULL
+  )
+  SELECT o.tienda_id, o.rutero_parada_id, o.check_out_at,
+         -- AVG ignora los nulos, igual que en Postgres: un levantamiento sin
+         -- puntuar no arrastra la visita a cero. Si TODOS son nulos, sale nulo.
+         ROUND(AVG(p.total_pct), 2) AS perfect_store_pct
+  FROM ordenadas o
+  LEFT JOIN levantamiento l ON l.visita_id = o.id
+  -- El id de PowerSync de puntaje_perfect_store ES el levantamiento (1:1).
+  LEFT JOIN puntaje_perfect_store p ON p.id = l.id
+  WHERE o.n = 1
+  GROUP BY o.tienda_id, o.rutero_parada_id, o.check_out_at
+`;
+
+export function useUltimaVisitaPorTienda(): UltimaVisita[] {
+  const { data } = useQuery<UltimaVisita>(SQL_ULTIMA_VISITA);
+  return data ?? [];
+}
+
+/**
+ * La última visita a una tienda que NO sea la parada de hoy.
+ *
+ * El descarte no es un detalle: si el mercaderista ya hizo el check-out de hoy,
+ * "la última vez" tiene que seguir siendo la anterior. Enseñarle el puntaje que
+ * acaba de sacar como referencia de lo que va a mejorar no dice nada.
+ */
+export function ultimaVisitaAjena(
+  visitas: readonly UltimaVisita[],
+  tiendaId: string,
+  paradaDeHoyId: string,
+): UltimaVisita | null {
+  return (
+    visitas.find(
+      (v) => v.tienda_id === tiendaId && v.rutero_parada_id !== paradaDeHoyId,
+    ) ?? null
+  );
+}
+
+/**
+ * El gemelo puro del `ROUND(AVG(total_pct), 2)` de la consulta. Existe aparte
+ * para poder probar la regla sin el motor nativo — el mismo patrón que
+ * `rechazosDentroDeVentana` con su consulta.
+ */
+export function promedioPerfectStore(
+  totales: readonly (number | null)[],
+): number | null {
+  const validos = totales.filter((t): t is number => t !== null);
+  if (validos.length === 0) return null;
+  const media = validos.reduce((a, b) => a + b, 0) / validos.length;
+  return Math.round(media * 100) / 100;
+}

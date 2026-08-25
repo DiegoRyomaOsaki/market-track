@@ -248,9 +248,7 @@ describe("aislamiento de las sync rules", () => {
         filas.filter((f) => f.mercaderista_id === PUNTAJE_COMPANERO.companero),
       ).toEqual([]);
       expect(
-        filas.every(
-          (f) => f.mercaderista_id === USUARIOS.joseMaracumango.id,
-        ),
+        filas.every((f) => f.mercaderista_id === USUARIOS.joseMaracumango.id),
       ).toBe(true);
     });
   }, 90000);

@@ -1,5 +1,5 @@
-import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { Link, useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -9,6 +9,10 @@ import {
   View,
 } from "react-native";
 
+import { diaEnLima, etiquetaDePeriodo } from "@market-track/shared";
+
+import { TarjetaDesempeno } from "@/componentes/tarjeta-desempeno";
+import { fechaCorta, formatearPct, useMiDesempeno } from "@/lib/desempeno";
 import { supabase } from "@/lib/supabase";
 import { olvidarDispositivo } from "@/lib/recordar-dispositivo";
 import {
@@ -16,7 +20,10 @@ import {
   estadoVisual,
   horaEsperada,
   type ParadaDeHoy,
+  type UltimaVisita,
+  ultimaVisitaAjena,
   useRuteroDeHoy,
+  useUltimaVisitaPorTienda,
 } from "@/lib/rutero";
 import {
   etiquetaDecision,
@@ -49,6 +56,9 @@ export default function MiDia() {
   const router = useRouter();
   const { paradas, cargando, fecha } = useRuteroDeHoy();
   const rechazos = useRechazosRecientes();
+  const ultimasVisitas = useUltimaVisitaPorTienda();
+  const hoyLima = useMemo(() => diaEnLima(new Date()), []);
+  const desempeno = useMiDesempeno(hoyLima);
   const [transitoDesde, setTransitoDesde] = useState<string | null>(null);
 
   // Al volver a Mi día (p. ej. tras un check-out) se relee el cronómetro de
@@ -83,6 +93,35 @@ export default function MiDia() {
           <Text style={e.salir}>Salir</Text>
         </Pressable>
       </View>
+
+      {/* Lo primero que el cliente describió: "yo entro a mi sesión, veo mi
+          puntaje, veo mi ruta con las tiendas que tengo que visitar". Por eso
+          va en la portada y no solo detrás de un toque. */}
+      {desempeno.actual ? (
+        <Link href="/mi-desempeno" asChild>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityHint="Abre el detalle de tu puntaje"
+            style={({ pressed }) => [
+              e.enlaceDesempeno,
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <TarjetaDesempeno
+              compacta
+              etiquetaPeriodo={etiquetaDePeriodo(
+                desempeno.tipo,
+                desempeno.actual.periodo_inicio,
+              )}
+              totalPct={desempeno.actual.total_pct}
+              posicion={desempeno.actual.posicion}
+              evaluados={desempeno.actual.mercaderistas_evaluados}
+              hayEmpate={desempeno.actual.hay_empate === 1}
+              cerrado={desempeno.actual.cerrado_at !== null}
+            />
+          </Pressable>
+        </Link>
+      ) : null}
 
       {paradas.length > 0 && (
         <Text style={e.progreso}>
@@ -121,6 +160,11 @@ export default function MiDia() {
           renderItem={({ item }) => (
             <ParadaItem
               parada={item}
+              ultima={ultimaVisitaAjena(
+                ultimasVisitas,
+                item.tienda_id,
+                item.parada_id,
+              )}
               onPress={() => router.push(`/check-in/${item.parada_id}`)}
             />
           )}
@@ -181,13 +225,17 @@ function BannerTransito({ desde }: { desde: string }) {
 
 function ParadaItem({
   parada,
+  ultima,
   onPress,
 }: {
   parada: ParadaDeHoy;
+  /** La última visita a esta tienda que NO sea la de hoy. */
+  ultima: UltimaVisita | null;
   onPress: () => void;
 }) {
   const estado = estadoVisual(parada.visita_estado);
   const hora = horaEsperada(parada.hora_planificada);
+  const historial = textoHistorial(ultima);
   return (
     <Pressable
       onPress={onPress}
@@ -202,6 +250,7 @@ function ParadaItem({
         parada.revision_decision
           ? etiquetaDecision(parada.revision_decision)
           : null,
+        historial,
       ]
         .filter(Boolean)
         .join(", ")}
@@ -223,6 +272,9 @@ function ParadaItem({
             {parada.tienda_direccion}
           </Text>
         ) : null}
+        {/* "…la última vez no estuvo tan bien, entonces hoy voy y la dejo
+            perfecta". Es el motivo entero de la pantalla. */}
+        {historial ? <Text style={e.historial}>{historial}</Text> : null}
       </View>
       {parada.revision_decision ? (
         <Text
@@ -239,6 +291,21 @@ function ParadaItem({
       <Semaforo estado={estado} />
     </Pressable>
   );
+}
+
+/**
+ * "12 ago · Perfect Store 78,0" — el historial de la tienda en una línea.
+ *
+ * Nunca dice "0" cuando no hubo puntaje: un cero se lee como "la dejaste
+ * fatal" y la verdad es que no se evaluó.
+ */
+function textoHistorial(ultima: UltimaVisita | null): string | null {
+  if (ultima === null) return null;
+  const cuando = fechaCorta(ultima.check_out_at);
+  if (ultima.perfect_store_pct === null) {
+    return `Última visita: ${cuando} · sin puntaje`;
+  }
+  return `Última visita: ${cuando} · Perfect Store ${formatearPct(ultima.perfect_store_pct)}`;
 }
 
 const ETIQUETA: Record<EstadoVisual, string> = {
@@ -266,6 +333,8 @@ function Semaforo({ estado }: { estado: EstadoVisual }) {
 
 const e = StyleSheet.create({
   pantalla: { flex: 1, backgroundColor: colores.fondo },
+  enlaceDesempeno: { paddingHorizontal: espacio.m, paddingTop: espacio.s },
+  historial: { color: colores.textoSuave, fontSize: 12, marginTop: 2 },
   encabezado: {
     flexDirection: "row",
     alignItems: "flex-start",

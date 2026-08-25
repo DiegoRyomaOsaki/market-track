@@ -282,6 +282,72 @@ const foto = new Table({
   subida_at: column.text,
 });
 
+// El plan de lealtad: SOLO la fila propia (packages/sync lo acota por
+// `auth.user_id()`, y eso es lo que cumple la decisión del cliente — la RLS no
+// interviene en la bajada).
+//
+// `posicion`, `mercaderistas_evaluados` y `hay_empate` vienen CALCULADAS del
+// servidor y no se derivan aquí: con una sola fila no hay rango que calcular, y
+// recalcularlo dejaría al panel diciendo "2.º" y al teléfono "3.º".
+//
+// El `id` no se declara —es la PK implícita de PowerSync—, pero en esta tabla es
+// una columna SUSTITUTA: la clave real es `(mercaderista_id, tipo,
+// periodo_inicio)`. Sin ella, todos los periodos de una persona colapsarían en
+// una fila local y la evolución desaparecería.
+//
+// A propósito NO se declaran `nivel_bono_id` ni el monto del bono: el ticket no
+// los pide y el stream tampoco los baja.
+const puntaje_merchandiser = new Table({
+  mercaderista_id: column.text,
+  tenant_id: column.text,
+  tipo: column.text,
+  periodo_inicio: column.text,
+  total_pct: column.real,
+  puntualidad_pct: column.real,
+  asistencia_pct: column.real,
+  calidad_pct: column.real,
+  herramientas_pct: column.real,
+  posicion: column.integer,
+  mercaderistas_evaluados: column.integer,
+  // Booleano → 0/1: PowerSync no tiene tipo booleano.
+  hay_empate: column.integer,
+  paradas_evaluables: column.integer,
+  paradas_asistidas: column.integer,
+  paradas_con_hora: column.integer,
+  paradas_puntuales: column.integer,
+  campos_obligatorios: column.integer,
+  campos_respondidos: column.integer,
+  fotos_esperadas: column.integer,
+  fotos_presentes: column.integer,
+  items_checklist: column.integer,
+  items_cumplidos: column.integer,
+  calculado_at: column.text,
+  cerrado_at: column.text,
+});
+
+// El Perfect Store de SUS levantamientos: lo que deja a "Mi día" decir cómo
+// quedó la tienda la última vez. Aquí el `id` de PowerSync ES el
+// `levantamiento_id` (lo aliasa la sync rule, la relación es 1:1), así que se
+// une por `puntaje_perfect_store.id = levantamiento.id`.
+//
+// Solo lectura: la app nunca escribe esta tabla ni la anterior. El puntaje lo
+// produce el servidor, y el `grant` de la base rechazaría cualquier intento.
+const puntaje_perfect_store = new Table({
+  tenant_id: column.text,
+  levantamiento_id: column.text,
+  total_pct: column.real,
+  calculado_at: column.text,
+});
+
+// De la configuración del plan solo baja la PERIODICIDAD — los pesos son la
+// política laboral del cliente. Sin ella el móvil tendría que adivinar qué
+// `tipo` de periodo mirar, y el 1 de enero es inicio de los tres.
+const config_perfect_merchandiser = new Table({
+  tenant_id: column.text,
+  periodicidad: column.text,
+  vigente_desde: column.text,
+});
+
 export const AppSchema = new Schema({
   tienda,
   cadena,
@@ -306,4 +372,7 @@ export const AppSchema = new Schema({
   visita_respuesta,
   revision_visita,
   foto,
+  puntaje_merchandiser,
+  puntaje_perfect_store,
+  config_perfect_merchandiser,
 });

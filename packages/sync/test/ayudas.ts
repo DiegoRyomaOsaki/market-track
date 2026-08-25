@@ -435,10 +435,10 @@ export async function conPuntajeDeCompanero<T>(
       );
     }
     for (const inicio of [P.periodoAnterior, P.periodoActual]) {
-      await pg.query(
-        "select app.posicionar_merchandiser($1, 'mensual', $2)",
-        [tenant, inicio],
-      );
+      await pg.query("select app.posicionar_merchandiser($1, 'mensual', $2)", [
+        tenant,
+        inicio,
+      ]);
     }
     return await fn();
   } finally {
