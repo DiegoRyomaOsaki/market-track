@@ -1858,6 +1858,80 @@ export type Database = {
           },
         ]
       }
+      rutero_parada_retirada: {
+        Row: {
+          estado_rutero: Database["public"]["Enums"]["estado_rutero"]
+          fecha: string
+          hora_planificada: string | null
+          id: string
+          mercaderista_id: string
+          motivo: string | null
+          orden: number
+          retirada_at: string
+          retirada_por: string
+          rutero_id: string
+          tenant_id: string
+          tienda_id: string
+        }
+        Insert: {
+          estado_rutero: Database["public"]["Enums"]["estado_rutero"]
+          fecha: string
+          hora_planificada?: string | null
+          id?: string
+          mercaderista_id: string
+          motivo?: string | null
+          orden: number
+          retirada_at?: string
+          retirada_por: string
+          rutero_id: string
+          tenant_id: string
+          tienda_id: string
+        }
+        Update: {
+          estado_rutero?: Database["public"]["Enums"]["estado_rutero"]
+          fecha?: string
+          hora_planificada?: string | null
+          id?: string
+          mercaderista_id?: string
+          motivo?: string | null
+          orden?: number
+          retirada_at?: string
+          retirada_por?: string
+          rutero_id?: string
+          tenant_id?: string
+          tienda_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "retirada_tienda_fk"
+            columns: ["tienda_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tienda"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "rutero_parada_retirada_mercaderista_id_fkey"
+            columns: ["mercaderista_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rutero_parada_retirada_retirada_por_fkey"
+            columns: ["retirada_por"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rutero_parada_retirada_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sku: {
         Row: {
           activo: boolean
@@ -2576,6 +2650,7 @@ export type Database = {
           rutero_id: string
           tienda_id: string
           tienda_nombre: string
+          tiene_visita: boolean
         }[]
       }
       portal_modulos: {
@@ -2623,6 +2698,10 @@ export type Database = {
           rutero_id: string
           tienda_id: string
         }[]
+      }
+      quitar_parada_rutero: {
+        Args: { p_motivo?: string; p_parada: string }
+        Returns: undefined
       }
       ranking_merchandiser: {
         Args: {
