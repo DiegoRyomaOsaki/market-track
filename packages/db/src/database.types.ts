@@ -1434,16 +1434,20 @@ export type Database = {
           fotos_presentes: number
           fotos_subidas: number
           fotos_verificadas: number
+          hay_empate: boolean
           herramientas_pct: number | null
+          id: string
           items_checklist: number
           items_cumplidos: number
           mercaderista_id: string
+          mercaderistas_evaluados: number
           nivel_bono_id: string | null
           paradas_asistidas: number
           paradas_con_hora: number
           paradas_evaluables: number
           paradas_puntuales: number
           periodo_inicio: string
+          posicion: number | null
           puntualidad_pct: number | null
           tenant_id: string
           tiempo_efectivo_pct: number | null
@@ -1464,16 +1468,20 @@ export type Database = {
           fotos_presentes?: number
           fotos_subidas?: number
           fotos_verificadas?: number
+          hay_empate?: boolean
           herramientas_pct?: number | null
+          id?: string
           items_checklist?: number
           items_cumplidos?: number
           mercaderista_id: string
+          mercaderistas_evaluados?: number
           nivel_bono_id?: string | null
           paradas_asistidas?: number
           paradas_con_hora?: number
           paradas_evaluables?: number
           paradas_puntuales?: number
           periodo_inicio: string
+          posicion?: number | null
           puntualidad_pct?: number | null
           tenant_id: string
           tiempo_efectivo_pct?: number | null
@@ -1494,16 +1502,20 @@ export type Database = {
           fotos_presentes?: number
           fotos_subidas?: number
           fotos_verificadas?: number
+          hay_empate?: boolean
           herramientas_pct?: number | null
+          id?: string
           items_checklist?: number
           items_cumplidos?: number
           mercaderista_id?: string
+          mercaderistas_evaluados?: number
           nivel_bono_id?: string | null
           paradas_asistidas?: number
           paradas_con_hora?: number
           paradas_evaluables?: number
           paradas_puntuales?: number
           periodo_inicio?: string
+          posicion?: number | null
           puntualidad_pct?: number | null
           tenant_id?: string
           tiempo_efectivo_pct?: number | null

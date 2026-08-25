@@ -1566,3 +1566,124 @@ describe("guardarraíl: una caída de R2 no cierra el periodo", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// El recálculo RECOLOCA
+//
+// La posición no la escribe el motor —calcula una persona y la posición es del
+// conjunto—, sino su llamante, una vez por cliente tocado. Estos tests fijan esa
+// costura: si alguien mueve la llamada de sitio, aquí se nota.
+// ---------------------------------------------------------------------------
+describe("el recálculo recoloca a todo el cliente", () => {
+  async function posicionDe(
+    c: Client,
+    mercaderista: string,
+    inicio = "2026-02-01",
+  ): Promise<{ posicion: number | null; evaluados: number } | undefined> {
+    const r = await c.query<{ posicion: number | null; evaluados: number }>(
+      `select posicion, mercaderistas_evaluados as evaluados
+         from public.puntaje_merchandiser
+        where mercaderista_id = $1 and tipo = 'mensual' and periodo_inicio = $2`,
+      [mercaderista, inicio],
+    );
+    return r.rows[0];
+  }
+
+  it("recalcular a UNO recoloca igualmente a sus compañeros de cliente", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      // Un compañero con puntaje sembrado a mano y una posición imposible: si el
+      // recálculo de OTRO no recolocara el cliente, este 42 sobreviviría.
+      await c.query("set local role postgres");
+      await c.query(
+        `insert into public.puntaje_merchandiser
+           (mercaderista_id, tipo, periodo_inicio, tenant_id, config_id,
+            total_pct, posicion, mercaderistas_evaluados)
+         values ($1, 'mensual', '2026-02-01', $2, $3, 10, 42, 99)
+         on conflict (mercaderista_id, tipo, periodo_inicio) do update
+           set total_pct = 10, posicion = 42, mercaderistas_evaluados = 99`,
+        [USUARIOS.desvinculado, TENANTS.maracumango, CONFIG_SEED],
+      );
+      await c.query("set local role authenticated");
+
+      await c.query(
+        `select * from public.recalcular_puntaje_merchandiser(
+           'mensual', '2026-02-01', $1, $2)`,
+        [MERCADERISTA, TENANTS.maracumango],
+      );
+
+      const companero = await posicionDe(c, USUARIOS.desvinculado);
+      expect(companero?.posicion).not.toBe(42);
+      expect(companero?.evaluados).not.toBe(99);
+    });
+  });
+
+  it("el barrido del operador (sin cliente) recoloca CADA cliente que tocó", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await c.query(
+        `select * from public.recalcular_puntaje_merchandiser('mensual', '2026-02-01')`,
+      );
+
+      const r = await c.query<{ huerfanas: string }>(
+        `select count(*) as huerfanas from public.puntaje_merchandiser
+          where tipo = 'mensual' and periodo_inicio = '2026-02-01'
+            and total_pct is not null and posicion is null`,
+      );
+      expect(Number(r.rows[0]!.huerfanas)).toBe(0);
+    });
+  });
+
+  it("cuando el motor BORRA la fila por falta de configuración, los que quedan se recolocan", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      // Un periodo sin configuración vigente: el motor borra en vez de escribir.
+      // Antes se siembra una fila con posición para comprobar que desaparece.
+      await c.query("set local role postgres");
+      await c.query(
+        `insert into public.puntaje_merchandiser
+           (mercaderista_id, tipo, periodo_inicio, tenant_id, config_id,
+            total_pct, posicion, mercaderistas_evaluados)
+         values ($1, 'mensual', '2020-01-01', $2, $3, 50, 1, 1)`,
+        [MERCADERISTA, TENANTS.maracumango, CONFIG_SEED],
+      );
+      await c.query("set local role authenticated");
+
+      await c.query(
+        `select * from public.recalcular_puntaje_merchandiser(
+           'mensual', '2020-01-01', null, $1)`,
+        [TENANTS.maracumango],
+      );
+
+      // La configuración del seed empieza mucho después de 2020: la fila se fue.
+      expect(await posicionDe(c, MERCADERISTA, "2020-01-01")).toBeUndefined();
+    });
+  });
+
+  it("un periodo CERRADO no se recalcula, pero su posición sigue siendo coherente", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await c.query("set local role postgres");
+      await c.query(
+        `insert into public.puntaje_merchandiser
+           (mercaderista_id, tipo, periodo_inicio, tenant_id, config_id,
+            total_pct, calculado_at, cerrado_at)
+         values ($1, 'mensual', '2026-03-01', $2, $3, 77, now(), now())`,
+        [MERCADERISTA, TENANTS.maracumango, CONFIG_SEED],
+      );
+      await c.query("set local role authenticated");
+
+      await c.query(
+        `select * from public.recalcular_puntaje_merchandiser(
+           'mensual', '2026-03-01', null, $1)`,
+        [TENANTS.maracumango],
+      );
+
+      const fila = await c.query<{ total_pct: string; posicion: number }>(
+        `select total_pct, posicion from public.puntaje_merchandiser
+          where mercaderista_id = $1 and periodo_inicio = '2026-03-01'`,
+        [MERCADERISTA],
+      );
+      // El puntaje no se tocó (el guard de congelación)...
+      expect(Number(fila.rows[0]!.total_pct)).toBe(77);
+      // ...y la posición sí se escribió: es del conjunto, no del sello.
+      expect(fila.rows[0]!.posicion).toBe(1);
+    });
+  });
+});

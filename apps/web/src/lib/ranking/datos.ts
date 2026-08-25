@@ -1,6 +1,5 @@
-import type { PeriodoPuntaje } from "@market-track/shared";
+import { inicioDePeriodo, type PeriodoPuntaje } from "@market-track/shared";
 
-import { inicioDePeriodo } from "@/lib/ranking/ranking";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 // La lectura de servidor del ranking. Separada de los componentes por lo mismo

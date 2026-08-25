@@ -1,9 +1,12 @@
 import Link from "next/link";
 
 import { Aviso, Pastilla, Tarjeta, TD, TH } from "@/components/panel/tabla";
-import type { PeriodoPuntaje } from "@market-track/shared";
+import {
+  ETIQUETA_ASISTENCIA,
+  etiquetaDePeriodo,
+  type PeriodoPuntaje,
+} from "@market-track/shared";
 import { datosDeDetalle, type ParadaDetalle } from "@/lib/ranking/datos";
-import { ETIQUETA_ASISTENCIA, etiquetaDePeriodo } from "@/lib/ranking/ranking";
 
 // De dónde sale cada punto: un ranking sin explicación se discute, no se usa.
 //

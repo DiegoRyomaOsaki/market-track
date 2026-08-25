@@ -14,6 +14,13 @@ export type EstadoSync = {
   subiendo: boolean;
   bajando: boolean;
   pendientesRegistros: number;
+  /**
+   * Cuándo habló por última vez este teléfono con el servidor. `null` cuando no
+   * ha sincronizado en esta sesión — y eso incluye un arranque en frío con
+   * datos ya en disco: el SDK reinicia este sello al arrancar, así que
+   * `null` NO significa "réplica vacía". Quien lo pinte tiene que decir eso.
+   */
+  ultimaSync: Date | null;
 };
 
 export async function contarPendientes(): Promise<number> {
@@ -30,6 +37,7 @@ export function useEstadoSync(): EstadoSync {
     subiendo: false,
     bajando: false,
     pendientesRegistros: 0,
+    ultimaSync: null,
   });
 
   useEffect(() => {
@@ -52,6 +60,7 @@ export function useEstadoSync(): EstadoSync {
         subiendo: s.dataFlowStatus.uploading,
         bajando: s.dataFlowStatus.downloading,
         pendientesRegistros: pendientes,
+        ultimaSync: s.lastSyncedAt ?? null,
       });
     }
 

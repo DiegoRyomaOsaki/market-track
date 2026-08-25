@@ -25,7 +25,7 @@ import { rmSync } from "node:fs";
 
 export const SUPABASE_URL = "http://127.0.0.1:54321";
 export const POWERSYNC_URL = "http://127.0.0.1:8080";
-const PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
+export const PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 
 export const USUARIOS = {
   joseMaracumango: {
@@ -86,6 +86,23 @@ export const AppSchema = new Schema({
     levantamiento_id: column.text,
   }),
   contingencia: new Table({ tenant_id: column.text, visita_id: column.text }),
+  // El plan de lealtad. Aquí sí hacen falta más columnas que `tenant_id`: el
+  // caso a demostrar es un COMPAÑERO DEL MISMO CLIENTE, así que el tenant no
+  // distingue nada y hay que mirar `mercaderista_id`. Y `periodo_inicio` porque
+  // varias filas de la misma persona no pueden colapsar en una.
+  puntaje_merchandiser: new Table({
+    tenant_id: column.text,
+    mercaderista_id: column.text,
+    periodo_inicio: column.text,
+    total_pct: column.real,
+    posicion: column.integer,
+    mercaderistas_evaluados: column.integer,
+  }),
+  puntaje_perfect_store: new Table({
+    tenant_id: column.text,
+    levantamiento_id: column.text,
+    total_pct: column.real,
+  }),
 });
 
 function anonKey(): string {
@@ -362,6 +379,74 @@ export async function conTrabajoDeCompanero<T>(
       T.respuestaPropiaDeJose,
     ]);
     await pg.query(`delete from public.visita where id = $1`, [T.visita]);
+    await pg.end();
+  }
+}
+
+/**
+ * El puntaje del plan de lealtad de un COMPAÑERO DEL MISMO CLIENTE, más el
+ * propio de José, sembrados directo en Postgres.
+ *
+ * Las dos mitades son obligatorias. El seed NO trae ni una fila de
+ * `puntaje_merchandiser`, así que sin la propia el test pasaría en verde con la
+ * regla rota —«no bajó nada ajeno» es trivialmente cierto cuando no baja nada—;
+ * y sin la ajena no habría nada que aislar. Y el compañero es del MISMO cliente
+ * a propósito: contra otro tenant, el filtro por `tenant_id` ya bastaría y el
+ * test no probaría el acotado por usuario, que es lo que el ticket exige.
+ *
+ * Dos periodos para José: si la réplica los colapsara en una fila —el riesgo de
+ * una clave compuesta sin `id` propio—, aquí se ve.
+ */
+export const PUNTAJE_COMPANERO = {
+  companero: "55555555-5555-5555-5555-555555555555",
+  periodoAnterior: "2026-01-01",
+  periodoActual: "2026-02-01",
+} as const;
+
+export async function conPuntajeDeCompanero<T>(
+  fn: () => Promise<T>,
+): Promise<T> {
+  const tenant = USUARIOS.joseMaracumango.tenant;
+  const jose = USUARIOS.joseMaracumango.id;
+  const P = PUNTAJE_COMPANERO;
+  const pg = new Client({ connectionString: PG });
+  await pg.connect();
+  try {
+    const cfg = await pg.query<{ id: string }>(
+      "select id from public.config_perfect_merchandiser where tenant_id = $1 order by vigente_desde desc limit 1",
+      [tenant],
+    );
+    const configId = cfg.rows[0]?.id;
+    if (!configId) throw new Error("el seed no tiene config de merchandiser");
+
+    const filas: [string, string, number][] = [
+      [jose, P.periodoAnterior, 88],
+      [jose, P.periodoActual, 91.5],
+      [P.companero, P.periodoActual, 74],
+    ];
+    for (const [merc, inicio, total] of filas) {
+      await pg.query(
+        `insert into public.puntaje_merchandiser
+           (mercaderista_id, tipo, periodo_inicio, tenant_id, config_id, total_pct)
+         values ($1, 'mensual', $2, $3, $4, $5)
+         on conflict (mercaderista_id, tipo, periodo_inicio) do update
+           set total_pct = excluded.total_pct`,
+        [merc, inicio, tenant, configId, total],
+      );
+    }
+    for (const inicio of [P.periodoAnterior, P.periodoActual]) {
+      await pg.query("select app.posicionar_merchandiser($1, 'mensual', $2)", [
+        tenant,
+        inicio,
+      ]);
+    }
+    return await fn();
+  } finally {
+    await pg.query(
+      `delete from public.puntaje_merchandiser
+        where tenant_id = $1 and tipo = 'mensual' and periodo_inicio in ($2, $3)`,
+      [tenant, P.periodoAnterior, P.periodoActual],
+    );
     await pg.end();
   }
 }

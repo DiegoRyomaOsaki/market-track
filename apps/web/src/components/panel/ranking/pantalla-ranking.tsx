@@ -3,16 +3,17 @@ import Link from "next/link";
 import { botonSecundario } from "@/components/panel/estilos";
 import { Pestanas } from "@/components/panel/pestanas";
 import { Aviso } from "@/components/panel/tabla";
-import { PERIODOS_PUNTAJE, type PeriodoPuntaje } from "@market-track/shared";
-import { diaEnLima } from "@/lib/fecha-lima";
-import { tenantActivo } from "@/lib/panel/tenant-activo";
-import { datosDeRanking } from "@/lib/ranking/datos";
 import {
   esFechaISO,
   etiquetaDePeriodo,
   periodoAnterior,
   periodoSiguiente,
-} from "@/lib/ranking/ranking";
+  PERIODOS_PUNTAJE,
+  type PeriodoPuntaje,
+} from "@market-track/shared";
+import { diaEnLima } from "@/lib/fecha-lima";
+import { tenantActivo } from "@/lib/panel/tenant-activo";
+import { datosDeRanking } from "@/lib/ranking/datos";
 
 import { BotonRecalcular } from "./boton-recalcular";
 import { TablaRanking } from "./tabla-ranking";

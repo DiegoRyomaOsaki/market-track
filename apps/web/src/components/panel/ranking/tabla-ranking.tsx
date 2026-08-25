@@ -2,16 +2,17 @@ import Link from "next/link";
 
 import { enlaceTabla } from "@/components/panel/estilos";
 import { Avatar, Pastilla, Tarjeta, TD, TH } from "@/components/panel/tabla";
-import type { FilaRanking } from "@/lib/ranking/datos";
 import {
   descripcionDeltaPosicion,
   formatearDelta,
   formatearDeltaPosicion,
   textoDePosicion,
-} from "@/lib/ranking/ranking";
+} from "@market-track/shared";
+import type { FilaRanking } from "@/lib/ranking/datos";
 
 // La tabla del ranking. Sin lógica propia: posición, empates, deltas y sus
-// textos salen de `lib/ranking/ranking.ts`, que es donde se prueban.
+// textos salen de `@market-track/shared`, que es donde se prueban y de donde
+// los lee también el móvil: dos copias dirían "2.º" y "3.º" del mismo dato.
 
 function pct(valor: number | null): string {
   return valor === null ? "—" : `${valor}`;
