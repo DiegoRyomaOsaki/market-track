@@ -132,12 +132,28 @@ function entero(v: number | null): string {
   return v == null ? "—" : String(v);
 }
 
+/**
+ * El nombre visible de cada KPI, en un solo sitio.
+ *
+ * Lo leen las tarjetas del dashboard y el configurador del reporte. Vive aquí y
+ * no en `reportes.ts` porque el dueño del KPI es el dashboard; un mapa paralelo
+ * allí acabaría diciendo otra cosa el día que alguien renombre uno.
+ */
+export const ETIQUETAS_KPI = {
+  cumplimiento: "Cumplimiento de rutero",
+  quiebres: "Quiebres",
+  diferencias: "Diferencias de stock",
+  sos: "Share of Shelf",
+  exhibiciones: "Exhibiciones cumplidas",
+  precio: "Desviaciones de precio",
+} as const;
+
 /** Arma las 6 tarjetas de KPI desde la fila de `dashboard_kpis`. */
 export function armarKpis(fila: FilaKpis): Kpi[] {
   return [
     {
       clave: "cumplimiento",
-      etiqueta: "Cumplimiento de rutero",
+      etiqueta: ETIQUETAS_KPI.cumplimiento,
       valor: pct(fila.cumplimiento_pct),
       tendencia: calcularTendencia(
         fila.cumplimiento_pct,
@@ -147,28 +163,28 @@ export function armarKpis(fila: FilaKpis): Kpi[] {
     },
     {
       clave: "quiebres",
-      etiqueta: "Quiebres",
+      etiqueta: ETIQUETAS_KPI.quiebres,
       valor: entero(fila.quiebres),
       tendencia: calcularTendencia(fila.quiebres, fila.quiebres_prev),
       subirEsBueno: false,
     },
     {
       clave: "diferencias",
-      etiqueta: "Diferencias de stock",
+      etiqueta: ETIQUETAS_KPI.diferencias,
       valor: entero(fila.diferencias),
       tendencia: calcularTendencia(fila.diferencias, fila.diferencias_prev),
       subirEsBueno: false,
     },
     {
       clave: "sos",
-      etiqueta: "Share of Shelf",
+      etiqueta: ETIQUETAS_KPI.sos,
       valor: pct(fila.sos_pct),
       tendencia: calcularTendencia(fila.sos_pct, fila.sos_pct_prev),
       subirEsBueno: true,
     },
     {
       clave: "exhibiciones",
-      etiqueta: "Exhibiciones cumplidas",
+      etiqueta: ETIQUETAS_KPI.exhibiciones,
       valor:
         fila.exhib_negociadas === 0
           ? "—"
@@ -181,7 +197,7 @@ export function armarKpis(fila: FilaKpis): Kpi[] {
     },
     {
       clave: "precio",
-      etiqueta: "Desviaciones de precio",
+      etiqueta: ETIQUETAS_KPI.precio,
       valor: entero(fila.desviaciones_precio),
       tendencia: calcularTendencia(
         fila.desviaciones_precio,

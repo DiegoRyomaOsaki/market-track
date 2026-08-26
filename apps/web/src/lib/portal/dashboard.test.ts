@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { CLAVES_KPI } from "./reportes";
+
 import {
   armarKpis,
   calcularTendencia,
@@ -189,5 +191,16 @@ describe("periodoDeFiltros", () => {
     expect(periodoDeFiltros({ desde: null, hasta: null }, ref)).toEqual(
       periodoPorDefecto(ref),
     );
+  });
+});
+
+describe("el catálogo de KPI del reporte no se desincroniza del dashboard", () => {
+  it("armarKpis devuelve exactamente las claves de CLAVES_KPI, en su orden", () => {
+    // El configurador del reporte ofrece `CLAVES_KPI`. Si mañana el dashboard
+    // gana un séptimo KPI y nadie lo añade ahí, el reporte se quedaría callado
+    // con seis en vez de avisar. Este test es quien avisa.
+    const claves = armarKpis(FILA).map((k) => k.clave);
+
+    expect(claves).toEqual([...CLAVES_KPI]);
   });
 });

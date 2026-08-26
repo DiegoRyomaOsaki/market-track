@@ -11,7 +11,7 @@ export const TD = "px-4 py-3 align-middle";
 
 export function Tarjeta({ children }: { children: React.ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-border bg-background">
+    <div className="overflow-x-auto rounded-xl border border-border bg-background print:overflow-visible">
       <table className="w-full border-collapse text-[13px]">{children}</table>
     </div>
   );

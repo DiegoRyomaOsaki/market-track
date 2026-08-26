@@ -15,7 +15,7 @@ export function SidebarPortal({
   items: readonly ItemPortal[];
 }) {
   return (
-    <aside className="sticky top-0 flex h-dvh w-[248px] flex-none flex-col border-r border-border bg-background">
+    <aside className="sticky top-0 flex h-dvh w-[248px] flex-none flex-col border-r border-border bg-background print:hidden">
       <div className="flex items-center gap-2.5 border-b border-border px-5 py-4">
         <div
           aria-hidden="true"

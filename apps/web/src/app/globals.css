@@ -139,3 +139,20 @@
     font-family: var(--font-sans);
   }
 }
+
+/* La impresión del portal: el PDF del reporte se genera desde la MISMA vista
+   previa, así que lo que se ve es lo que sale. Aquí solo lo que Tailwind no
+   sabe expresar —`@page` no tiene utilidad— y el reseteo del fondo, que en
+   papel gastaría tinta sin aportar nada. Lo que se esconde al imprimir lo dicen
+   las utilidades `print:hidden` de cada pieza del cromo. */
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+
+  body {
+    background: #fff;
+    color: #000;
+  }
+}
