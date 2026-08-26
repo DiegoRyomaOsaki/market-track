@@ -74,16 +74,31 @@ export async function cerrarSesion(datos: unknown): Promise<never> {
   const { data } = await supabase.auth.getSession();
   const usuario = data.session?.user.id ?? "sin-sesion";
 
+  // El `.catch` va sobre la promesa, no solo alrededor de la carrera, y no es
+  // redundante: la perdedora de un `Promise.race` no se espera nunca. Si
+  // `signOut` acaba rechazando DESPUÉS del deadline, ese rechazo se quedaría sin
+  // manejar — y Node tumba el proceso por un unhandled rejection. Aquí se
+  // normaliza a la misma forma que devuelve el SDK, incluido el rechazo con algo
+  // que no es un `Error` (un string, un objeto suelto).
+  const cierre = supabase.auth
+    .signOut({ scope: "global" })
+    .catch((error: unknown) => ({
+      error: {
+        message: error instanceof Error ? error.message : String(error),
+      },
+    }));
+
   let degradado: string | null = null;
   try {
     const resultado = await Promise.race([
-      supabase.auth.signOut({ scope: "global" }),
+      cierre,
       new Promise<never>((_, rechazar) =>
         setTimeout(() => rechazar(new Error("timeout")), DEADLINE_MS),
       ),
     ]);
     if (resultado.error) degradado = resultado.error.message;
   } catch (error) {
+    // Ya solo llega el deadline: los fallos del SDK los absorbe el `.catch`.
     degradado = error instanceof Error ? error.message : String(error);
   }
 

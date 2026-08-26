@@ -122,3 +122,18 @@ describe("cerrarSesion", () => {
     expect(linea).not.toMatch(/token|jwt|bearer/i);
   });
 });
+
+describe("cerrarSesion — el rechazo que no es un Error", () => {
+  it("un rechazo con un valor cualquiera se registra igual y borra las cookies", async () => {
+    // Un SDK puede rechazar con un string o un objeto plano. Si esa rama
+    // reventara al construir el mensaje, el "Salir" fallaría con la sesión viva.
+    const aviso = vi.spyOn(console, "error").mockImplementation(() => {});
+    signOut.mockRejectedValue("boom");
+    cookieStore.getAll.mockReturnValue([{ name: "sb-127-auth-token" }]);
+
+    expect(await digestDe(new FormData())).toContain("/login");
+
+    expect(cookieStore.delete).toHaveBeenCalledWith("sb-127-auth-token");
+    expect(String(aviso.mock.calls[0]?.[0] ?? "")).toContain("boom");
+  });
+});

@@ -1,6 +1,8 @@
 import { cerrarSesion } from "@/lib/sesion/acciones";
 import { iniciales } from "@/lib/panel/iniciales";
 
+import { BotonSalir } from "./boton-salir";
+
 // El bloque de identidad del pie de la barra lateral, con su salida.
 //
 // Vive aquí y no en `panel/` ni en `portal/` porque el markup era EXACTAMENTE el
@@ -8,12 +10,14 @@ import { iniciales } from "@/lib/panel/iniciales";
 // única forma de implementar el botón de salir una vez en vez de dos, y de que
 // no aparezca una tercera copia que se olvide de tenerlo.
 //
-// Server Component a propósito. El `<form action={...}>` con una Server Action
-// no necesita `"use client"`: React lo hidrata solo, y sin JS hace un POST nativo
-// que responde con la redirección. Así la barra lateral sigue siendo servidor
-// entera y se esquiva de paso la trampa del empaquetado que este repo ya pisó —
-// una Server Action importada desde un componente cliente arrastra su grafo al
-// bundle, y eso solo lo ve `next build`.
+// Server Component. El `<form action={...}>` con una Server Action no necesita
+// `"use client"`: React lo hidrata solo, y sin JS hace un POST nativo que
+// responde con la redirección — el botón sigue cerrando la sesión sin JavaScript.
+//
+// La única hoja cliente es `<BotonSalir />`, y solo por el estado de envío: el
+// cierre puede tardar hasta 8 s con el Auth server lento, y una ventana muerta se
+// lee como un clic ignorado. El borde de cliente se queda en esa hoja, que es lo
+// que además mantiene la Server Action fuera del empaquetado del navegador.
 
 export function BloqueUsuario({
   nombre,
@@ -40,13 +44,11 @@ export function BloqueUsuario({
         </div>
       </div>
 
+      {/* El botón es la única hoja cliente, y solo por el estado de envío. La
+          acción la importa ESTE componente, que es servidor: si la importara la
+          hoja, arrastraría su grafo al empaquetado. */}
       <form action={cerrarSesion}>
-        <button
-          type="submit"
-          className="mt-2 min-h-11 w-full rounded-lg border border-border px-3 text-[12px] font-semibold hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        >
-          Cerrar sesión
-        </button>
+        <BotonSalir />
       </form>
     </div>
   );
