@@ -21,8 +21,7 @@ import {
   textoDeMiPosicion,
   useMiDesempeno,
 } from "@/lib/desempeno";
-import { supabase } from "@/lib/supabase";
-import { olvidarDispositivo } from "@/lib/recordar-dispositivo";
+import { cerrarSesion } from "@/lib/cierre-sesion";
 import {
   type EstadoVisual,
   estadoVisual,
@@ -40,11 +39,6 @@ import {
 } from "@/lib/revision";
 import { leerTransito } from "@/lib/transito";
 import { colores, espacio, radio } from "@/tema";
-
-async function cerrarSesion() {
-  await olvidarDispositivo();
-  await supabase.auth.signOut();
-}
 
 function fechaLarga(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
@@ -97,13 +91,17 @@ export default function MiDia() {
           <Text style={e.titulo}>Mi día</Text>
           <Text style={e.fecha}>{fechaLarga(fecha)}</Text>
         </View>
+        {/* Sin `hitSlop`: ampliaba el área tocable con superficie INVISIBLE
+            pegada al título, en la pantalla por donde más veces pasa un pulgar.
+            Ahora el área que dispara el cierre es exactamente la que se ve. */}
         <Pressable
           onPress={() => void cerrarSesion()}
           accessibilityRole="button"
-          hitSlop={8}
-          style={({ pressed }) => pressed && { opacity: 0.6 }}
+          accessibilityLabel="Salir, cerrar sesión"
+          accessibilityHint="Pide confirmación antes de salir"
+          style={({ pressed }) => [e.salir, pressed && { opacity: 0.6 }]}
         >
-          <Text style={e.salir}>Salir</Text>
+          <Text style={e.salirTexto}>Salir</Text>
         </Pressable>
       </View>
 
@@ -395,7 +393,20 @@ const e = StyleSheet.create({
     marginTop: 2,
     textTransform: "capitalize",
   },
-  salir: { color: colores.textoSuave, fontSize: 14, fontWeight: "600" },
+  salir: {
+    // 48 y no 44: es la guía de Android, que es la plataforma de campo, y este
+    // botón se pulsa de pie y con una mano.
+    minHeight: 48,
+    justifyContent: "center",
+    paddingHorizontal: espacio.s,
+    borderWidth: 1,
+    // `textoSuave` y no `borde` para el contorno: `borde` da 1,45:1 contra el
+    // fondo —invisible bajo el sol— y el sentido de este borde es justamente
+    // que se VEA dónde empieza el área que cierra la sesión. Este da 6,97:1.
+    borderColor: colores.textoSuave,
+    borderRadius: radio.m,
+  },
+  salirTexto: { color: colores.textoSuave, fontSize: 14, fontWeight: "600" },
   progreso: {
     color: colores.textoSuave,
     fontSize: 13,
