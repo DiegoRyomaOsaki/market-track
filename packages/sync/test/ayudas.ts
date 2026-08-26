@@ -19,9 +19,9 @@ import { rmSync } from "node:fs";
 // PowerSync reales como distintos usuarios y afirma qué se replica.
 //
 // Prerrequisitos (documentados, como test:db exige `supabase start`):
-//   - `supabase start`
-//   - `supabase functions serve` (el hook que entrega el OTP del 2FA)
+//   - `supabase start` — levanta también el edge-runtime con el hook del OTP
 //   - `pnpm --filter @market-track/sync sync:up`
+// El preflight de `preparacion.ts` prepara y comprueba el resto.
 
 export const SUPABASE_URL = "http://127.0.0.1:54321";
 export const POWERSYNC_URL = "http://127.0.0.1:8080";

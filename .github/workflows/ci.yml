@@ -142,10 +142,11 @@ jobs:
       # fallan `start`, `db reset` y `db:types` por igual — y no corre ni un test.
       # Va a nivel de JOB, no de paso, precisamente por eso: cualquier comando del
       # CLI que se añada aquí lo necesita, y ponerlo por paso ya se olvidó una vez.
-      # En CI el hook nunca se invoca: el `edge-runtime` está excluido en `start` y
-      # ningún test de aislamiento hace login. Por eso puede estar a la vista — no
-      # protege nada. El de verdad vive en el `.env` de cada quien y en los
-      # secretos del proyecto Supabase.
+      # En ESTE job el hook nunca se invoca: el `edge-runtime` está excluido en
+      # `start` y ningún test de aislamiento hace login. Por eso puede estar a la
+      # vista — no protege nada. (El job `sync` sí lo invoca: allí el harness hace
+      # login con 2FA real, y por eso arranca con `edge-runtime`.) El secreto de
+      # verdad vive en el `.env` de cada quien y en los secretos del proyecto.
       SEND_SMS_HOOK_SECRET: v1,whsec_cmVsbGVuby1kZS1jaS1uby1lcy11bi1zZWNyZXRvLXJlYWw=
 
     steps:
@@ -189,3 +190,71 @@ jobs:
             git --no-pager diff -- packages/db/src/database.types.ts
             exit 1
           fi
+
+  sync:
+    name: Aislamiento de la bajada (PowerSync)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # La OTRA superficie de seguridad del producto. `aislamiento` prueba lo que la
+    # RLS deja LEER; esto prueba lo que el teléfono se DESCARGA, que no pasa por la
+    # RLS en absoluto: PowerSync replica con un rol BYPASSRLS y lo que baja lo
+    # deciden solo las sync rules. Un harness que solo pruebe RLS da un falso verde
+    # para el móvil.
+    #
+    # Job aparte, y en paralelo, por tres razones: necesita `edge-runtime` (que
+    # `aislamiento` excluye a propósito), necesita Mongo y PowerSync (que aquel no),
+    # y fundirlos haría que un fallo de RLS y uno de sincronización compartieran un
+    # solo check rojo — hoy el listado distingue «ningún cliente ve los datos de
+    # otro» de «ningún teléfono se los descarga», y esa distinción vale.
+    env:
+      # Mismo relleno que el job de aislamiento, y por el mismo motivo: el CLI
+      # valida su FORMATO al leer `config.toml`, así que sin él no arranca nada.
+      SEND_SMS_HOOK_SECRET: v1,whsec_cmVsbGVuby1kZS1jaS1uby1lcy11bi1zZWNyZXRvLXJlYWw=
+      # A diferencia de `aislamiento`, aquí el hook SÍ se invoca: el harness hace
+      # login con 2FA de verdad. Sin proveedor de correo en CI, `enviar-otp`
+      # devolvería 500 y ningún test podría autenticarse. En dry-run responde 200 y
+      # deja el código en su log; el harness lo lee de `auth.mfa_challenges`, no del
+      # correo. El OTP acaba en el log del runner: son usuarios de juguete de un
+      # Supabase efímero.
+      OTP_DRY_RUN: "true"
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Levantar Supabase local
+        # CON `edge-runtime`, a diferencia del job de aislamiento: ahí está el hook
+        # que entrega el OTP, y sin él el harness no consigue una sesión aal2 — que
+        # es exactamente lo que las sync rules exigen para bajar una sola fila.
+        run: pnpm exec supabase start -x studio,realtime,storage-api,imgproxy,logflare,vector,supavisor
+
+      - name: Aplicar migraciones y seed
+        run: pnpm exec supabase db reset
+
+      - name: Levantar PowerSync
+        # El rol de replicación y la publicación los deja el preflight del harness,
+        # que es quien sabe repararlos — y hace falta DESPUÉS de cada `db reset`,
+        # porque el reset se lleva la publicación por delante.
+        run: pnpm --filter @market-track/sync sync:up
+
+      - name: Harness de aislamiento de la bajada
+        # `supabase status -o env` exporta ANON_KEY con ese nombre exacto: la clave
+        # sale del proyecto efímero, no de un valor pegado a mano que se desincroniza.
+        run: |
+          eval "$(pnpm exec supabase status -o env)"
+          ANON_KEY="$ANON_KEY" pnpm turbo run test:sync --cache-dir=.turbo
+
+      - name: Logs de PowerSync si algo falló
+        # Sin esto, un fallo de replicación llega a GitHub como «bajaron 0 filas» y
+        # no hay forma de saber por qué desde aquí.
+        if: failure()
+        run: docker compose -f packages/sync/config/docker-compose.yaml logs --tail=200
