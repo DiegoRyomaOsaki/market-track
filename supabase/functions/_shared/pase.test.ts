@@ -4,11 +4,14 @@
 import { assert, assertEquals, assertMatch } from "jsr:@std/assert@1";
 
 import {
+  contarPasesDeLaVentana,
   generarCodigo,
   hashCodigo,
+  LIMITE_DIARIO,
   paseQueCoincide,
   type PerfilAutz,
   puedeEmitirPase,
+  VENTANA_MS,
 } from "./pase.ts";
 
 const admin: PerfilAutz = { id: "admin-1", rol: "admin", supervisor_id: null };
@@ -154,3 +157,111 @@ Deno.test(
     );
   },
 );
+
+// --- La cota antiabuso --------------------------------------------------------
+//
+// El doble guarda FILAS y APLICA los filtros, en vez de devolver un número fijo.
+// No es ceremonia: el fallo que estos tests fijan era que la consulta filtraba
+// por `revocado_at is null`, y un doble que ignorase los filtros daría el mismo
+// verde con la consulta correcta y con la rota.
+
+type FilaPase = {
+  profile_id: string;
+  generado_at: string;
+  revocado_at: string | null;
+};
+
+function clienteConPases(filas: FilaPase[]) {
+  const filtros: ((f: FilaPase) => boolean)[] = [];
+  const consulta = {
+    eq: (columna: string, valor: string) => {
+      filtros.push((f) => f[columna as keyof FilaPase] === valor);
+      return consulta;
+    },
+    is: (columna: string, valor: null) => {
+      filtros.push((f) => f[columna as keyof FilaPase] === valor);
+      return consulta;
+    },
+    gte: (columna: string, valor: string) => {
+      filtros.push((f) => String(f[columna as keyof FilaPase]) >= valor);
+      return consulta;
+    },
+    abortSignal: (_senal: AbortSignal) =>
+      Promise.resolve({
+        count: filas.filter((f) => filtros.every((pasa) => pasa(f))).length,
+        error: null,
+      }),
+  };
+  return {
+    from: () => ({ select: () => consulta }),
+  };
+}
+
+const AYER = new Date(Date.now() - VENTANA_MS).toISOString();
+const HACE_UNA_HORA = new Date(Date.now() - 3_600_000).toISOString();
+const HACE_DOS_DIAS = new Date(Date.now() - 2 * VENTANA_MS).toISOString();
+
+function pase(over: Partial<FilaPase> = {}): FilaPase {
+  return {
+    profile_id: "merc-1",
+    generado_at: HACE_UNA_HORA,
+    revocado_at: null,
+    ...over,
+  };
+}
+
+Deno.test("revocar un pase NO libera cupo del tope diario", async () => {
+  // El criterio del ticket. Se emitieron tres —el tope— y se revocó uno: el
+  // cuarto no cabe. Contar solo los vivos convertía el límite en orientativo:
+  // emites tres, revocas dos y emites dos más.
+  const filas = [pase(), pase(), pase({ revocado_at: HACE_UNA_HORA })];
+
+  const { count } = await contarPasesDeLaVentana(
+    clienteConPases(filas),
+    "merc-1",
+    AYER,
+    AbortSignal.timeout(1_000),
+  );
+
+  assertEquals(count, 3);
+  assert((count ?? 0) >= LIMITE_DIARIO, "el tope tiene que seguir alcanzado");
+});
+
+Deno.test("el tope es por usuario, no global", async () => {
+  const filas = [pase(), pase(), pase({ profile_id: "merc-2" })];
+
+  const { count } = await contarPasesDeLaVentana(
+    clienteConPases(filas),
+    "merc-1",
+    AYER,
+    AbortSignal.timeout(1_000),
+  );
+
+  assertEquals(count, 2);
+});
+
+Deno.test("los pases de fuera de la ventana no cuentan", async () => {
+  // Sin esta cota, el tope sería para siempre en vez de diario.
+  const filas = [pase(), pase({ generado_at: HACE_DOS_DIAS })];
+
+  const { count } = await contarPasesDeLaVentana(
+    clienteConPases(filas),
+    "merc-1",
+    AYER,
+    AbortSignal.timeout(1_000),
+  );
+
+  assertEquals(count, 1);
+});
+
+Deno.test("sin pases previos el cupo está libre", async () => {
+  const { count } = await contarPasesDeLaVentana(
+    clienteConPases([]),
+    "merc-1",
+    AYER,
+    AbortSignal.timeout(1_000),
+  );
+
+  assertEquals(count, 0);
+  assert((count ?? 0) < LIMITE_DIARIO);
+});
