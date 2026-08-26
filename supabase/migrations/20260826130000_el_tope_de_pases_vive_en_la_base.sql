@@ -31,6 +31,21 @@ declare
   c_ventana constant interval := interval '24 hours';
   v_emitidos integer;
 begin
+  -- Un pase "generado" en el futuro no existe todavía, y aceptarlo dejaría
+  -- RESERVAR bloqueos con fecha: como la ventana se mide contra la propia fila,
+  -- una fila futura no gasta cupo hoy —así que entra sin levantar sospecha— pero
+  -- lo gastará cuando el reloj llegue. Un bloqueo programado e invisible hasta
+  -- que cae. Antedatar sí se permite: lo necesitan el seed y los tests, y una
+  -- fila vieja no le quita el cupo a nadie.
+  --
+  -- `check_violation` y no el código del tope: esto no es "te pasaste del
+  -- límite", es una fila mal formada, y la función tiene que traducirlo a 500 y
+  -- no a 429.
+  if new.generado_at > pg_catalog.now() then
+    raise exception 'un pase no se puede fechar en el futuro'
+      using errcode = 'check_violation';
+  end if;
+
   -- Serializa por usuario OBJETIVO. Sin esto, dos inserciones simultáneas leen
   -- las dos "hay cupo" y entran las dos: contar y luego insertar no es atómico
   -- ni dentro de un trigger. El candado es de transacción, así que se suelta

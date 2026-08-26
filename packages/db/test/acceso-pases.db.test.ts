@@ -1019,6 +1019,25 @@ describe("el tope de pases lo impone la BASE, no la Edge Function", () => {
     });
   });
 
+  it("un pase fechado en el FUTURO se rechaza", async () => {
+    // Como la ventana se mide contra la propia fila, una fila futura no gasta
+    // cupo hoy —entra sin levantar sospecha— pero lo gastará cuando el reloj
+    // llegue: un bloqueo programado e invisible hasta que cae. Antedatar sí se
+    // permite, y el test de arriba lo comprueba.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      expect(
+        await alIntentar(
+          c,
+          `insert into public.pase_acceso_temporal
+             (profile_id, codigo_hash, motivo, generado_por, generado_at, expira_at)
+           values ($1, $2, $3, $4, now() + interval '12 hours',
+                   now() + interval '12 hours' + interval '10 minutes')`,
+          [JOSE, "fut", "reservado para luego", USUARIOS.admin],
+        ),
+      ).toMatch(/no se puede fechar en el futuro/i);
+    });
+  });
+
   it("dos emisiones simultáneas no pueden pasar AMBAS del tope", async () => {
     // La carrera que el trigger cierra con su candado de transacción: contar y
     // luego insertar no es atómico, así que sin él las dos leerían "hay cupo".
