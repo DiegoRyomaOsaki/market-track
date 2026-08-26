@@ -22,7 +22,6 @@ import {
   useMiDesempeno,
 } from "@/lib/desempeno";
 import { cerrarSesion } from "@/lib/cierre-sesion";
-import { useEstadoSync } from "@/lib/powersync/estado";
 import {
   type EstadoVisual,
   estadoVisual,
@@ -65,11 +64,6 @@ export default function MiDia() {
     // de servicio del mercaderista.
     useMemo(() => paradas.map((p) => p.tienda_id), [paradas]),
   );
-  // Solo `conectado`: ese SÍ es fiable aquí porque `statusChanged` se emite al
-  // conectar y desconectar. Los CONTEOS no se leen del hook — se leen frescos
-  // dentro de `cerrarSesion`, porque ese evento no se emite al escribir en
-  // local y un mercaderista sin señal acumularía trabajo sin que el hook lo vea.
-  const { conectado } = useEstadoSync();
   const hoyLima = useMemo(() => diaEnLima(new Date()), []);
   const desempeno = useMiDesempeno(hoyLima);
   const [transitoDesde, setTransitoDesde] = useState<string | null>(null);
@@ -101,9 +95,9 @@ export default function MiDia() {
             pegada al título, en la pantalla por donde más veces pasa un pulgar.
             Ahora el área que dispara el cierre es exactamente la que se ve. */}
         <Pressable
-          onPress={() => void cerrarSesion(undefined, conectado)}
+          onPress={() => void cerrarSesion()}
           accessibilityRole="button"
-          accessibilityLabel="Cerrar sesión"
+          accessibilityLabel="Salir, cerrar sesión"
           accessibilityHint="Pide confirmación antes de salir"
           style={({ pressed }) => [e.salir, pressed && { opacity: 0.6 }]}
         >
@@ -400,11 +394,16 @@ const e = StyleSheet.create({
     textTransform: "capitalize",
   },
   salir: {
-    minHeight: 44,
+    // 48 y no 44: es la guía de Android, que es la plataforma de campo, y este
+    // botón se pulsa de pie y con una mano.
+    minHeight: 48,
     justifyContent: "center",
     paddingHorizontal: espacio.s,
     borderWidth: 1,
-    borderColor: colores.borde,
+    // `textoSuave` y no `borde` para el contorno: `borde` da 1,45:1 contra el
+    // fondo —invisible bajo el sol— y el sentido de este borde es justamente
+    // que se VEA dónde empieza el área que cierra la sesión. Este da 6,97:1.
+    borderColor: colores.textoSuave,
     borderRadius: radio.m,
   },
   salirTexto: { color: colores.textoSuave, fontSize: 14, fontWeight: "600" },

@@ -212,3 +212,46 @@ describe("cerrarSesion", () => {
     expect(io.vistos).toHaveLength(2);
   });
 });
+
+describe("cerrarSesion — los fallos que dejarían al usuario sin respuesta", () => {
+  it("si signOut se cuelga, corta al deadline en vez de dejar el botón muerto", async () => {
+    // El SDK no admite `AbortSignal` en `signOut` y su default de red pasa de
+    // los 30 s. Sin techo, el mercaderista se queda mirando un botón que no
+    // responde justo cuando quiere irse.
+    jest.useFakeTimers();
+    mockSignOut.mockReturnValue(new Promise(() => {}));
+    mockGetSession.mockResolvedValue({ data: { session: { user: {} } } });
+    const io = dialogos(true);
+
+    const enCurso = cerrarSesion(io);
+    await jest.advanceTimersByTimeAsync(8_000);
+
+    expect(await enCurso).toBe("reinicio_pendiente");
+    expect(io.avisos).toHaveLength(1);
+    jest.useRealTimers();
+  });
+
+  it("si no se puede comprobar la sesión, asume lo peor y lo dice", async () => {
+    // Sin capturarlo, el rechazo se lo tragaría el `void` del `onPress` y el
+    // mercaderista se quedaría sin saber si salió.
+    mockGetSession.mockRejectedValue(new Error("red"));
+    const io = dialogos(true);
+
+    expect(await cerrarSesion(io)).toBe("reinicio_pendiente");
+    expect(io.avisos[0]?.cuerpo).toContain("vuelve a abrirla");
+  });
+
+  it("si el diálogo mismo falla, el botón no se queda bloqueado", async () => {
+    // El guardarraíl de reentrada se libera en `finally`: sin eso, un fallo del
+    // diálogo dejaría "Salir" muerto durante el resto de la sesión.
+    const roto: DialogosDeSalida = {
+      confirmar: () => Promise.reject(new Error("boom")),
+      avisar: () => {},
+    };
+    await expect(cerrarSesion(roto)).rejects.toThrow("boom");
+
+    const io = dialogos(false);
+    expect(await cerrarSesion(io)).toBe("cancelada");
+    expect(io.vistos).toHaveLength(1);
+  });
+});

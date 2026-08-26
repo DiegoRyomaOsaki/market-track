@@ -1,4 +1,4 @@
-import { Alert } from "react-native";
+import { Alert, AppState } from "react-native";
 
 import { colaFotos } from "./cola-fotos-instancia";
 import { mensajeDeError } from "./error";
@@ -27,6 +27,29 @@ import { supabase } from "./supabase";
 
 /** Cuánto se espera a que el servidor confirme el cierre antes de seguir. */
 const DEADLINE_MS = 8_000;
+
+/**
+ * Corre `tarea` con un techo de tiempo y devuelve `null` si vence.
+ *
+ * El SDK de auth no admite un `AbortSignal`, y su default de red pasa de los
+ * 30 s: sin este techo, un servidor colgado deja al mercaderista mirando un
+ * botón que no responde justo cuando quiere irse.
+ */
+async function conPlazo<T>(tarea: Promise<T>): Promise<T | null> {
+  let temporizador: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      tarea,
+      new Promise<null>((resolver) => {
+        temporizador = setTimeout(() => resolver(null), DEADLINE_MS);
+      }),
+    ]);
+  } finally {
+    // Sin esto el temporizador sigue vivo los 8 s aunque la tarea haya ido
+    // bien: en un teléfono es un despertador de más por cada salida.
+    if (temporizador !== undefined) clearTimeout(temporizador);
+  }
+}
 
 export type ConteoDeSalida = {
   /** `null` = no se pudo contar. NUNCA 0: son cosas distintas. */
@@ -140,6 +163,28 @@ export async function leerConteoDeSalida(): Promise<ConteoDeSalida> {
 export const dialogosAlert: DialogosDeSalida = {
   confirmar: ({ titulo, cuerpo }) =>
     new Promise<boolean>((resolver) => {
+      // Cada camino de salida tiene que resolver EXACTAMENTE una vez: si el
+      // diálogo se cierra sin resolver, la promesa se cuelga, el `finally` de
+      // `cerrarSesion` no corre y el guardarraíl de reentrada deja "Salir"
+      // muerto hasta que se mate la app.
+      let resuelto = false;
+      const salir = (valor: boolean) => {
+        if (resuelto) return;
+        resuelto = true;
+        suscripcion.remove();
+        resolver(valor);
+      };
+
+      // La red de seguridad de iOS. `cancelable`/`onDismiss` son SOLO Android
+      // (verificado en los tipos de `react-native`), así que allí un descarte
+      // del sistema —una llamada entrante, la app al segundo plano— no invoca
+      // ningún `onPress` y no hay nada que resuelva. Si la app deja de estar en
+      // primer plano con el diálogo abierto, se cuenta como cancelar: es lo
+      // seguro, porque no cierra sesión sin que nadie lo haya confirmado.
+      const suscripcion = AppState.addEventListener("change", (estado) => {
+        if (estado !== "active") salir(false);
+      });
+
       Alert.alert(
         titulo,
         cuerpo,
@@ -147,21 +192,22 @@ export const dialogosAlert: DialogosDeSalida = {
           {
             text: "Seguir trabajando",
             style: "cancel",
-            onPress: () => resolver(false),
+            onPress: () => salir(false),
           },
           {
+            // `destructive` solo pinta en iOS; en Android los dos botones se ven
+            // igual y lo que distingue la acción es el texto. Por eso el texto
+            // dice qué pasa, no "Aceptar".
             text: "Cerrar sesión",
             style: "destructive",
-            onPress: () => resolver(true),
+            onPress: () => salir(true),
           },
         ],
         {
           // En Android el diálogo se cierra tocando fuera o con el botón atrás
-          // SIN invocar ningún `onPress`. Sin esto la promesa no se resolvería
-          // nunca y "Salir" dejaría de funcionar para siempre — el guardarraíl
-          // de reentrada de abajo se quedaría echado.
+          // SIN invocar ningún `onPress`.
           cancelable: true,
-          onDismiss: () => resolver(false),
+          onDismiss: () => salir(false),
         },
       );
     }),
@@ -215,37 +261,35 @@ export async function cerrarSesion(
       );
     }
 
-    // El `.catch` va sobre la promesa y no solo alrededor de la carrera: la
+    // El `.catch` va sobre la promesa y no solo alrededor del plazo: la
     // perdedora de un `Promise.race` no se espera nunca, así que un rechazo
     // tardío de `signOut` quedaría sin manejar.
-    const cierre = supabase.auth.signOut().catch((e: unknown) => {
-      console.error(`[salir] signOut: ${mensajeDeError(e)}`);
-    });
-
-    let temporizador: ReturnType<typeof setTimeout> | undefined;
-    try {
-      await Promise.race([
-        cierre,
-        new Promise<never>((_, rechazar) => {
-          temporizador = setTimeout(
-            () => rechazar(new Error("timeout")),
-            DEADLINE_MS,
-          );
-        }),
-      ]);
-    } catch (e) {
-      console.error(`[salir] signOut: ${mensajeDeError(e)}`);
-    } finally {
-      // Sin esto el temporizador sigue vivo los 8 s aunque el cierre haya ido
-      // bien: en un teléfono es un despertador de más por cada salida.
-      if (temporizador !== undefined) clearTimeout(temporizador);
-    }
+    await conPlazo(
+      supabase.auth.signOut().catch((e: unknown) => {
+        console.error(`[salir] signOut: ${mensajeDeError(e)}`);
+      }),
+    );
 
     // Se comprueba el resultado, no se supone: auth-js borra la sesión local
     // incluso cuando la llamada de red falla, así que un error no significa que
     // el usuario siga dentro.
-    const { data } = await supabase.auth.getSession();
-    if (data.session === null) return "cerrada";
+    //
+    // Y si la comprobación misma falla, se asume lo peor. Sin este `catch` la
+    // función rechazaría, el `void` del `onPress` se tragaría el rechazo y el
+    // mercaderista se quedaría mirando la pantalla sin saber si salió: la peor
+    // de las respuestas posibles justo aquí.
+    // Con plazo también: `getSession` puede disparar un refresh de token con
+    // red, y era el único punto del flujo que quedaba sin techo.
+    let sesionViva = true;
+    try {
+      const r = await conPlazo(supabase.auth.getSession());
+      sesionViva = r === null || r.data.session !== null;
+    } catch (e) {
+      console.error(
+        `[salir] no se pudo comprobar la sesión: ${mensajeDeError(e)}`,
+      );
+    }
+    if (!sesionViva) return "cerrada";
 
     io.avisar({
       titulo: "No se pudo cerrar del todo",
