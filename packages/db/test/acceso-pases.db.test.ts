@@ -1019,6 +1019,33 @@ describe("el tope de pases lo impone la BASE, no la Edge Function", () => {
     });
   });
 
+  it("con el cupo de HOY lleno, una fila antedatada entra igual", async () => {
+    // Este es el caso que fija la decisión de medir la ventana contra la PROPIA
+    // fila y no contra `now()`. El test de arriba no la fijaba: sus filas viejas
+    // caen fuera de la ventana se mida como se mida. Aquí el cupo de hoy está
+    // LLENO, así que con `now()` la antedatada se rechazaría — y no debe:
+    // su ventana está vacía y no le quita el cupo a nadie.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      for (let i = 1; i <= 3; i++) {
+        await c.query(EMITIR, [
+          JOSE,
+          `w${i}`,
+          "llena el cupo de hoy",
+          USUARIOS.admin,
+        ]);
+      }
+
+      const r = await c.query(
+        `insert into public.pase_acceso_temporal
+           (profile_id, codigo_hash, motivo, generado_por, generado_at, expira_at)
+         values ($1, $2, $3, $4, now() - interval '48 hours',
+                 now() - interval '48 hours' + interval '10 minutes')`,
+        [JOSE, "wv", "de hace dos días", USUARIOS.admin],
+      );
+      expect(r.rowCount).toBe(1);
+    });
+  });
+
   it("un pase fechado en el FUTURO se rechaza", async () => {
     // Como la ventana se mide contra la propia fila, una fila futura no gasta
     // cupo hoy —entra sin levantar sospecha— pero lo gastará cuando el reloj

@@ -24,9 +24,9 @@ import {
   json,
 } from "../_shared/supabase.ts";
 import {
+  falloAlEmitir,
   generarCodigo,
   hashCodigo,
-  SQLSTATE_TOPE_ALCANZADO,
   puedeEmitirPase,
 } from "../_shared/pase.ts";
 
@@ -115,16 +115,15 @@ Deno.serve(async (req) => {
     //
     // Por el CÓDIGO y no por el texto del mensaje: un mensaje es copy y cambia;
     // el SQLSTATE es el contrato.
-    if (errInsert?.code === SQLSTATE_TOPE_ALCANZADO) {
-      return json(429, {
-        error: "límite diario de pases alcanzado para este usuario",
-      });
-    }
-    // Lo demás sí es infraestructura: existencia, rol y forma ya se validaron.
-    return json(500, {
-      error: "no se pudo emitir el pase",
-      // Recortado: los mensajes de infra pueden arrastrar contenido de más.
-      detalle: errInsert?.message.slice(0, 200),
+    const fallo = falloAlEmitir(errInsert?.code);
+    return json(fallo.estado, {
+      error: fallo.error,
+      // El detalle solo acompaña al 500: en el 429 la causa ya la dice el
+      // mensaje, y adjuntar el error de infraestructura no le aporta nada a
+      // quien llama. Recortado, porque puede arrastrar contenido de más.
+      ...(fallo.estado === 500
+        ? { detalle: errInsert?.message.slice(0, 200) }
+        : {}),
     });
   }
 
