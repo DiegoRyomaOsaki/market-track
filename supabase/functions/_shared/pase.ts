@@ -147,54 +147,15 @@ export function paseQueCoincide(
 
 // --- Cota antiabuso -----------------------------------------------------------
 
-/** Cuántos pases se pueden emitir a un mismo usuario dentro de la ventana. */
-export const LIMITE_DIARIO = 3;
-
-/** La ventana del tope: 24 h. */
-export const VENTANA_MS = 24 * 60 * 60 * 1000;
-
-/** Lo mínimo del cliente de Supabase que necesita el conteo. Se declara aquí
- *  para poder doblarlo en los tests con un cliente que aplique los filtros de
- *  verdad: uno que los ignorase daría verde con la consulta correcta y con la
- *  rota. */
-type ConsultaFiltrable = {
-  eq(columna: string, valor: string): ConsultaFiltrable;
-  is(columna: string, valor: null): ConsultaFiltrable;
-  gte(columna: string, valor: string): ConsultaFiltrable;
-  abortSignal(
-    senal: AbortSignal,
-  ): PromiseLike<{ count: number | null; error: unknown }>;
-};
-
-export type ClienteDeConteo = {
-  from(tabla: string): {
-    select(
-      columnas: string,
-      opciones: { count: "exact"; head: true },
-    ): ConsultaFiltrable;
-  };
-};
-
 /**
- * Cuántos pases se han GENERADO para este usuario dentro de la ventana.
+ * El SQLSTATE con el que la base rechaza una emisión por encima del tope.
  *
- * Cuenta TODOS, revocados incluidos. No filtrar por `revocado_at` es la decisión
- * del control, no un olvido: contar solo los vivos convertía el tope en
- * orientativo desde que el panel estrena el botón de revocar — se emiten tres,
- * se revocan dos y se emiten dos más. Un límite que se puede reiniciar no es un
- * límite, y cada emisión ya queda auditada con su motivo y su emisor, así que
- * revocar no puede además borrar el rastro del cupo consumido.
+ * El tope y su ventana viven en el trigger `pase_tope_por_ventana`, no aquí: si
+ * los contara también esta función, serían dos definiciones del mismo número —y
+ * la que se salta el rodeo por PostgREST es la de la base. Lo único que queda de
+ * este lado es traducir el rechazo al 429 que el cliente espera.
+ *
+ * Se compara por CÓDIGO y no por el texto del mensaje: el mensaje es copy y
+ * cambia; el SQLSTATE es el contrato.
  */
-export function contarPasesDeLaVentana(
-  servicio: ClienteDeConteo,
-  profileId: string,
-  desdeIso: string,
-  senal: AbortSignal,
-): PromiseLike<{ count: number | null; error: unknown }> {
-  return servicio
-    .from("pase_acceso_temporal")
-    .select("id", { count: "exact", head: true })
-    .eq("profile_id", profileId)
-    .gte("generado_at", desdeIso)
-    .abortSignal(senal);
-}
+export const SQLSTATE_TOPE_ALCANZADO = "53400";

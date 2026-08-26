@@ -902,3 +902,154 @@ describe("custom_access_token_hook — la única autoridad de aal fuera del OTP"
     });
   });
 });
+
+describe("el tope de pases lo impone la BASE, no la Edge Function", () => {
+  // Hasta MAR-131 el tope solo lo contaba `emitir-pase`, y por debajo
+  // `authenticated` tiene grant de `insert` con políticas de emisión: quien podía
+  // emitir podía saltárselo insertando directo por PostgREST. Estos casos entran
+  // por la RLS, como lo haría PostgREST — que es el único camino que prueba la
+  // verja de verdad.
+
+  const EMITIR = `insert into public.pase_acceso_temporal
+       (profile_id, codigo_hash, motivo, generado_por)
+     values ($1, $2, $3, $4)`;
+
+  async function limpiar(motivo: string): Promise<void> {
+    await db.query(
+      "delete from public.pase_acceso_temporal where profile_id = $1 and motivo = $2",
+      [JOSE, motivo],
+    );
+  }
+
+  it("un insert directo por encima del tope lo rechaza la base", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      for (let i = 1; i <= 3; i++) {
+        await c.query(EMITIR, [
+          JOSE,
+          `h${i}`,
+          "dentro del tope",
+          USUARIOS.admin,
+        ]);
+      }
+
+      expect(
+        await alIntentar(c, EMITIR, [
+          JOSE,
+          "h4",
+          "el que sobra",
+          USUARIOS.admin,
+        ]),
+      ).toMatch(/límite diario/i);
+    });
+  });
+
+  it("revocar NO libera cupo", async () => {
+    // La garantía de MAR-111, ahora probada donde se impone. Contar solo los
+    // vivos volvía el tope reiniciable: se emiten tres, se revocan dos y se
+    // emiten dos más.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const ids: string[] = [];
+      for (let i = 1; i <= 3; i++) {
+        const r = await c.query<{ id: string }>(`${EMITIR} returning id`, [
+          JOSE,
+          `r${i}`,
+          "para revocar",
+          USUARIOS.admin,
+        ]);
+        ids.push(r.rows[0]!.id);
+      }
+      // Por `id` y no por `codigo_hash`: esa columna no tiene grant de lectura a
+      // propósito —el código del pase no sale de la base ni en un `where`—, y
+      // filtrar por ella muere con un `permission denied` que parece de RLS.
+      await c.query(
+        "update public.pase_acceso_temporal set revocado_at = now() where id = $1",
+        [ids[0]],
+      );
+
+      expect(
+        await alIntentar(c, EMITIR, [
+          JOSE,
+          "r4",
+          "tras revocar",
+          USUARIOS.admin,
+        ]),
+      ).toMatch(/límite diario/i);
+    });
+  });
+
+  it("los pases de fuera de la ventana no ocupan cupo", async () => {
+    // Sin esta cota el tope sería para siempre en vez de diario.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      for (let i = 1; i <= 3; i++) {
+        await c.query(
+          `insert into public.pase_acceso_temporal
+             (profile_id, codigo_hash, motivo, generado_por, generado_at, expira_at)
+           -- expira_at va explicito: su default es ahora + 15 min, y con el
+           -- generado_at antedatado el CHECK de los 15 minutos salta.
+           values ($1, $2, 'antiguo', $3, now() - interval '25 hours',
+                   now() - interval '25 hours' + interval '15 minutes')`,
+          [JOSE, `v${i}`, USUARIOS.admin],
+        );
+      }
+
+      const r = await c.query(EMITIR, [
+        JOSE,
+        "v4",
+        "hoy sí cabe",
+        USUARIOS.admin,
+      ]);
+      expect(r.rowCount).toBe(1);
+    });
+  });
+
+  it("el tope es por usuario objetivo, no global", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      for (let i = 1; i <= 3; i++) {
+        await c.query(EMITIR, [JOSE, `u${i}`, "de josé", USUARIOS.admin]);
+      }
+
+      // Otro mercaderista del mismo tenant conserva su cupo entero.
+      const r = await c.query(EMITIR, [
+        USUARIOS.desvinculado,
+        "u4",
+        "de otro",
+        USUARIOS.admin,
+      ]);
+      expect(r.rowCount).toBe(1);
+    });
+  });
+
+  it("dos emisiones simultáneas no pueden pasar AMBAS del tope", async () => {
+    // La carrera que el trigger cierra con su candado de transacción: contar y
+    // luego insertar no es atómico, así que sin él las dos leerían "hay cupo".
+    // Hacen falta dos conexiones de verdad — con una sola no hay concurrencia
+    // que probar.
+    const a = await conectar();
+    const b = await conectar();
+    try {
+      // Deja sitio para exactamente UNA más.
+      for (let i = 1; i <= 2; i++) {
+        await db.query(EMITIR, [JOSE, `c${i}`, "carrera", USUARIOS.admin]);
+      }
+
+      await a.query("begin");
+      await b.query("begin");
+
+      // A entra primero y se queda con el candado sin soltarlo (sigue abierta).
+      await a.query(EMITIR, [JOSE, "cA", "carrera", USUARIOS.admin]);
+
+      // B se queda esperando en el candado: la promesa NO se resuelve todavía.
+      const enEspera = b.query(EMITIR, [JOSE, "cB", "carrera", USUARIOS.admin]);
+
+      await a.query("commit");
+
+      // Al soltarse el candado, B cuenta de nuevo y ya no hay cupo.
+      await expect(enEspera).rejects.toThrow(/límite diario/i);
+      await b.query("rollback");
+    } finally {
+      await limpiar("carrera");
+      await a.end();
+      await b.end();
+    }
+  });
+});
