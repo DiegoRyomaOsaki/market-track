@@ -285,7 +285,7 @@ export default function MiDia() {
  */
 function BannerRechazos({ rechazos }: { rechazos: RevisionLocal[] }) {
   return (
-    <Banner color={colores.alerta}>
+    <Banner color={colores.alerta} style={e.avisoApilado}>
       <Text style={e.rechazosTitulo}>
         {rechazos.length === 1
           ? "1 reporte rechazado"
@@ -317,7 +317,7 @@ function BannerRetiros({
   onDescartar: (id: string) => void;
 }) {
   return (
-    <Banner color={colores.ambar}>
+    <Banner color={colores.ambar} rol="none" style={e.avisoApilado}>
       {/* El significado va en el TEXTO, nunca en el color del borde. */}
       <Text style={e.retirosTitulo}>
         {avisos.length === 1
@@ -530,6 +530,10 @@ const e = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  // La separación entre hijos la pone quien apila, no la caja: `BannerTransito`
+  // nunca la tuvo y heredarla al extraer el componente habría sido un cambio de
+  // aspecto que nadie pidió.
+  avisoApilado: { gap: espacio.xs },
   transitoTexto: { color: colores.texto, fontSize: 14, fontWeight: "700" },
   transitoNota: { color: colores.textoSuave, fontSize: 12 },
   rechazosTitulo: {

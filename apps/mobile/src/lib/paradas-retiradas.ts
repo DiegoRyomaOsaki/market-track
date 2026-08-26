@@ -192,13 +192,16 @@ function comoGuardado(datos: unknown): DescartesGuardados | null {
 }
 
 async function leerGuardado(): Promise<DescartesGuardados | null> {
-  const info = await FileSystem.getInfoAsync(RUTA);
-  if (!info.exists) return null;
+  // El `try` cubre TAMBIÉN el `getInfoAsync`. Fuera de él, un fallo de disco
+  // —distinto del JSON ilegible— se propagaría hasta el `.then()` de la pantalla
+  // y quedaría sin manejar, que es justo lo contrario de lo que promete este
+  // módulo: se falla hacia MOSTRAR, nunca hacia ocultar. Un fichero que no se
+  // puede leer no puede convertirse en "ya se lo dijimos".
   try {
+    const info = await FileSystem.getInfoAsync(RUTA);
+    if (!info.exists) return null;
     return comoGuardado(JSON.parse(await FileSystem.readAsStringAsync(RUTA)));
   } catch {
-    // Se falla hacia MOSTRAR, nunca hacia ocultar: un fichero ilegible no puede
-    // convertirse en "ya se lo dijimos".
     console.warn("[retiros] no se pudieron leer los descartes");
     return null;
   }

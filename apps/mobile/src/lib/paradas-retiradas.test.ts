@@ -9,11 +9,18 @@ jest.mock("@powersync/react-native", () => ({
 // El prefijo `mock` no es estilo: Jest iza los `jest.mock()` por encima de las
 // declaraciones y solo deja que su factory toque variables con ese prefijo.
 // eslint-disable-next-line no-var
-var mockDisco: { contenido: string | null; escrituraFalla: boolean };
+var mockDisco: {
+  contenido: string | null;
+  escrituraFalla: boolean;
+  lecturaFalla: boolean;
+};
 
 jest.mock("expo-file-system/legacy", () => ({
   documentDirectory: "file:///docs/",
-  getInfoAsync: () => Promise.resolve({ exists: mockDisco.contenido !== null }),
+  getInfoAsync: () => {
+    if (mockDisco.lecturaFalla) return Promise.reject(new Error("disco"));
+    return Promise.resolve({ exists: mockDisco.contenido !== null });
+  },
   readAsStringAsync: () => Promise.resolve(mockDisco.contenido ?? ""),
   writeAsStringAsync: (_ruta: string, c: string) => {
     if (mockDisco.escrituraFalla) return Promise.reject(new Error("disco"));
@@ -47,7 +54,7 @@ function retirada(over: Partial<RetiradaLocal> = {}): RetiradaLocal {
 const NADA = new Set<string>();
 
 beforeEach(() => {
-  mockDisco = { contenido: null, escrituraFalla: false };
+  mockDisco = { contenido: null, escrituraFalla: false, lecturaFalla: false };
   jest.spyOn(console, "warn").mockImplementation(() => {});
 });
 
@@ -174,6 +181,36 @@ describe("el descarte en disco", () => {
     expect((await leerDescartes(HOY)).size).toBe(0);
   });
 
+  it("un fichero con la FORMA equivocada tampoco oculta nada", async () => {
+    // JSON válido pero con la forma cambiada: es la otra mitad de la
+    // validación de frontera. Sin estos casos solo se probaba el JSON roto.
+    for (const contenido of [
+      '{"ids":["r1"]}', // sin fecha
+      '{"fecha":"2026-08-26"}', // sin ids
+      '{"fecha":123,"ids":["r1"]}', // fecha que no es texto
+      '{"fecha":"2026-08-26","ids":"r1"}', // ids que no es lista
+      "null",
+      "[]",
+    ]) {
+      mockDisco.contenido = contenido;
+      expect((await leerDescartes(HOY)).size).toBe(0);
+    }
+  });
+
+  it("una entrada corrupta no se lleva por delante las válidas", async () => {
+    mockDisco.contenido = '{"fecha":"2026-08-26","ids":["r1",7,null,"r2"]}';
+
+    expect([...(await leerDescartes(HOY))].sort()).toEqual(["r1", "r2"]);
+  });
+
+  it("un fallo de disco al comprobar el fichero no rompe la pantalla", async () => {
+    // `getInfoAsync` va DENTRO del try. Fuera, su rechazo subiría hasta el
+    // `.then()` de la pantalla y quedaría sin manejar — y este módulo promete
+    // fallar hacia MOSTRAR, no hacia reventar.
+    mockDisco.lecturaFalla = true;
+
+    await expect(leerDescartes(HOY)).resolves.toEqual(new Set());
+  });
   it("lo descartado sobrevive a cerrar y reabrir la app", async () => {
     await descartarRetiro("r1", HOY);
     expect((await leerDescartes(HOY)).has("r1")).toBe(true);
