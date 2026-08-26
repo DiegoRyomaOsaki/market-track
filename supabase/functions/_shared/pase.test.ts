@@ -182,6 +182,12 @@ function clienteConPases(filas: FilaPase[]) {
       filtros.push((f) => f[columna as keyof FilaPase] === valor);
       return consulta;
     },
+    // Comparación de STRINGS, y solo vale porque todo lo que se compara aquí
+    // sale de `toISOString()`: ancho fijo, con relleno de ceros, en UTC y con
+    // `Z`. En ese formato el orden lexicográfico y el cronológico coinciden.
+    // Postgres compara `timestamptz` de verdad; el día que un fixture use otra
+    // representación válida (offset `+00:00`, microsegundos) el doble mentiría
+    // sin avisar.
     gte: (columna: string, valor: string) => {
       filtros.push((f) => String(f[columna as keyof FilaPase]) >= valor);
       return consulta;
@@ -227,6 +233,13 @@ Deno.test("revocar un pase NO libera cupo del tope diario", async () => {
   assert((count ?? 0) >= LIMITE_DIARIO, "el tope tiene que seguir alcanzado");
 });
 
+// Los dos tests que siguen NO son secundarios: son la GUARDIA DEL DOBLE.
+//
+// El caso del criterio pasa aunque el doble ignore los filtros —tres filas dan
+// tres de todas formas—, así que por sí solo no demostraría nada. Estos dos
+// esperan un conteo MENOR que el total, y por eso caen en cuanto el doble deja
+// de filtrar. Comprobado a la fuerza con un doble ciego: el del criterio sigue
+// verde y estos dos se ponen rojos.
 Deno.test("el tope es por usuario, no global", async () => {
   const filas = [pase(), pase(), pase({ profile_id: "merc-2" })];
 
