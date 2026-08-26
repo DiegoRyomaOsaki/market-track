@@ -1,7 +1,8 @@
 import type { RolUsuario } from "@market-track/shared";
 
-import { iniciales } from "@/lib/panel/iniciales";
+import { BloqueUsuario } from "@/components/shell/bloque-usuario";
 import {
+  ETIQUETA_ROL,
   type ItemNav,
   NAV_ADMIN,
   NAV_SUPERVISOR,
@@ -53,22 +54,7 @@ export function Sidebar({ nombre, rol }: { nombre: string; rol: RolUsuario }) {
 
       <SidebarNav secciones={seccionesDe(rol)} />
 
-      <div className="border-t border-border p-3">
-        <div className="flex items-center gap-2.5 rounded-lg bg-muted px-2.5 py-2">
-          <div
-            aria-hidden="true"
-            className="flex size-8 items-center justify-center rounded-full bg-accent text-[13px] font-bold text-accent-foreground"
-          >
-            {iniciales(nombre)}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-[12.5px] font-semibold">{nombre}</div>
-            <div className="text-[11px] capitalize text-muted-foreground">
-              {rol}
-            </div>
-          </div>
-        </div>
-      </div>
+      <BloqueUsuario nombre={nombre} detalle={ETIQUETA_ROL[rol]} />
     </aside>
   );
 }

@@ -1,3 +1,5 @@
+import type { RolUsuario } from "@market-track/shared";
+
 // Modelo de navegación del panel: la fuente única de las secciones, sus rutas,
 // los títulos del header y su AYUDA contextual. El sidebar lo pinta, el header lo
 // consulta para titular la pantalla activa, y el popover `?` muestra `ayuda`. Los
@@ -213,3 +215,20 @@ export function itemActivo(pathname: string): ItemNav | undefined {
     (i) => pathname === i.href || pathname.startsWith(`${i.href}/`),
   ).sort((a, b) => b.href.length - a.href.length)[0];
 }
+
+/**
+ * Cómo se nombra cada rol en pantalla.
+ *
+ * `Record` exhaustivo y no un `capitalize` de CSS: el bloque de usuario es el
+ * mismo en el panel y en el portal, y ahí la segunda línea a veces es el rol y a
+ * veces el nombre de un cliente-marca. `text-transform: capitalize` sube la
+ * primera letra de cada palabra sin bajar el resto, así que una marca escrita a
+ * propósito en minúscula saldría deformada. Y siendo `Record`, si
+ * `rol_usuario` gana un valor esto deja de compilar en vez de pintarlo crudo.
+ */
+export const ETIQUETA_ROL: Record<RolUsuario, string> = {
+  admin: "Administrador",
+  supervisor: "Supervisor",
+  cliente: "Cliente",
+  mercaderista: "Mercaderista",
+};

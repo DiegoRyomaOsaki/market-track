@@ -1,4 +1,4 @@
-import { iniciales } from "@/lib/panel/iniciales";
+import { BloqueUsuario } from "@/components/shell/bloque-usuario";
 import type { ItemPortal } from "@/lib/portal/nav";
 
 import { NavPortal } from "./nav-portal";
@@ -35,22 +35,7 @@ export function SidebarPortal({
 
       <NavPortal items={items} />
 
-      <div className="border-t border-border p-3">
-        <div className="flex items-center gap-2.5 rounded-lg bg-muted px-2.5 py-2">
-          <div
-            aria-hidden="true"
-            className="flex size-8 items-center justify-center rounded-full bg-accent text-[13px] font-bold text-accent-foreground"
-          >
-            {iniciales(nombre)}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-[12.5px] font-semibold">{nombre}</div>
-            <div className="truncate text-[11px] text-muted-foreground">
-              {cliente}
-            </div>
-          </div>
-        </div>
-      </div>
+      <BloqueUsuario nombre={nombre} detalle={cliente} />
     </aside>
   );
 }
