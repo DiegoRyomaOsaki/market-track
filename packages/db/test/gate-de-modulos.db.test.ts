@@ -54,6 +54,23 @@ async function apagarModulo(
   await c.query("set local role authenticated");
 }
 
+/** El gemelo de `apagarModulo`: hace falta para probar una verja de DOS módulos,
+ * donde "apagado" ya no es el único estado interesante. */
+async function encenderModulo(
+  c: Client,
+  modulo: string,
+  tenantId: string = TENANTS.maracumango,
+): Promise<void> {
+  await c.query("set local role postgres");
+  await c.query(
+    `insert into public.portal_modulo_habilitado (tenant_id, modulo, habilitado)
+     values ($1, $2::public.modulo_portal, true)
+     on conflict (tenant_id, modulo) do update set habilitado = true`,
+    [tenantId, modulo],
+  );
+  await c.query("set local role authenticated");
+}
+
 /**
  * Una RPC de sección: a qué módulo pertenece, qué es "vacío" para su forma y
  * qué señal DETERMINISTA (independiente de cuántos datos haya) demuestra que
@@ -85,11 +102,19 @@ const RPCS: RpcDeSeccion[] = [
     nombre: "dashboard_kpis",
     // Sin verja, los agregados devuelven SIEMPRE una fila (aunque sea de ceros):
     // cero filas solo puede significar que la verja cortó.
-    esperaVacio: (c) =>
-      esperaCeroFilas(
+    //
+    // Su verja mira DOS módulos desde que el reporte del portal usa esta misma
+    // función, así que aquí hay que apagar los dos. Hasta ahora este caso pasaba
+    // por COINCIDENCIA: el seed trae `reportes = false` para este cliente, y el
+    // día que alguien se lo habilitara el test se habría puesto rojo sin que el
+    // cambio tuviera nada que ver con él.
+    esperaVacio: async (c) => {
+      await apagarModulo(c, "reportes");
+      await esperaCeroFilas(
         c,
         `select * from public.dashboard_kpis('${DESDE}', '${HASTA}')`,
-      ),
+      );
+    },
     esperaVivo: (c) =>
       esperaFilas(
         c,
@@ -315,6 +340,35 @@ describe("gate de módulos — el contrato de la verja", () => {
     );
     expect(r.rows[0]?.auth).toBe(true);
     expect(r.rows[0]?.anon).toBe(false);
+  });
+
+  it("con `reportes` habilitado, los KPI bajan aunque `dashboard` esté apagado", async () => {
+    // El fallo silencioso que cerró esta verja: un cliente que contrata Reportes
+    // y no Dashboard entraba a su reporte, lo veía VACÍO —indistinguible de "no
+    // hubo trabajo"— y se lo exportaba a Excel.
+    await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
+      await encenderModulo(c, "reportes");
+      await apagarModulo(c, "dashboard");
+
+      await esperaFilas(
+        c,
+        `select * from public.dashboard_kpis('${DESDE}', '${HASTA}')`,
+      );
+    });
+  });
+
+  it("con los DOS módulos apagados no baja nada", async () => {
+    // El control negativo del test de arriba: sin él, "sí baja con reportes" se
+    // cumpliría igual con la verja borrada del todo.
+    await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
+      await apagarModulo(c, "reportes");
+      await apagarModulo(c, "dashboard");
+
+      await esperaCeroFilas(
+        c,
+        `select * from public.dashboard_kpis('${DESDE}', '${HASTA}')`,
+      );
+    });
   });
 
   it("las tres funciones del dashboard conservan su search_path fijado", async () => {
