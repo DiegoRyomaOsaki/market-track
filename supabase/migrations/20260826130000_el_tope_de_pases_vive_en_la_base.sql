@@ -46,6 +46,20 @@ begin
       using errcode = 'check_violation';
   end if;
 
+  -- Y antedatar no abre la puerta por atrás, aunque a primera vista lo parezca:
+  -- espaciando fechas viejas más de 24 h cada fila ve su ventana vacía y entra,
+  -- así que se pueden crear más de tres. Pero nacen CADUCADAS y son inertes, y
+  -- eso no lo decide este trigger sino el CHECK que ya existía:
+  --
+  --   check (expira_at <= generado_at + interval '15 minutes')
+  --
+  -- La banda en la que una fila antedatada sigue siendo canjeable son los
+  -- últimos 15 minutos — y esas ventanas solapan la de hoy, así que cuentan y
+  -- topan. Medido: cinco filas antedatadas 48 h entran, y ninguna queda vigente.
+  --
+  -- Se apoya en ese CHECK a propósito, en vez de repetir la regla aquí: si
+  -- alguien lo relaja, este comentario es el que dice qué se llevó por delante.
+
   -- Serializa por usuario OBJETIVO. Sin esto, dos inserciones simultáneas leen
   -- las dos "hay cupo" y entran las dos: contar y luego insertar no es atómico
   -- ni dentro de un trigger. El candado es de transacción, así que se suelta
