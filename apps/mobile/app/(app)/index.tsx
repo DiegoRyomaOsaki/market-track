@@ -11,6 +11,7 @@ import {
 
 import { diaEnLima, etiquetaDePeriodo } from "@market-track/shared";
 
+import { Banner } from "@/componentes/banner";
 import {
   etiquetaDeDesempeno,
   TarjetaDesempeno,
@@ -284,7 +285,7 @@ export default function MiDia() {
  */
 function BannerRechazos({ rechazos }: { rechazos: RevisionLocal[] }) {
   return (
-    <View style={e.rechazos} accessibilityRole="summary">
+    <Banner color={colores.alerta}>
       <Text style={e.rechazosTitulo}>
         {rechazos.length === 1
           ? "1 reporte rechazado"
@@ -296,7 +297,7 @@ function BannerRechazos({ rechazos }: { rechazos: RevisionLocal[] }) {
           {r.motivo ? ` — ${r.motivo}` : ""}
         </Text>
       ))}
-    </View>
+    </Banner>
   );
 }
 
@@ -316,7 +317,7 @@ function BannerRetiros({
   onDescartar: (id: string) => void;
 }) {
   return (
-    <View style={e.retiros} accessibilityRole="summary">
+    <Banner color={colores.ambar}>
       {/* El significado va en el TEXTO, nunca en el color del borde. */}
       <Text style={e.retirosTitulo}>
         {avisos.length === 1
@@ -346,7 +347,7 @@ function BannerRetiros({
           </Pressable>
         </View>
       ))}
-    </View>
+    </Banner>
   );
 }
 
@@ -363,12 +364,12 @@ function BannerTransito({ desde }: { desde: string }) {
   const mm = String(Math.floor(seg / 60)).padStart(2, "0");
   const ss = String(seg % 60).padStart(2, "0");
   return (
-    <View style={e.transito} accessibilityRole="summary">
+    <Banner color={colores.marca} style={e.transitoFila}>
       <Text style={e.transitoTexto}>
         En tránsito · {mm}:{ss}
       </Text>
       <Text style={e.transitoNota}>Se registra al hacer check-in</Text>
-    </View>
+    </Banner>
   );
 }
 
@@ -524,49 +525,19 @@ const e = StyleSheet.create({
     paddingHorizontal: espacio.m,
     marginTop: espacio.s,
   },
-  transito: {
+  transitoFila: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginHorizontal: espacio.m,
-    marginTop: espacio.s,
-    paddingHorizontal: espacio.m,
-    paddingVertical: espacio.s,
-    borderRadius: radio.m,
-    borderWidth: 1,
-    borderColor: colores.marca,
-    backgroundColor: colores.superficie,
   },
   transitoTexto: { color: colores.texto, fontSize: 14, fontWeight: "700" },
   transitoNota: { color: colores.textoSuave, fontSize: 12 },
-  rechazos: {
-    marginHorizontal: espacio.m,
-    marginTop: espacio.s,
-    paddingHorizontal: espacio.m,
-    paddingVertical: espacio.s,
-    borderRadius: radio.m,
-    borderWidth: 1,
-    borderColor: colores.alerta,
-    backgroundColor: colores.superficie,
-    gap: espacio.xs,
-  },
   rechazosTitulo: {
     color: colores.alertaTexto,
     fontSize: 14,
     fontWeight: "700",
   },
   rechazosLinea: { color: colores.texto, fontSize: 13 },
-  retiros: {
-    marginHorizontal: espacio.m,
-    marginTop: espacio.s,
-    paddingHorizontal: espacio.m,
-    paddingVertical: espacio.s,
-    borderRadius: radio.m,
-    borderWidth: 1,
-    borderColor: colores.ambar,
-    backgroundColor: colores.superficie,
-    gap: espacio.xs,
-  },
   // `colores.texto` y no `ambar` para el título: ese token es de relleno y
   // borde. El mismo razonamiento que separó `alerta` de `alertaTexto`.
   retirosTitulo: { color: colores.texto, fontSize: 14, fontWeight: "700" },
