@@ -87,7 +87,7 @@ export default async function ReportesPortalPage({
       <Configurador filtros={filtros} seleccion={seleccion} />
 
       {kpisRes.error ? (
-        <Aviso>
+        <Aviso esError>
           No se pudieron leer los indicadores. Vuelve a intentarlo en un
           momento.
         </Aviso>

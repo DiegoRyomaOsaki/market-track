@@ -54,11 +54,17 @@ export function VistaPrevia({
         <Tarjeta>
           <thead>
             <tr className="border-b border-border">
-              <th className={TH}>Indicador</th>
-              <th className={TH}>Valor</th>
+              <th scope="col" className={TH}>
+                Indicador
+              </th>
+              <th scope="col" className={TH}>
+                Valor
+              </th>
               {/* «Variación» y no una flecha: el sentido del cambio va en
                   palabras, nunca solo en un icono o un color (WCAG 1.4.1). */}
-              <th className={TH}>Variación</th>
+              <th scope="col" className={TH}>
+                Variación
+              </th>
             </tr>
           </thead>
           <tbody>
