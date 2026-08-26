@@ -94,6 +94,20 @@ const rutero_parada = new Table({
   hora_planificada: column.text,
 });
 
+// La baja de una parada, con su rastro: es lo que distingue "esta tienda ya no
+// está en tu ruta" de "esta tienda nunca estuvo". Solo lectura — la escribe la
+// RPC del panel, y el GRANT de la tabla no le da escritura a nadie más.
+//
+// `retirada_por` no se declara porque el stream no la proyecta: quién quitó la
+// parada no baja al teléfono.
+const rutero_parada_retirada = new Table({
+  tenant_id: column.text,
+  fecha: column.text,
+  tienda_id: column.text,
+  retirada_at: column.text,
+  motivo: column.text,
+});
+
 const visita = new Table({
   tenant_id: column.text,
   rutero_parada_id: column.text,
@@ -358,6 +372,7 @@ export const AppSchema = new Schema({
   promocion,
   rutero,
   rutero_parada,
+  rutero_parada_retirada,
   visita,
   levantamiento,
   levantamiento_sku,

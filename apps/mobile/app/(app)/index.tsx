@@ -23,6 +23,13 @@ import {
 } from "@/lib/desempeno";
 import { cerrarSesion } from "@/lib/cierre-sesion";
 import {
+  type AvisoDeRetiro,
+  avisosDeRetiro,
+  descartarRetiro,
+  leerDescartes,
+  useRetirosDeHoy,
+} from "@/lib/paradas-retiradas";
+import {
   type EstadoVisual,
   estadoVisual,
   horaEsperada,
@@ -67,6 +74,35 @@ export default function MiDia() {
   const hoyLima = useMemo(() => diaEnLima(new Date()), []);
   const desempeno = useMiDesempeno(hoyLima);
   const [transitoDesde, setTransitoDesde] = useState<string | null>(null);
+
+  // Las tiendas que el supervisor quitó de la ruta. Se leen de la réplica con
+  // la MISMA fecha que el rutero: dos relojes distintos cerca de medianoche
+  // dirían cosas contradictorias en esta misma pantalla.
+  const retiros = useRetirosDeHoy(fecha);
+  const [descartados, setDescartados] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  useEffect(() => {
+    let vivo = true;
+    void leerDescartes(fecha).then((d) => vivo && setDescartados(d));
+    return () => {
+      vivo = false;
+    };
+  }, [fecha]);
+
+  // El aviso se calcula contra las paradas VIVAS: una tienda que sigue en la
+  // ruta no se anuncia como perdida. `useQuery` repinta con el mismo
+  // checkpoint que borra la parada, así que la baja que llega a mitad de
+  // jornada aparece sola, sin reabrir la app.
+  const avisosRetiro = useMemo(
+    () =>
+      avisosDeRetiro(
+        retiros.retiradas,
+        descartados,
+        new Set(paradas.map((p) => p.tienda_id)),
+      ),
+    [retiros.retiradas, descartados, paradas],
+  );
 
   // Al volver a Mi día (p. ej. tras un check-out) se relee el cronómetro de
   // tránsito: se cierra en el siguiente check-in.
@@ -171,6 +207,31 @@ export default function MiDia() {
 
       {rechazos.length > 0 ? <BannerRechazos rechazos={rechazos} /> : null}
 
+      {/* La región viva se monta desde el PRIMER render y solo cambia su
+          contenido: montarla junto con el aviso lo anunciaría en el mismo
+          instante en que se inserta, y algunos lectores se lo pierden.
+          (`accessibilityLiveRegion` es solo de Android; en iOS no se anuncia
+          solo. No es lo que cubre la baja que llega a mitad de jornada —eso
+          lo cubre que el aviso PERSISTA—, es un extra.)
+
+          Y un fallo de la consulta NO se calla: sin este aviso, la ausencia
+          de banner se lee como "no te quitaron nada", que es justo la
+          conclusión contraria. */}
+      <View accessibilityLiveRegion="polite">
+        {retiros.error ? (
+          <Text style={e.avisoDesempeno} accessibilityRole="alert">
+            No se pudo comprobar si cambió tu ruta. Vuelve a abrir la app.
+          </Text>
+        ) : avisosRetiro.length > 0 ? (
+          <BannerRetiros
+            avisos={avisosRetiro}
+            onDescartar={(id) => {
+              void descartarRetiro(id, fecha).then(setDescartados);
+            }}
+          />
+        ) : null}
+      </View>
+
       <Pressable
         onPress={() => router.push("/solicitar-cambio-ruta")}
         style={e.enlaceSolicitud}
@@ -234,6 +295,56 @@ function BannerRechazos({ rechazos }: { rechazos: RevisionLocal[] }) {
           {r.tienda_nombre ?? "Tienda"}
           {r.motivo ? ` — ${r.motivo}` : ""}
         </Text>
+      ))}
+    </View>
+  );
+}
+
+/**
+ * Las tiendas que salieron de la ruta de hoy.
+ *
+ * Va ARRIBA y fuera de la lista, no como fila fantasma dentro de ella: una
+ * tienda que ya no es suya no debe invitar a tocarla y mandarlo a un check-in
+ * imposible. El motivo se muestra entero, sin truncar, por lo mismo que en el
+ * banner de rechazos: es lo único que le explica qué pasó.
+ */
+function BannerRetiros({
+  avisos,
+  onDescartar,
+}: {
+  avisos: AvisoDeRetiro[];
+  onDescartar: (id: string) => void;
+}) {
+  return (
+    <View style={e.retiros} accessibilityRole="summary">
+      {/* El significado va en el TEXTO, nunca en el color del borde. */}
+      <Text style={e.retirosTitulo}>
+        {avisos.length === 1
+          ? "1 tienda salió de tu ruta de hoy"
+          : `${avisos.length} tiendas salieron de tu ruta de hoy`}
+      </Text>
+      {avisos.map((a) => (
+        <View key={a.id} style={e.retiroFila}>
+          <Text style={e.retirosLinea}>
+            {a.tienda} · {fechaCorta(a.retirada_at)}
+            {a.motivo ? `\nMotivo: ${a.motivo}` : ""}
+          </Text>
+          {/* "Entendido" y no una "✕": un glifo suelto es significado por
+              icono, y además es un blanco pequeño. La etiqueta nombra la
+              tienda porque tres botones "Entendido" seguidos son
+              indistinguibles con un lector de pantalla. */}
+          <Pressable
+            onPress={() => onDescartar(a.id)}
+            accessibilityRole="button"
+            accessibilityLabel={`Entendido, ocultar el aviso de ${a.tienda}`}
+            style={({ pressed }) => [
+              e.retiroBoton,
+              pressed && { opacity: 0.6 },
+            ]}
+          >
+            <Text style={e.retiroBotonTexto}>Entendido</Text>
+          </Pressable>
+        </View>
       ))}
     </View>
   );
@@ -445,6 +556,41 @@ const e = StyleSheet.create({
     fontWeight: "700",
   },
   rechazosLinea: { color: colores.texto, fontSize: 13 },
+  retiros: {
+    marginHorizontal: espacio.m,
+    marginTop: espacio.s,
+    paddingHorizontal: espacio.m,
+    paddingVertical: espacio.s,
+    borderRadius: radio.m,
+    borderWidth: 1,
+    borderColor: colores.ambar,
+    backgroundColor: colores.superficie,
+    gap: espacio.xs,
+  },
+  // `colores.texto` y no `ambar` para el título: ese token es de relleno y
+  // borde. El mismo razonamiento que separó `alerta` de `alertaTexto`.
+  retirosTitulo: { color: colores.texto, fontSize: 14, fontWeight: "700" },
+  retiroFila: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: espacio.s,
+  },
+  retirosLinea: { color: colores.texto, fontSize: 13, flex: 1 },
+  retiroBoton: {
+    // 48 y no 44: es la guía de Android, que es la plataforma de campo.
+    minHeight: 48,
+    justifyContent: "center",
+    paddingHorizontal: espacio.s,
+    borderWidth: 1,
+    borderColor: colores.textoSuave,
+    borderRadius: radio.m,
+  },
+  retiroBotonTexto: {
+    color: colores.textoSuave,
+    fontSize: 14,
+    fontWeight: "600",
+  },
   revision: { color: colores.textoSuave, fontSize: 11, fontWeight: "700" },
   enlaceSolicitud: {
     marginHorizontal: espacio.m,
