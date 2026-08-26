@@ -139,7 +139,9 @@ export function avisosDeRetiro(
  * pregunta; y si ya no está, que la tienda tenga un retiro registrado es
  * exactamente la respuesta que se busca.
  */
-export function useRetiroDeTienda(tiendaId: string | null): RetiradaLocal | null {
+export function useRetiroDeTienda(
+  tiendaId: string | null,
+): RetiradaLocal | null {
   const { data } = useQuery<RetiradaLocal>(
     tiendaId === null ? SQL_SIN_TIENDA : SQL_POR_TIENDA,
     tiendaId === null ? [] : [tiendaId],

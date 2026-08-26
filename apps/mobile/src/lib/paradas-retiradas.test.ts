@@ -152,9 +152,9 @@ describe("descartadosVigentes", () => {
   });
 
   it("los descartes de hoy sí valen", () => {
-    expect(descartadosVigentes({ fecha: HOY, ids: ["r1"] }, HOY).has("r1")).toBe(
-      true,
-    );
+    expect(
+      descartadosVigentes({ fecha: HOY, ids: ["r1"] }, HOY).has("r1"),
+    ).toBe(true);
   });
 
   it("sin nada guardado no hay nada descartado", () => {
