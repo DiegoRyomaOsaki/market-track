@@ -21,8 +21,8 @@ import {
   textoDeMiPosicion,
   useMiDesempeno,
 } from "@/lib/desempeno";
-import { supabase } from "@/lib/supabase";
-import { olvidarDispositivo } from "@/lib/recordar-dispositivo";
+import { cerrarSesion } from "@/lib/cierre-sesion";
+import { useEstadoSync } from "@/lib/powersync/estado";
 import {
   type EstadoVisual,
   estadoVisual,
@@ -40,11 +40,6 @@ import {
 } from "@/lib/revision";
 import { leerTransito } from "@/lib/transito";
 import { colores, espacio, radio } from "@/tema";
-
-async function cerrarSesion() {
-  await olvidarDispositivo();
-  await supabase.auth.signOut();
-}
 
 function fechaLarga(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
@@ -70,6 +65,11 @@ export default function MiDia() {
     // de servicio del mercaderista.
     useMemo(() => paradas.map((p) => p.tienda_id), [paradas]),
   );
+  // Solo `conectado`: ese SÍ es fiable aquí porque `statusChanged` se emite al
+  // conectar y desconectar. Los CONTEOS no se leen del hook — se leen frescos
+  // dentro de `cerrarSesion`, porque ese evento no se emite al escribir en
+  // local y un mercaderista sin señal acumularía trabajo sin que el hook lo vea.
+  const { conectado } = useEstadoSync();
   const hoyLima = useMemo(() => diaEnLima(new Date()), []);
   const desempeno = useMiDesempeno(hoyLima);
   const [transitoDesde, setTransitoDesde] = useState<string | null>(null);
@@ -97,13 +97,17 @@ export default function MiDia() {
           <Text style={e.titulo}>Mi día</Text>
           <Text style={e.fecha}>{fechaLarga(fecha)}</Text>
         </View>
+        {/* Sin `hitSlop`: ampliaba el área tocable con superficie INVISIBLE
+            pegada al título, en la pantalla por donde más veces pasa un pulgar.
+            Ahora el área que dispara el cierre es exactamente la que se ve. */}
         <Pressable
-          onPress={() => void cerrarSesion()}
+          onPress={() => void cerrarSesion(undefined, conectado)}
           accessibilityRole="button"
-          hitSlop={8}
-          style={({ pressed }) => pressed && { opacity: 0.6 }}
+          accessibilityLabel="Cerrar sesión"
+          accessibilityHint="Pide confirmación antes de salir"
+          style={({ pressed }) => [e.salir, pressed && { opacity: 0.6 }]}
         >
-          <Text style={e.salir}>Salir</Text>
+          <Text style={e.salirTexto}>Salir</Text>
         </Pressable>
       </View>
 
@@ -395,7 +399,15 @@ const e = StyleSheet.create({
     marginTop: 2,
     textTransform: "capitalize",
   },
-  salir: { color: colores.textoSuave, fontSize: 14, fontWeight: "600" },
+  salir: {
+    minHeight: 44,
+    justifyContent: "center",
+    paddingHorizontal: espacio.s,
+    borderWidth: 1,
+    borderColor: colores.borde,
+    borderRadius: radio.m,
+  },
+  salirTexto: { color: colores.textoSuave, fontSize: 14, fontWeight: "600" },
   progreso: {
     color: colores.textoSuave,
     fontSize: 13,
