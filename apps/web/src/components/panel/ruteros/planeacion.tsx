@@ -39,6 +39,7 @@ export function Planeacion({
   mercaderistas,
   tiendas,
   dias,
+  hoyLima,
 }: {
   vista: Vista;
   dia: string;
@@ -46,6 +47,8 @@ export function Planeacion({
   mercaderistas: Mercaderista[];
   tiendas: Tienda[];
   dias: DiaPlaneado[];
+  /** El día de hoy en Lima, resuelto en el servidor. */
+  hoyLima: string;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [pendiente, iniciar] = useTransition();
@@ -190,6 +193,7 @@ export function Planeacion({
               dia={d}
               mercaderistaId={mercaderistaId}
               tiendas={tiendas}
+              hoyLima={hoyLima}
               compacto={vista === "mes"}
             />
           ))}

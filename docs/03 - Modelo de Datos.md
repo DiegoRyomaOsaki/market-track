@@ -230,6 +230,41 @@ auditoría, y una sesión iniciada con pase queda marcada como tal.
 
 **`rutero_parada`** — cada tienda del rutero, ordenada. `rutero_id, tienda_id, orden, estado`.
 
+**`rutero_parada_retirada`** — quién quitó qué parada, de qué rutero y con el
+rutero en qué estado. **Sin FK a `rutero`** a propósito: `rutero_parada` cuelga
+de `rutero` con `on delete cascade`, así que una FK aquí se llevaría el rastro
+justo cuando se borra lo que audita. El contexto (`fecha`, `mercaderista_id`,
+`orden`, `hora_planificada`, `estado_rutero`) va desnormalizado por lo mismo: es
+el estado en el INSTANTE del retiro. Solo la escribe `quitar_parada_rutero`; el
+grant a `authenticated` es de `select` y nada más, así que una fila de auditoría
+no se puede forjar ni borrar con un JWT.
+
+**Corregir un rutero ya publicado** — `public.quitar_parada_rutero` abre una
+ventana estrecha sobre el trigger `parada_solo_se_planifica_en_borrador`: quitar
+una parada y reordenar las que quedan se permite en `borrador` **y en
+`publicado`**; añadir una tienda, no, y cambiarle la tienda a una parada
+existente tampoco (sería sustituir el destino sin dejar rastro). Por encima hay
+dos guardarraíles que el estado no da:
+
+* **la visita** — `visita_parada_fk ... on delete restrict` es una verja dura por
+  debajo del trigger. La RPC la comprueba antes para poder dar un mensaje que se
+  entienda, con el MISMO SQLSTATE que levantaría la FK: si entre la comprobación
+  y el borrado entra un check-in, una sola rama cubre las dos. Ojo: esa FK corta
+  también la CASCADA del rutero entero, así que «borrar el día y rehacerlo» deja
+  de funcionar en cuanto alguien ficha.
+* **el día pasado** — `rutero.estado` **no sale nunca de `publicado`** (nada en el
+  repo lo avanza a `en_curso` ni a `completado`), así que «solo en publicado»
+  incluye el rutero de hace tres meses. Y `puntualidad_paradas` cuenta las paradas
+  de todo rutero distinto de borrador: quitar una de un día pasado borra un
+  `falto` y sube el bono del periodo abierto. `cerrado_at` protege los periodos ya
+  sellados, no el mes en curso.
+
+La **hora** sigue siendo solo de borrador, y no por descuido:
+`fijar_hora_parada` la rechaza fuera de ahí porque es la vara con la que se mide
+la puntualidad, y moverla después de ver a qué hora fichó el mercaderista no es
+planificar sino fabricar el resultado. El panel la muestra con su motivo en vez
+de esconder el campo.
+
 **`visita`** — ejecución real en una tienda (núcleo transaccional).
 | Campo | Tipo | Nota |
 |---|---|---|

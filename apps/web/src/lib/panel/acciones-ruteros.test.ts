@@ -146,21 +146,78 @@ describe("agregarParada", () => {
 });
 
 describe("quitarParada", () => {
-  it("el supervisor la quita", async () => {
-    conSupabase("supervisor");
+  it("pasa por la RPC, no por un delete suelto", async () => {
+    // Hacen falta tres cosas en la MISMA transacción: comprobar el estado con
+    // bloqueo, dejar el rastro de quién la quitó y borrar. Con el delete por
+    // PostgREST, la auditoría sería una escritura aparte que puede quedarse sin
+    // su borrado. (El test de las 0 filas que había aquí desaparece con él: ese
+    // camino ya no existe.)
+    const espia = conSupabase("supervisor");
     await expect(quitarParada({ paradaId: PARADA })).resolves.toEqual({
       ok: true,
     });
+    expect(espia.rpcsPedidas).toContainEqual({
+      nombre: "quitar_parada_rutero",
+      argumentos: { p_parada: PARADA },
+    });
   });
 
-  it("0 filas afectadas es 'sin permiso', no éxito", async () => {
-    // Un DELETE que la RLS bloquea NO da error: borra 0 filas y devuelve éxito.
-    conSupabase("supervisor", { escritura: { data: [], error: null } });
+  it.each([
+    [
+      "23503",
+      "Esa tienda ya tiene una visita registrada: no se puede quitar de la ruta.",
+    ],
+    [
+      "55000",
+      "Ese día ya no admite cambios de ruta. Recarga la pantalla para ver su estado.",
+    ],
+    ["P0002", "Esa parada ya no existe. Recarga la pantalla."],
+    ["42501", "No encontrado o sin permiso"],
+  ])(
+    "traduce el %s a algo que el supervisor pueda hacer",
+    async (code, mensaje) => {
+      // Cada uno es una acción distinta para quien está delante: recargar,
+      // elegir otra tienda o rendirse. Un genérico no le dice qué hacer.
+      conSupabase("supervisor", {
+        rpc: { error: { message: "boom", code } },
+      });
+      await expect(quitarParada({ paradaId: PARADA })).resolves.toEqual({
+        ok: false,
+        error: mensaje,
+      });
+      expect(revalidatePath).not.toHaveBeenCalled();
+    },
+  );
+
+  it("un código desconocido cae al genérico y deja traza", async () => {
+    const warn = vi.spyOn(console, "error").mockImplementation(() => {});
+    conSupabase("supervisor", {
+      rpc: { error: { message: "algo raro", code: "XX999" } },
+    });
     await expect(quitarParada({ paradaId: PARADA })).resolves.toEqual({
       ok: false,
-      error: "No encontrado o sin permiso",
+      error: "No se pudo guardar el cambio",
     });
-    expect(revalidatePath).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("el mensaje CRUDO de la base no llega al navegador", async () => {
+    // Los mensajes de un driver concatenan el cuerpo de la respuesta: no son
+    // seguros para pintarlos tal cual.
+    const warn = vi.spyOn(console, "error").mockImplementation(() => {});
+    conSupabase("supervisor", {
+      rpc: {
+        error: {
+          message: "duplicate key value violates unique constraint secreto_idx",
+          code: "23503",
+        },
+      },
+    });
+    const r = await quitarParada({ paradaId: PARADA });
+    expect(r).toMatchObject({ ok: false });
+    if (!r.ok) expect(r.error).not.toContain("secreto_idx");
+    warn.mockRestore();
   });
 });
 

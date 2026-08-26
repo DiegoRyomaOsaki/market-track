@@ -34,6 +34,7 @@ const DIAS: DiaPlaneado[] = [
 function pintar(over: Partial<Parameters<typeof Planeacion>[0]> = {}) {
   return render(
     <Planeacion
+      hoyLima="2026-08-03"
       vista="semana"
       dia="2026-08-03"
       mercaderistaId="m1"

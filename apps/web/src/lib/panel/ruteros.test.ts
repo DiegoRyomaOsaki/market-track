@@ -4,16 +4,20 @@ import {
   agruparPorDia,
   desplazamientoDeDuplicado,
   finDeMes,
+  horaCorta,
   inicioDeMes,
   inicioDeSemana,
   moverParada,
   periodoVecino,
   rangoDeVista,
-  horaCorta,
+  sePuedeEditarHora,
   sePuedePublicar,
+  sePuedeQuitarParada,
+  sePuedeReordenar,
   type DiaPlaneado,
   type FilaPlaneacion,
   type Parada,
+  vecinoParaFoco,
 } from "./ruteros";
 
 function fila(over: Partial<FilaPlaneacion> = {}): FilaPlaneacion {
@@ -187,9 +191,30 @@ describe("agruparPorDia con horas", () => {
 
 describe("moverParada", () => {
   const paradas: Parada[] = [
-    { id: "a", orden: 1, tiendaId: "t1", tiendaNombre: "A", hora: null },
-    { id: "b", orden: 2, tiendaId: "t2", tiendaNombre: "B", hora: null },
-    { id: "c", orden: 3, tiendaId: "t3", tiendaNombre: "C", hora: null },
+    {
+      id: "a",
+      orden: 1,
+      tiendaId: "t1",
+      tiendaNombre: "A",
+      hora: null,
+      tieneVisita: false,
+    },
+    {
+      id: "b",
+      orden: 2,
+      tiendaId: "t2",
+      tiendaNombre: "B",
+      hora: null,
+      tieneVisita: false,
+    },
+    {
+      id: "c",
+      orden: 3,
+      tiendaId: "t3",
+      tiendaNombre: "C",
+      hora: null,
+      tieneVisita: false,
+    },
   ];
 
   it("sube una posición", () => {
@@ -216,7 +241,14 @@ describe("sePuedePublicar", () => {
     ruteroId: "r1",
     estado: "borrador",
     paradas: [
-      { id: "a", orden: 1, tiendaId: "t1", tiendaNombre: "A", hora: null },
+      {
+        id: "a",
+        orden: 1,
+        tiendaId: "t1",
+        tiendaNombre: "A",
+        hora: null,
+        tieneVisita: false,
+      },
     ],
   };
 
@@ -235,5 +267,146 @@ describe("sePuedePublicar", () => {
   it("lo ya publicado no se vuelve a publicar", () => {
     expect(sePuedePublicar({ ...base, estado: "publicado" })).toBe(false);
     expect(sePuedePublicar({ ...base, estado: "en_curso" })).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Qué se puede hacer con una parada, y POR QUÉ no cuando no se puede
+//
+// El motivo se prueba junto al booleano a propósito: el valor de este cambio no
+// es el permiso —el servidor ya lo aplicaba— sino la explicación. Un test que
+// solo mirase `puede` pasaría en verde con todos los motivos en blanco.
+// ---------------------------------------------------------------------------
+describe("permisos por parada", () => {
+  const ESTADOS = ["borrador", "publicado", "en_curso", "completado"] as const;
+  const HOY = "2026-08-03";
+
+  function diaCon(
+    estado: (typeof ESTADOS)[number] | null,
+    fecha = HOY,
+  ): DiaPlaneado {
+    return { fecha, ruteroId: "r1", estado, paradas: [] };
+  }
+
+  function paradaCon(tieneVisita: boolean): Parada {
+    return {
+      id: "a",
+      orden: 1,
+      tiendaId: "t1",
+      tiendaNombre: "Plaza Vea Surco",
+      hora: null,
+      tieneVisita,
+    };
+  }
+
+  it.each([
+    ["borrador", true, ""],
+    ["publicado", true, ""],
+    ["en_curso", false, "El día ya empezó"],
+    ["completado", false, "El día ya cerró"],
+  ] as const)("quitar en %s", (estado, puede, motivo) => {
+    const r = sePuedeQuitarParada(diaCon(estado), paradaCon(false), HOY);
+    expect(r.puede).toBe(puede);
+    if (!r.puede) expect(r.motivo).toBe(motivo);
+  });
+
+  it.each(ESTADOS)("con visita no se quita, ni en %s", (estado) => {
+    const r = sePuedeQuitarParada(diaCon(estado), paradaCon(true), HOY);
+    expect(r).toEqual({
+      puede: false,
+      motivo: "Ya tiene una visita registrada",
+    });
+  });
+
+  it("la VISITA gana la precedencia sobre el estado", () => {
+    // Es la razón más concreta y la que el servidor aplicaría igualmente: decir
+    // "el día ya empezó" mandaría a corregir lo que no es.
+    const r = sePuedeQuitarParada(diaCon("en_curso"), paradaCon(true), HOY);
+    expect(r).toEqual({
+      puede: false,
+      motivo: "Ya tiene una visita registrada",
+    });
+  });
+
+  it("un día pasado no se toca aunque el rutero siga publicado", () => {
+    // `rutero.estado` no sale nunca de `publicado`: sin esto, el rutero de hace
+    // tres meses seguiría siendo editable y quitarle una parada borraría un
+    // `falto` del periodo abierto.
+    const r = sePuedeQuitarParada(
+      diaCon("publicado", "2026-08-01"),
+      paradaCon(false),
+      HOY,
+    );
+    expect(r).toEqual({ puede: false, motivo: "Ese día ya pasó" });
+  });
+
+  it("el día de mañana sí", () => {
+    expect(
+      sePuedeQuitarParada(
+        diaCon("publicado", "2026-08-04"),
+        paradaCon(false),
+        HOY,
+      ).puede,
+    ).toBe(true);
+  });
+
+  it("un día sin rutero no tiene parada que quitar", () => {
+    expect(sePuedeQuitarParada(diaCon(null), paradaCon(false), HOY)).toEqual({
+      puede: false,
+      motivo: "No hay rutero",
+    });
+  });
+
+  it.each([
+    ["borrador", true],
+    ["publicado", true],
+    ["en_curso", false],
+    ["completado", false],
+  ] as const)("reordenar en %s", (estado, puede) => {
+    expect(sePuedeReordenar(diaCon(estado)).puede).toBe(puede);
+  });
+
+  it.each(["publicado", "en_curso", "completado"] as const)(
+    "la hora NO se edita en %s, y se dice por qué",
+    (estado) => {
+      // La base lo rechaza a propósito: la hora es la vara que mide la
+      // puntualidad y de ahí sale el bono.
+      const r = sePuedeEditarHora(diaCon(estado));
+      expect(r).toEqual({
+        puede: false,
+        motivo: "La hora fija la puntualidad y el día ya se publicó",
+      });
+    },
+  );
+
+  it("la hora sí se edita en borrador", () => {
+    expect(sePuedeEditarHora(diaCon("borrador")).puede).toBe(true);
+  });
+});
+
+describe("vecinoParaFoco", () => {
+  // A dónde salta el foco cuando una fila desaparece del DOM. Sin esto el
+  // navegador lo manda a `<body>` y quien navega con teclado pierde el sitio.
+  const paradas: Parada[] = ["a", "b", "c"].map((id, i) => ({
+    id,
+    orden: i + 1,
+    tiendaId: `t${i}`,
+    tiendaNombre: `Tienda ${id}`,
+    hora: null,
+    tieneVisita: false,
+  }));
+
+  it("salta al vecino de ARRIBA cuando lo hay", () => {
+    expect(vecinoParaFoco(paradas, 1)).toBe("a");
+    expect(vecinoParaFoco(paradas, 2)).toBe("b");
+  });
+
+  it("quitando la PRIMERA salta al de abajo", () => {
+    expect(vecinoParaFoco(paradas, 0)).toBe("b");
+  });
+
+  it("si era la única no hay vecino: lo resuelve el título del día", () => {
+    expect(vecinoParaFoco([paradas[0]!], 0)).toBeNull();
+    expect(vecinoParaFoco([], 0)).toBeNull();
   });
 });
