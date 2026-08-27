@@ -56,9 +56,15 @@ async function diaDeLaVisita(c: Client, visitaId: string): Promise<string> {
 /**
  * El día en que se sembró la base. Sirve de ancla ÚNICA para todo lo que viene
  * del seed —visitas, contingencias y las alertas que estas disparan— porque
- * `now()` es constante dentro de una transacción y el seed entero corre en una:
- * todas esas filas comparten el mismo instante, así que basta con preguntarle a
- * una.
+ * `now()` es constante dentro de una transacción y esas filas se escriben todas
+ * en la misma: comprobado con `xmin` sobre un `supabase db reset` real, las tres
+ * tablas comparten transacción (y las dos visitas, además, un solo `insert`).
+ *
+ * Que el seed corra en UNA transacción es comportamiento observado de la CLI,
+ * no un contrato documentado. Si algún día dejara de serlo, este ancla deja de
+ * valer y habría que fechar por fila —`diaDeLaVisita`— en cada test. La forma de
+ * volver a comprobarlo es esa misma: `select xmin from public.visita`, y compararlo
+ * con el de `contingencia` y `alerta`.
  */
 let diaDelSeed: string;
 
@@ -256,11 +262,15 @@ describe("tablero_dia", () => {
       const filas = await tablero(c, hoy);
       expect(filas.map((f) => f.visita_id)).toContain(VISITA_MARACUMANGO);
 
-      const manana = await c.query<{ d: string }>(
-        `select to_char($1::date + 1, 'YYYY-MM-DD') as d`,
+      // El día siguiente se suma en SQL, sobre el mismo día que se acaba de
+      // leer. Antes se traía a TypeScript con un `?? ""` detrás: una fila
+      // ausente se habría convertido en una fecha vacía —y en un tablero vacío
+      // que hace pasar este test por la razón contraria a la que dice probar.
+      const siguiente = await c.query<FilaTablero>(
+        `select * from public.tablero_dia(($1::date + 1))`,
         [hoy],
       );
-      const delDiaSiguiente = await tablero(c, manana.rows[0]?.d ?? "");
+      const delDiaSiguiente = siguiente.rows;
       expect(delDiaSiguiente.map((f) => f.visita_id)).not.toContain(
         VISITA_MARACUMANGO,
       );
