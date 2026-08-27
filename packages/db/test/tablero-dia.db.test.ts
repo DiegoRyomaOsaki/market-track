@@ -7,7 +7,9 @@ import { comoUsuario, conectar, TENANTS, USUARIOS } from "./ayudas";
 // fotos, motivo de la contingencia) los calcula la base una sola vez, así que se
 // prueban contra la base y no contra el helper de TypeScript que los pinta.
 //
-// El seed deja una visita por cliente, con foto y contingencia, abiertas hoy.
+// El seed deja una visita por cliente, con foto y contingencia, abiertas el día
+// en que se sembró la base — que NO tiene por qué ser hoy. Ese día se le
+// pregunta al dato (`diaDelSeed`); ver el porqué en `diaDeLaVisita`.
 
 const VISITA_MARACUMANGO = "a0000010-0000-0000-0000-000000000001";
 const PARADA = "a0000009-0000-0000-0000-000000000001";
@@ -26,21 +28,54 @@ type FilaTablero = {
 
 let db: Client;
 
+/**
+ * El día de Lima en que quedó fechada una visita. Se le pregunta A LA FILA, que
+ * es lo único que sabe de verdad en qué día cae.
+ *
+ * Antes esto miraba el reloj (`now()`) y daba por hecho que el seed era de hoy.
+ * El seed fecha sus filas con `now()` al correr `supabase db reset`, así que las
+ * dos fechas coinciden solo mientras nadie deje `supabase start` levantado de un
+ * día para otro. Cuando dejaban de coincidir, el fallo era `expected 0 to be 2`
+ * — que parece un fallo de la RLS o de la función y no lo es.
+ */
+async function diaDeLaVisita(c: Client, visitaId: string): Promise<string> {
+  const r = await c.query<{ dia: string }>(
+    `select to_char((check_in_at at time zone 'America/Lima')::date, 'YYYY-MM-DD') as dia
+     from public.visita where id = $1`,
+    [visitaId],
+  );
+  const dia = r.rows[0]?.dia;
+  if (!dia) {
+    throw new Error(
+      `El seed no trae la visita ${visitaId}: corre \`supabase db reset\`.`,
+    );
+  }
+  return dia;
+}
+
+/**
+ * El día en que se sembró la base. Sirve de ancla ÚNICA para todo lo que viene
+ * del seed —visitas, contingencias y las alertas que estas disparan— porque
+ * `now()` es constante dentro de una transacción y esas filas se escriben todas
+ * en la misma: comprobado con `xmin` sobre un `supabase db reset` real, las tres
+ * tablas comparten transacción (y las dos visitas, además, un solo `insert`).
+ *
+ * Que el seed corra en UNA transacción es comportamiento observado de la CLI,
+ * no un contrato documentado. Si algún día dejara de serlo, este ancla deja de
+ * valer y habría que fechar por fila —`diaDeLaVisita`— en cada test. La forma de
+ * volver a comprobarlo es esa misma: `select xmin from public.visita`, y compararlo
+ * con el de `contingencia` y `alerta`.
+ */
+let diaDelSeed: string;
+
 beforeAll(async () => {
   db = await conectar();
+  diaDelSeed = await diaDeLaVisita(db, VISITA_MARACUMANGO);
 });
 
 afterAll(async () => {
   await db.end();
 });
-
-/** El día de calendario en Lima, que es el "hoy" del negocio. */
-async function hoyEnLima(c: Client): Promise<string> {
-  const r = await c.query<{ dia: string }>(
-    `select to_char((now() at time zone 'America/Lima')::date, 'YYYY-MM-DD') as dia`,
-  );
-  return r.rows[0]?.dia ?? "";
-}
 
 async function tablero(c: Client, fecha: string): Promise<FilaTablero[]> {
   const r = await c.query<FilaTablero>(
@@ -53,7 +88,7 @@ async function tablero(c: Client, fecha: string): Promise<FilaTablero[]> {
 describe("tablero_dia", () => {
   it("el supervisor ve las visitas de todos los clientes", async () => {
     await comoUsuario(db, USUARIOS.supervisor, async (c) => {
-      const filas = await tablero(c, await hoyEnLima(c));
+      const filas = await tablero(c, diaDelSeed);
       expect(filas.length).toBe(2);
     });
   });
@@ -65,7 +100,7 @@ describe("tablero_dia", () => {
     // filtra filas, no columnas. Si alguien añadiera esa política "inofensiva",
     // este test se cae.
     await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
-      expect(await tablero(c, await hoyEnLima(c))).toEqual([]);
+      expect(await tablero(c, diaDelSeed)).toEqual([]);
     });
   });
 
@@ -74,14 +109,14 @@ describe("tablero_dia", () => {
     // fila, así que ve su visita con su propio nombre. Lo que importa es que no
     // alcanza al resto del equipo — el DNI del compañero sigue fuera.
     await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
-      const filas = await tablero(c, await hoyEnLima(c));
+      const filas = await tablero(c, diaDelSeed);
       expect(filas.map((f) => f.visita_id)).toEqual([VISITA_MARACUMANGO]);
     });
   });
 
   it("trae el mercaderista con su DNI y el punto de venta", async () => {
     await comoUsuario(db, USUARIOS.supervisor, async (c) => {
-      const filas = await tablero(c, await hoyEnLima(c));
+      const filas = await tablero(c, diaDelSeed);
       const fila = filas.find((f) => f.visita_id === VISITA_MARACUMANGO);
       expect(fila?.mercaderista_nombre).toBeTruthy();
       expect(fila?.mercaderista_dni).toBeTruthy();
@@ -96,9 +131,7 @@ describe("tablero_dia", () => {
       // El conteo se compara consigo mismo, no contra un número fijo: cuántas
       // fotos trae el seed es asunto del seed, y clavarlo aquí convierte añadir
       // una en un test roto que no señala nada.
-      const antes = Number(
-        laVisita(await tablero(c, await hoyEnLima(c)))?.fotos,
-      );
+      const antes = Number(laVisita(await tablero(c, diaDelSeed))?.fotos);
       expect(antes).toBeGreaterThan(0);
 
       await c.query("set local role postgres");
@@ -109,7 +142,7 @@ describe("tablero_dia", () => {
       );
       await c.query("set local role authenticated");
 
-      const despues = await tablero(c, await hoyEnLima(c));
+      const despues = await tablero(c, diaDelSeed);
       expect(Number(laVisita(despues)?.fotos)).toBe(antes + 1);
     });
   });
@@ -118,7 +151,7 @@ describe("tablero_dia", () => {
     await comoUsuario(db, USUARIOS.supervisor, async (c) => {
       const laVisita = (filas: FilaTablero[]) =>
         filas.find((f) => f.visita_id === VISITA_MARACUMANGO);
-      expect(laVisita(await tablero(c, await hoyEnLima(c)))?.motivo).toBe(
+      expect(laVisita(await tablero(c, diaDelSeed))?.motivo).toBe(
         "Góndola en remodelación, no se pudo verificar precio",
       );
 
@@ -131,7 +164,7 @@ describe("tablero_dia", () => {
       );
       await c.query("set local role authenticated");
 
-      expect(laVisita(await tablero(c, await hoyEnLima(c)))?.motivo).toBe(
+      expect(laVisita(await tablero(c, diaDelSeed))?.motivo).toBe(
         "Pasillo cerrado por inventario",
       );
     });
@@ -140,15 +173,26 @@ describe("tablero_dia", () => {
   it("la visita sin contingencia no trae motivo", async () => {
     await comoUsuario(db, USUARIOS.supervisor, async (c) => {
       await c.query("set local role postgres");
+      // Fechada en el MISMO instante que la visita del seed, no con el default
+      // `now()`: si no, la fila nace hoy y el tablero se consulta por el día del
+      // seed, que no tienen por qué ser el mismo.
       const nueva = await c.query<{ id: string }>(
         `insert into public.visita
-           (tenant_id, rutero_parada_id, mercaderista_id, tienda_id)
-         values ($1, $2, $3, $4) returning id`,
-        [TENANTS.maracumango, PARADA, USUARIOS.mercaderistaMaracumango, TIENDA],
+           (tenant_id, rutero_parada_id, mercaderista_id, tienda_id, check_in_at)
+         values ($1, $2, $3, $4,
+                 (select check_in_at from public.visita where id = $5))
+         returning id`,
+        [
+          TENANTS.maracumango,
+          PARADA,
+          USUARIOS.mercaderistaMaracumango,
+          TIENDA,
+          VISITA_MARACUMANGO,
+        ],
       );
       await c.query("set local role authenticated");
 
-      const filas = await tablero(c, await hoyEnLima(c));
+      const filas = await tablero(c, diaDelSeed);
       const fila = filas.find((f) => f.visita_id === nueva.rows[0]?.id);
       expect(fila?.motivo).toBeNull();
       expect(Number(fila?.fotos)).toBe(0);
@@ -165,7 +209,12 @@ describe("tablero_dia", () => {
       );
       await c.query("set local role authenticated");
 
-      const enCurso = await tablero(c, await hoyEnLima(c));
+      // Esta visita SÍ se mueve a ahora —la duración de una visita abierta se
+      // mide contra `now()`—, así que su día se le pregunta a ella, no al seed
+      // ni al reloj. Preguntárselo a la fila es lo que hace que el test no se
+      // caiga si la corrida cruza la medianoche de Lima.
+      const diaEnCurso = await diaDeLaVisita(c, VISITA_MARACUMANGO);
+      const enCurso = await tablero(c, diaEnCurso);
       const abierta = enCurso.find((f) => f.visita_id === VISITA_MARACUMANGO);
       expect(abierta?.estado).toBe("en_curso");
       expect(abierta?.duracion_min).toBe(90);
@@ -180,7 +229,7 @@ describe("tablero_dia", () => {
       );
       await c.query("set local role authenticated");
 
-      const cerrada = await tablero(c, await hoyEnLima(c));
+      const cerrada = await tablero(c, diaEnCurso);
       const fila = cerrada.find((f) => f.visita_id === VISITA_MARACUMANGO);
       expect(fila?.duracion_min).toBe(25);
     });
@@ -197,24 +246,31 @@ describe("tablero_dia", () => {
     // día siguiente. Si la ventana se anclara en UTC, esta visita desaparecería
     // del tablero del día en que ocurrió.
     await comoUsuario(db, USUARIOS.supervisor, async (c) => {
-      const hoy = await hoyEnLima(c);
       await c.query("set local role postgres");
+      // El día lo pone `app.hoy_lima()` dentro de la propia sentencia y nunca
+      // viaja a TypeScript: el día que se escribe y el que se consulta salen de
+      // la misma fuente, que es justo lo que aquí se está probando.
       await c.query(
         `update public.visita
-         set check_in_at = ($1::date + time '20:00') at time zone 'America/Lima'
-         where id = $2`,
-        [hoy, VISITA_MARACUMANGO],
+         set check_in_at = (app.hoy_lima() + time '20:00') at time zone 'America/Lima'
+         where id = $1`,
+        [VISITA_MARACUMANGO],
       );
       await c.query("set local role authenticated");
 
+      const hoy = await diaDeLaVisita(c, VISITA_MARACUMANGO);
       const filas = await tablero(c, hoy);
       expect(filas.map((f) => f.visita_id)).toContain(VISITA_MARACUMANGO);
 
-      const manana = await c.query<{ d: string }>(
-        `select to_char($1::date + 1, 'YYYY-MM-DD') as d`,
+      // El día siguiente se suma en SQL, sobre el mismo día que se acaba de
+      // leer. Antes se traía a TypeScript con un `?? ""` detrás: una fila
+      // ausente se habría convertido en una fecha vacía —y en un tablero vacío
+      // que hace pasar este test por la razón contraria a la que dice probar.
+      const siguiente = await c.query<FilaTablero>(
+        `select * from public.tablero_dia(($1::date + 1))`,
         [hoy],
       );
-      const delDiaSiguiente = await tablero(c, manana.rows[0]?.d ?? "");
+      const delDiaSiguiente = siguiente.rows;
       expect(delDiaSiguiente.map((f) => f.visita_id)).not.toContain(
         VISITA_MARACUMANGO,
       );
@@ -245,7 +301,7 @@ describe("tablero_contingencias", () => {
 
   it("saca el paso y el motivo del payload que grabó el motor de alertas", async () => {
     await comoUsuario(db, USUARIOS.supervisor, async (c) => {
-      const filas = await contingencias(c, await hoyEnLima(c));
+      const filas = await contingencias(c, diaDelSeed);
       const suya = filas.find(
         (f) =>
           f.motivo === "Góndola en remodelación, no se pudo verificar precio",
@@ -258,7 +314,7 @@ describe("tablero_contingencias", () => {
 
   it("el supervisor ve las contingencias de todos los clientes", async () => {
     await comoUsuario(db, USUARIOS.supervisor, async (c) => {
-      expect(await contingencias(c, await hoyEnLima(c))).toHaveLength(2);
+      expect(await contingencias(c, diaDelSeed)).toHaveLength(2);
     });
   });
 
@@ -266,13 +322,13 @@ describe("tablero_contingencias", () => {
     // Mismo motivo que en `tablero_dia`: el join a `profile` deja fuera a quien
     // no es staff. El feed de contingencias es del supervisor.
     await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
-      expect(await contingencias(c, await hoyEnLima(c))).toEqual([]);
+      expect(await contingencias(c, diaDelSeed)).toEqual([]);
     });
   });
 
   it("no cuela alertas que no son de contingencia", async () => {
     await comoUsuario(db, USUARIOS.supervisor, async (c) => {
-      const filas = await contingencias(c, await hoyEnLima(c));
+      const filas = await contingencias(c, diaDelSeed);
       // El seed también deja alertas de `quiebre` sobre las mismas visitas.
       expect(filas.every((f) => f.paso !== null)).toBe(true);
       expect(filas).toHaveLength(2);
