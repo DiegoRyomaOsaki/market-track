@@ -26,7 +26,6 @@ type FilaFoto = {
 var mockEstado: {
   movidos: { from: string; to: string }[];
   existentes: Set<string>;
-  borrados: string[];
   manifiesto: string | null;
   sql: { sql: string; args: unknown[] }[];
   visitas: Record<string, string>;
@@ -55,10 +54,7 @@ jest.mock("expo-file-system/legacy", () => ({
     mockEstado.existentes.add(to);
     return Promise.resolve();
   },
-  deleteAsync: (ruta: string) => {
-    mockEstado.borrados.push(ruta);
-    return Promise.resolve();
-  },
+  deleteAsync: () => Promise.resolve(),
   makeDirectoryAsync: () => Promise.resolve(),
   uploadAsync: () => Promise.resolve({ status: 200 }),
 }));
@@ -112,7 +108,6 @@ beforeEach(() => {
   mockEstado = {
     movidos: [],
     existentes: new Set(),
-    borrados: [],
     manifiesto: null,
     sql: [],
     visitas: { [VISITA]: YO },

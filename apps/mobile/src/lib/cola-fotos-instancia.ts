@@ -2,11 +2,6 @@ import type { TipoFoto } from "@market-track/shared";
 import * as Crypto from "expo-crypto";
 import * as FileSystem from "expo-file-system/legacy";
 
-import {
-  DIR_FOTOS,
-  RUTA_MANIFIESTO_FOTOS,
-  RUTA_MANIFIESTO_TEMPORAL,
-} from "./limpieza-dispositivo";
 import { useEffect, useState } from "react";
 
 import {
@@ -14,6 +9,11 @@ import {
   ColaFotos,
   type FotoPendiente,
 } from "./cola-fotos";
+import {
+  DIR_FOTOS,
+  RUTA_MANIFIESTO_FOTOS as RUTA_MANIFIESTO,
+  RUTA_MANIFIESTO_TEMPORAL as TEMPORAL,
+} from "./limpieza-dispositivo";
 import type { FotoCapturada } from "./foto-captura";
 import { puntoAEwkt } from "./geo";
 import { db } from "./powersync/db";
@@ -29,9 +29,6 @@ import { supabase } from "./supabase";
 // `manipulateAsync` lo deja en caché, y Android purga la caché bajo presión de
 // almacenamiento — una foto tomada en un sótano y subida tres días después puede
 // no tener archivo.
-
-const RUTA_MANIFIESTO = RUTA_MANIFIESTO_FOTOS;
-const TEMPORAL = RUTA_MANIFIESTO_TEMPORAL;
 
 const almacenDisco: AlmacenManifiesto = {
   async leer() {
