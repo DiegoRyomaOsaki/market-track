@@ -217,7 +217,10 @@ jobs:
       # deja el código en su log; el harness lo lee de `auth.mfa_challenges`, no del
       # correo. El OTP acaba en el log del runner: son usuarios de juguete de un
       # Supabase efímero.
-      OTP_DRY_RUN: "true"
+      # Con prefijo de proyecto: `OTP_DRY_RUN` a secas es tan genérico que
+      # alguien podría tenerlo exportado por otra herramienta y encender el
+      # dry-run sin pedirlo.
+      MT_OTP_DRY_RUN: "true"
 
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0

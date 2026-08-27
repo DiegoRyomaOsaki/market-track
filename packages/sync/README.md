@@ -62,7 +62,7 @@ valiendo:
 supabase functions serve --env-file supabase/functions/.env
 ```
 
-Sin proveedor de correo, `enviar-otp` devuelve 500 salvo que `OTP_DRY_RUN=true`
+Sin proveedor de correo, `enviar-otp` devuelve 500 salvo que `MT_OTP_DRY_RUN=true`
 —entonces deja el código en su log—; el harness no lo necesita, porque lo lee de
 `auth.mfa_challenges` por SQL. En CI se pone a `true` por eso.
 

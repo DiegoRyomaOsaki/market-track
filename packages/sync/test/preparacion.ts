@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
@@ -161,6 +161,43 @@ async function hayReplicacionViva(): Promise<boolean> {
   }
 }
 
+const STREAMS = fileURLToPath(
+  new URL("../config/streams.yaml", import.meta.url),
+);
+
+/**
+ * ¿El servicio arrancó ANTES de la última edición de las sync rules?
+ *
+ * PowerSync lee `streams.yaml` al arrancar y no lo recarga. Editar las reglas y
+ * lanzar el harness sin reiniciar devuelve resultados de las reglas VIEJAS — y
+ * eso es la misma mentira que este harness existe para no contar, solo que por
+ * otro motivo: el veredicto no corresponde al código que se está mirando.
+ *
+ * Medido: pasó durante la revisión de este mismo cambio. Se mutaron las reglas,
+ * se restauró el fichero y el servicio siguió sirviendo la versión mutada; el
+ * harness dio un rojo que no correspondía a nada del árbol.
+ */
+async function laConfigEstaRancia(): Promise<boolean> {
+  try {
+    const [{ stdout: id }, reglas] = await Promise.all([
+      ejecutar("docker", ["compose", "-f", COMPOSE, "ps", "-q", "powersync"]),
+      stat(STREAMS),
+    ]);
+    if (!id.trim()) return false;
+    const { stdout: arranque } = await ejecutar("docker", [
+      "inspect",
+      "-f",
+      "{{.State.StartedAt}}",
+      id.trim(),
+    ]);
+    return reglas.mtime.getTime() > new Date(arranque.trim()).getTime();
+  } catch {
+    // Si no se puede saber, no se decide por sospecha: el resto de
+    // comprobaciones sigue su curso.
+    return false;
+  }
+}
+
 /**
  * Asegura que PowerSync está replicando contra la base ACTUAL.
  *
@@ -177,7 +214,10 @@ async function hayReplicacionViva(): Promise<boolean> {
  * a las once de la noche.
  */
 async function asegurarReplicacion(): Promise<void> {
-  if (await hayReplicacionViva()) return;
+  // Dos formas distintas de servir datos que no corresponden: sin slot es que la
+  // base se recreó debajo; con la config rancia es que las reglas cambiaron
+  // encima. Las dos se arreglan igual, y las dos hacen mentir al harness.
+  if ((await hayReplicacionViva()) && !(await laConfigEstaRancia())) return;
 
   try {
     await ejecutar("docker", [

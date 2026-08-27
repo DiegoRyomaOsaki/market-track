@@ -419,9 +419,16 @@ deno_version = 2
 # `OTP_DRY_RUN` sin valor equivale a "false", que es el comportamiento de
 # siempre: la función pide RESEND_API_KEY. Se pone a "true" solo en CI, donde no
 # hay proveedor de correo y el OTP se lee de la base.
+#
+# La variable del HOST se llama `MT_OTP_DRY_RUN`, con prefijo de proyecto, aunque
+# dentro del runtime la función siga leyendo `OTP_DRY_RUN`. El nombre a secas es
+# demasiado genérico: si alguien lo tuviera exportado en su shell por otra
+# herramienta, su `supabase start` activaría el dry-run EN SILENCIO y el código de
+# 2FA acabaría en texto plano en el log de la función. Un modo así se enciende
+# solo cuando se pide, no cuando se hereda.
 [edge_runtime.secrets]
 SEND_SMS_HOOK_SECRET = "env(SEND_SMS_HOOK_SECRET)"
-OTP_DRY_RUN = "env(OTP_DRY_RUN)"
+OTP_DRY_RUN = "env(MT_OTP_DRY_RUN)"
 
 # La invoca un Database Webhook (pg_net), que no manda un JWT de Supabase: su
 # puerta es el secreto compartido (x-webhook-secret), verificado dentro de la
