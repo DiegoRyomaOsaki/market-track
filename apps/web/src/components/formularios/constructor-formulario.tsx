@@ -140,6 +140,9 @@ export function ConstructorFormulario({
   const problemas = useMemo(() => problemasDeDefinicion(pasos), [pasos]);
   const esValido = problemas.length === 0;
 
+  // Ojo: NO toca `anuncio`. Todo borrado llama aquí al final, así que meter el
+  // anuncio en `mensaje` lo pondría y lo borraría en la misma tanda — el lector
+  // no llegaría a decir nada. Por eso son dos estados y no uno.
   function tocar() {
     setSinGuardar(true);
     setMensaje(null);
@@ -183,11 +186,14 @@ export function ConstructorFormulario({
 
   function eliminarPaso(idx: number) {
     const eliminado = pasos[idx];
-    const anterior = pasos[idx - 1];
+    // Al que PASA A OCUPAR el sitio; si se borró el último, al de arriba. Salir
+    // de la lista (al botón de agregar) solo cuando ya no queda ninguno: mandar
+    // el foco ahí teniendo vecinos obliga a subir de nuevo por toda la lista.
+    const vecino = pasos[idx + 1] ?? pasos[idx - 1];
     setPasos((prev) => prev.filter((_, i) => i !== idx));
     // El botón `✕` que tenía el foco se va con su fila. Sin esto el foco cae al
     // `<body>` y quien navega con teclado pierde su sitio en la lista.
-    setFoco(anterior ? idTituloPaso(anterior.id) : ID_AGREGAR_PASO);
+    setFoco(vecino ? idTituloPaso(vecino.id) : ID_AGREGAR_PASO);
     setAnuncio(
       `Paso ${eliminado?.titulo.trim() || idx + 1} eliminado. ` +
         cuantosQuedan(pasos.length - 1, "paso", "pasos"),
@@ -214,7 +220,9 @@ export function ConstructorFormulario({
   function eliminarCampo(pasoIdx: number, campoIdx: number) {
     const paso = pasos[pasoIdx];
     const eliminado = paso?.campos[campoIdx];
-    const anterior = paso?.campos[campoIdx - 1];
+    // Mismo criterio que en los pasos: al que pasa a ocupar el sitio, si no al
+    // de arriba, y solo al botón de agregar cuando el paso se queda sin campos.
+    const vecino = paso?.campos[campoIdx + 1] ?? paso?.campos[campoIdx - 1];
     setPasos((prev) =>
       prev.map((p, i) =>
         i === pasoIdx
@@ -222,11 +230,9 @@ export function ConstructorFormulario({
           : p,
       ),
     );
-    // Al campo de arriba; si era el primero, al botón que agrega otro — que es
-    // lo más cerca que queda de donde estaba el foco.
     setFoco(
-      anterior
-        ? idEtiquetaCampo(anterior.id)
+      vecino
+        ? idEtiquetaCampo(vecino.id)
         : paso
           ? idAgregarCampo(paso.id)
           : null,
@@ -351,16 +357,26 @@ export function ConstructorFormulario({
       {/* Las tres regiones se montan SIEMPRE y solo cambia su texto. Una que
           aparece al terminar la operación se anuncia en el mismo instante en
           que se inserta, y algunos lectores de pantalla se la pierden — justo
-          en el primer intento, que es el que importa. `empty:hidden` es lo que
-          evita que se vea la caja vacía mientras no hay nada que decir. */}
+          en el primer intento, que es el que importa.
+
+          `empty:hidden` es lo que evita que se vea la caja vacía: un hijo de
+          cadena vacía no crea nodo de texto, así que `:empty` casa (Selectors
+          nivel 4 excluye los nodos de texto de longitud cero). NO se cambia por
+          `hidden={!mensaje}`: eso volvería a sacar el elemento del árbol y
+          reintroduciría exactamente el fallo que este bloque arregla.
+
+          Cada región lleva nombre porque hay dos `status` a la vez: con nombre
+          se distinguen al navegar por regiones, y no hay que adivinar cuál sonó. */}
       <p
         role="alert"
+        aria-label="Error de la operación"
         className="rounded-[9px] bg-alerta-suave px-3 py-2 text-[13px] font-semibold text-alerta-texto empty:hidden"
       >
         {error ?? ""}
       </p>
       <p
         role="status"
+        aria-label="Resultado de la operación"
         className="rounded-[9px] bg-completado-suave px-3 py-2 text-[13px] font-semibold text-completado-texto empty:hidden"
       >
         {mensaje ?? ""}
@@ -368,7 +384,7 @@ export function ConstructorFormulario({
       {/* Lo que se elimina no deja rastro en pantalla, así que se dice aquí: el
           botón `✕` que tenía el foco desaparece con su fila, y sin esto el
           lector no anuncia nada de lo ocurrido. */}
-      <p role="status" className="sr-only">
+      <p role="status" aria-label="Cambios en la lista" className="sr-only">
         {anuncio}
       </p>
 

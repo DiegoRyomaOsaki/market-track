@@ -72,23 +72,13 @@ function montar(def: DefinicionBorrador = DOS_PASOS) {
   );
 }
 
-/** La región de resultado de la operación (guardar/publicar). */
-function regionResultado(): HTMLElement {
-  const region = screen
-    .getAllByRole("status")
-    .find((r) => !r.className.includes("sr-only"));
-  if (!region) throw new Error("No existe la región de resultado");
-  return region;
-}
-
-/** La región que narra los cambios de estructura (agregar/eliminar). */
-function regionAnuncio(): HTMLElement {
-  const region = screen
-    .getAllByRole("status")
-    .find((r) => r.className.includes("sr-only"));
-  if (!region) throw new Error("No existe la región de anuncios");
-  return region;
-}
+// Las dos regiones vivas se distinguen por su NOMBRE accesible, no por una clase
+// de CSS: la clase es estilo y podría cambiar en un refactor sin que nada avise,
+// y además no es como las distingue quien usa un lector de pantalla.
+const regionResultado = () =>
+  screen.getByRole("status", { name: "Resultado de la operación" });
+const regionAnuncio = () =>
+  screen.getByRole("status", { name: "Cambios en la lista" });
 
 beforeEach(() => {
   guardarBorrador.mockReset();
@@ -169,10 +159,12 @@ describe("ConstructorFormulario — foco al agregar", () => {
       screen.getAllByRole("button", { name: /agregar campo/i })[0]!,
     );
 
+    // Se identifica por estar VACÍO, no por su posición: si mañana el fixture
+    // trae otro campo, o si `agregarCampo` insertara arriba en vez de abajo, un
+    // índice fijo fallaría sin decir qué se rompió de verdad.
     await waitFor(() => {
-      const etiquetas = screen.getAllByLabelText("Etiqueta");
-      // El nuevo es el tercero del documento: dos del primer paso y el suyo.
-      expect(etiquetas[2]).toHaveFocus();
+      expect(document.activeElement).toHaveAccessibleName("Etiqueta");
+      expect(document.activeElement).toHaveValue("");
     });
   });
 });
@@ -191,7 +183,9 @@ describe("ConstructorFormulario — foco y anuncio al eliminar", () => {
     expect(document.body).not.toHaveFocus();
   });
 
-  it("eliminar el PRIMER campo cae en el botón de agregar, que es el vecino que queda", async () => {
+  it("eliminar el PRIMER campo deja el foco en el que pasa a ocupar su sitio", async () => {
+    // Antes esto mandaba el foco al botón de agregar, saltándose los campos que
+    // seguían: con una lista larga había que volver a subir por toda ella.
     montar();
 
     fireEvent.click(
@@ -199,8 +193,36 @@ describe("ConstructorFormulario — foco y anuncio al eliminar", () => {
     );
 
     await waitFor(() =>
+      expect(screen.getByDisplayValue("Segundo campo")).toHaveFocus(),
+    );
+  });
+
+  it("solo se sale de la lista cuando el paso se queda SIN campos", async () => {
+    montar(
+      definicion([
+        {
+          id: "p1",
+          titulo: "Único paso",
+          orden: 0,
+          campos: [
+            {
+              id: "c1",
+              tipo: "texto",
+              etiqueta: "Solo campo",
+              obligatorio: false,
+            },
+          ],
+        },
+      ]),
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /eliminar el campo Solo campo/i }),
+    );
+
+    await waitFor(() =>
       expect(
-        screen.getAllByRole("button", { name: /agregar campo/i })[0],
+        screen.getByRole("button", { name: /agregar campo/i }),
       ).toHaveFocus(),
     );
   });
@@ -252,6 +274,35 @@ describe("ConstructorFormulario — foco y anuncio al eliminar", () => {
     );
     expect(regionAnuncio()).toHaveTextContent(
       "Paso Único paso eliminado. No queda ningún paso.",
+    );
+  });
+
+  it("el recuento va en plural cuando quedan varios", async () => {
+    // La rama que faltaba: `cuantosQuedan` tiene tres (0, 1, y varios) y sin
+    // este caso la del plural no la ejercía nadie.
+    montar(
+      definicion([
+        {
+          id: "p1",
+          titulo: "Paso lleno",
+          orden: 0,
+          campos: [
+            { id: "c1", tipo: "texto", etiqueta: "Uno", obligatorio: false },
+            { id: "c2", tipo: "texto", etiqueta: "Dos", obligatorio: false },
+            { id: "c3", tipo: "texto", etiqueta: "Tres", obligatorio: false },
+          ],
+        },
+      ]),
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /eliminar el campo Uno/i }),
+    );
+
+    await waitFor(() =>
+      expect(regionAnuncio()).toHaveTextContent(
+        "Campo Uno eliminado. Quedan 2 campos.",
+      ),
     );
   });
 
