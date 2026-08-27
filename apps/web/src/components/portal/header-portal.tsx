@@ -23,7 +23,7 @@ export function HeaderPortal({ cliente }: { cliente: string }) {
   const titulo = item?.titulo ?? "Portal";
 
   return (
-    <header className="sticky top-0 z-30 flex h-[60px] flex-none items-center gap-4 border-b border-border bg-background px-6">
+    <header className="sticky top-0 z-30 flex h-[60px] flex-none items-center gap-4 border-b border-border bg-background px-6 print:hidden">
       <div className="min-w-0 flex-1">
         <h1 className="text-base font-bold tracking-tight">{titulo}</h1>
         {item?.subtitulo && (

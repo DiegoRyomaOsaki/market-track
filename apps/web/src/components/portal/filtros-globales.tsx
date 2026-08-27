@@ -52,7 +52,7 @@ export function FiltrosGlobales({
     <form
       key={params.toString()}
       onSubmit={aplicar}
-      className="flex flex-wrap items-end gap-3 border-b border-border bg-background px-6 py-3"
+      className="flex flex-wrap items-end gap-3 border-b border-border bg-background px-6 py-3 print:hidden"
     >
       <label className="flex flex-col gap-1">
         <span className={etiqueta}>Desde</span>

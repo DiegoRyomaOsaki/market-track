@@ -11,7 +11,7 @@ export const TD = "px-4 py-3 align-middle";
 
 export function Tarjeta({ children }: { children: React.ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-border bg-background">
+    <div className="overflow-x-auto rounded-xl border border-border bg-background print:overflow-visible">
       <table className="w-full border-collapse text-[13px]">{children}</table>
     </div>
   );
@@ -65,9 +65,20 @@ export function Estado({ activo }: { activo: boolean }) {
 }
 
 /** El estado vacío y el de error de una tabla: mismo hueco, mismo peso visual. */
-export function Aviso({ children }: { children: React.ReactNode }) {
+export function Aviso({
+  children,
+  esError = false,
+}: {
+  children: React.ReactNode;
+  /** Marca el aviso como fallo del sistema, no como estado normal. Sin esto, un
+   *  error y una elección del usuario suenan igual con un lector de pantalla. */
+  esError?: boolean;
+}) {
   return (
-    <div className="rounded-xl border border-dashed border-border bg-background p-10 text-center text-sm text-muted-foreground">
+    <div
+      role={esError ? "alert" : undefined}
+      className="rounded-xl border border-dashed border-border bg-background p-10 text-center text-sm text-muted-foreground"
+    >
       {children}
     </div>
   );
