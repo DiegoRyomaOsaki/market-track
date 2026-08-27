@@ -1,3 +1,5 @@
+import { prepararHarness } from "./preparacion";
+
 import { Client } from "pg";
 import { beforeAll, describe, expect, it } from "vitest";
 
@@ -21,8 +23,11 @@ import {
 // No pasa por RLS (PowerSync replica con BYPASSRLS), así que se prueba aquí,
 // conectando clientes reales y afirmando qué filas llegan.
 //
-// Prerrequisitos: `supabase start`, `supabase functions serve` y
-// `pnpm --filter @market-track/sync sync:up`. Sin ellos el harness no corre.
+// Prerrequisitos: `supabase start` y `pnpm --filter @market-track/sync sync:up`.
+// Del resto se encarga el preflight (`preparacion.ts`): aplica el setup de
+// Postgres, comprueba el rol y la publicación, y se asegura de que PowerSync esté
+// replicando contra la base ACTUAL. Si falta algo, lo dice — antes no: un
+// prerrequisito ausente salía disfrazado de fallo de aislamiento.
 
 const TABLAS = [
   "tienda",
@@ -40,13 +45,10 @@ const TABLAS = [
 ] as const;
 
 describe("aislamiento de las sync rules", () => {
-  beforeAll(() => {
-    if (!process.env.ANON_KEY) {
-      throw new Error(
-        "Falta ANON_KEY. Corre el harness con la anon key del Supabase local en el entorno.",
-      );
-    }
-  });
+  // Prepara Y comprueba los prerrequisitos. Sin esto, una replicación muerta se
+  // ve igual que un fallo de aislamiento: el harness acusaría a las sync rules de
+  // un problema que está tres capas más abajo.
+  beforeAll(prepararHarness, 60_000);
 
   it("un mercaderista solo replica los datos de SU cliente", async () => {
     const sesion = await sesionAal2(USUARIOS.joseMaracumango.email);

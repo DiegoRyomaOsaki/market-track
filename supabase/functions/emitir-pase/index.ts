@@ -23,7 +23,12 @@ import {
   clienteServicio,
   json,
 } from "../_shared/supabase.ts";
-import { generarCodigo, hashCodigo, puedeEmitirPase } from "../_shared/pase.ts";
+import {
+  falloAlEmitir,
+  generarCodigo,
+  hashCodigo,
+  puedeEmitirPase,
+} from "../_shared/pase.ts";
 
 // Fail-closed: sin el secreto no se puede acuñar el hash del código, así que la
 // función NO arranca — nunca un fallback que lo abra (igual que el webhook).
@@ -33,10 +38,6 @@ if (!PASE_HASH_SECRET) {
     "PASE_HASH_SECRET no configurado: la función no arranca (fail-closed)",
   );
 }
-
-// Cota antiabuso: cuántos pases se pueden emitir a un mismo usuario en 24 h.
-const LIMITE_DIARIO = 3;
-const VENTANA_MS = 24 * 60 * 60 * 1000;
 
 // Deadline de las consultas: una llamada colgada a Postgres no debe bloquear la
 // respuesta ni consumir el presupuesto de la función (Deno `fetch` no trae timeout).
@@ -95,24 +96,6 @@ Deno.serve(async (req) => {
     return json(decision.status, { error: decision.error });
   }
 
-  // Límite diario por usuario objetivo: pases no revocados en las últimas 24 h.
-  const desde = new Date(Date.now() - VENTANA_MS).toISOString();
-  const { count, error: errConteo } = await servicio
-    .from("pase_acceso_temporal")
-    .select("id", { count: "exact", head: true })
-    .eq("profile_id", profile_id)
-    .is("revocado_at", null)
-    .gte("generado_at", desde)
-    .abortSignal(AbortSignal.timeout(DB_TIMEOUT_MS));
-  if (errConteo) {
-    return json(500, { error: "no se pudo verificar el límite diario" });
-  }
-  if ((count ?? 0) >= LIMITE_DIARIO) {
-    return json(429, {
-      error: "límite diario de pases alcanzado para este usuario",
-    });
-  }
-
   // Código de 6 dígitos + su HMAC. El código se revela UNA vez; se guarda el hash.
   const codigo = generarCodigo();
   const codigo_hash = await hashCodigo(codigo, PASE_HASH_SECRET);
@@ -125,12 +108,22 @@ Deno.serve(async (req) => {
     .abortSignal(AbortSignal.timeout(DB_TIMEOUT_MS))
     .single();
   if (errInsert || !creado) {
-    // Aquí todo lo previo (existencia, rol, límite, forma) ya se validó: un fallo
-    // de insert es de infraestructura, no del cliente → 500.
-    return json(500, {
-      error: "no se pudo emitir el pase",
-      // Recortado: los mensajes de infra pueden arrastrar contenido de más.
-      detalle: errInsert?.message.slice(0, 200),
+    // El tope lo impone el trigger `pase_tope_por_ventana`, no esta función: es
+    // la única forma de que no se pueda rodear insertando directo por PostgREST,
+    // y de que dos emisiones simultáneas no pasen las dos. Aquí solo se traduce
+    // su rechazo al 429 que el cliente ya esperaba.
+    //
+    // Por el CÓDIGO y no por el texto del mensaje: un mensaje es copy y cambia;
+    // el SQLSTATE es el contrato.
+    const fallo = falloAlEmitir(errInsert?.code);
+    return json(fallo.estado, {
+      error: fallo.error,
+      // El detalle solo acompaña al 500: en el 429 la causa ya la dice el
+      // mensaje, y adjuntar el error de infraestructura no le aporta nada a
+      // quien llama. Recortado, porque puede arrastrar contenido de más.
+      ...(fallo.estado === 500
+        ? { detalle: errInsert?.message.slice(0, 200) }
+        : {}),
     });
   }
 

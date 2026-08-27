@@ -144,3 +144,43 @@ export function paseQueCoincide(
   }
   return coincidencia;
 }
+
+// --- Cota antiabuso -----------------------------------------------------------
+
+/**
+ * El SQLSTATE con el que la base rechaza una emisión por encima del tope.
+ *
+ * El tope y su ventana viven en el trigger `pase_tope_por_ventana`, no aquí: si
+ * los contara también esta función, serían dos definiciones del mismo número —y
+ * la que se salta el rodeo por PostgREST es la de la base. Lo único que queda de
+ * este lado es traducir el rechazo al 429 que el cliente espera.
+ *
+ * Se compara por CÓDIGO y no por el texto del mensaje: el mensaje es copy y
+ * cambia; el SQLSTATE es el contrato.
+ */
+export const SQLSTATE_TOPE_ALCANZADO = "53400";
+
+/**
+ * Qué responde `emitir-pase` cuando el `insert` falla.
+ *
+ * Vive aquí y no dentro del handler porque es la única lógica del camino de
+ * emisión que decide entre "el cliente pidió de más" y "algo se rompió", y en un
+ * `index.ts` nacería sin cobertura: ninguna Edge Function del repo tiene test de
+ * handler.
+ *
+ * Solo el rechazo del tope es un 429. Todo lo demás —una FK, un NOT NULL, un
+ * CHECK, una caída de red— es infraestructura: a estas alturas la existencia, el
+ * rol y la forma ya se validaron, así que no puede ser culpa del cliente.
+ */
+export function falloAlEmitir(codigo: string | undefined): {
+  estado: 429 | 500;
+  error: string;
+} {
+  if (codigo === SQLSTATE_TOPE_ALCANZADO) {
+    return {
+      estado: 429,
+      error: "límite diario de pases alcanzado para este usuario",
+    };
+  }
+  return { estado: 500, error: "no se pudo emitir el pase" };
+}

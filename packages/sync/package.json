@@ -9,7 +9,8 @@
     "test": "vitest run --dir src",
     "sync:up": "docker compose -f config/docker-compose.yaml up -d",
     "sync:down": "docker compose -f config/docker-compose.yaml down -v",
-    "test:sync": "vitest run --dir test"
+    "test:sync": "vitest run --dir test --no-file-parallelism",
+    "sync:setup": "node --experimental-strip-types test/aplicar-setup.ts"
   },
   "devDependencies": {
     "@powersync/common": "^1.57.2",
