@@ -222,7 +222,14 @@ intact — or worse, passes green while masking a real failure.
 
 **Logic inside a component of a workspace without component tests is untested
 by construction.** Extract it to a pure function; that is the only way its
-error branches get covered.
+error branches get covered. **`apps/mobile` stopped being such a workspace on
+27 Aug 2026**: `render()` from `@testing-library/react-native` does mount a
+real tree there (the belief that it could not came from an un-awaited promise —
+see the pitfall in `CLAUDE.md`). What lives *only* inside a mobile component —
+loading state, error branches, focus, what gets painted when the local query
+fails — is now covered by a component test rather than extracted for the sole
+purpose of making it reachable. Extraction remains right when the logic is
+genuinely domain logic; it is no longer the *only* option.
 
 **Keep tests fast and deterministic.** No network calls in unit tests. No
 sleep-based timing. No order-dependent setup.
