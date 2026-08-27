@@ -35,18 +35,5 @@
     "typescript-eslint": "^8.64.0",
     "vitest": "^4.1.10",
     "zod": "^4.4.3"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@op-engineering/op-sqlite",
-      "better-sqlite3"
-    ],
-    "packageExtensions": {
-      "@powersync/shared-internals": {
-        "dependencies": {
-          "@powersync/common": "2.0.0"
-        }
-      }
-    }
   }
 }
