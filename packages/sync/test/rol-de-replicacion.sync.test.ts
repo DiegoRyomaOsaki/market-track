@@ -1,5 +1,5 @@
 import { Client } from "pg";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { PG } from "./ayudas";
 import { prepararPostgres } from "./preparacion";
@@ -42,6 +42,12 @@ async function comoSuperusuario<T>(fn: (c: Client) => Promise<T>): Promise<T> {
     await c.end();
   }
 }
+
+// En una base recién creada el rol NO existe todavía, y estos casos empiezan
+// rompiéndolo: sin esto, el primer `alter role` muere con `42704 role does not
+// exist`. En una máquina donde ya se corrió el harness antes no se nota — lo
+// destapó la primera corrida en CI.
+beforeAll(prepararPostgres);
 
 // Pase lo que pase, el rol queda reparado: un fallo a mitad no puede dejar la
 // replicación rota para el resto de la sesión ni para la siguiente.
