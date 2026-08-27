@@ -10,28 +10,26 @@ import { TableroVivo } from "./tablero-vivo";
 // El cliente de Supabase se sustituye por un espía que anota el ORDEN de lo que
 // pasa: `setAuth()` tiene que ir antes de suscribirse o Realtime no evalúa la
 // RLS y rechaza el canal privado.
+//
+// El espía respeta el contrato real de la librería, que es lo que evita un verde
+// falso: `.on()` devuelve el canal para poder encadenar, `.subscribe()` es
+// SÍNCRONO (no devuelve promesa) y `removeChannel()` sí devuelve una, resuelta a
+// `'ok'`. Comprobado contra los tipos instalados de `@supabase/supabase-js`.
 
 const espia = vi.hoisted(() => {
   const orden: string[] = [];
-  const retirados: string[] = [];
-
-  // Con la compuerta puesta, `setAuth` se queda esperando: así se puede
-  // desmontar el componente en mitad del arranque.
-  let compuerta: Promise<void> | null = null;
-  let abrir: (() => void) | null = null;
 
   const cliente = {
     realtime: {
-      setAuth: vi.fn(async () => {
-        if (compuerta) await compuerta;
+      setAuth: vi.fn(() => {
         orden.push("setAuth");
+        return Promise.resolve();
       }),
     },
-    channel: vi.fn((topico: string, opciones: unknown) => {
+    channel: vi.fn((topico: string) => {
       orden.push(`channel:${topico}`);
       const canal = {
         topico,
-        opciones,
         on: vi.fn(() => canal),
         subscribe: vi.fn(() => {
           orden.push(`subscribe:${topico}`);
@@ -40,25 +38,17 @@ const espia = vi.hoisted(() => {
       };
       return canal;
     }),
-    removeChannel: vi.fn((canal: { topico: string }) => {
-      retirados.push(canal.topico);
-      return Promise.resolve("ok");
-    }),
+    // El parámetro se declara aunque el cuerpo no lo use: es lo que tipa
+    // `mock.calls` y deja leer después qué canal se retiró, sin castear. La
+    // promesa resuelta a `'ok'` es la respuesta real de la librería.
+    removeChannel: vi.fn((_canal: { topico: string }) => Promise.resolve("ok")),
   };
 
   return {
     cliente,
     orden,
-    retirados,
-    frenarSetAuth: () => {
-      compuerta = new Promise<void>((r) => (abrir = r));
-    },
-    soltarSetAuth: () => abrir?.(),
     reiniciar: () => {
       orden.length = 0;
-      retirados.length = 0;
-      compuerta = null;
-      abrir = null;
       cliente.realtime.setAuth.mockClear();
       cliente.channel.mockClear();
       cliente.removeChannel.mockClear();
@@ -74,17 +64,13 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
 }));
 
-// El mapa trae MapLibre y WebGL, que no existen en jsdom, y aquí no se prueba.
-vi.mock("@/components/mapa/mapa-pines", () => ({
-  MapaPines: () => <div data-testid="mapa" />,
-}));
-
 // Es un módulo de Server Actions: importarlo de verdad arrastra el runtime del
 // servidor a un test de navegador.
 vi.mock("@/lib/panel/acciones-tablero", () => ({
   marcarContingenciaAtendida: vi.fn(),
 }));
 
+/** Sin `urlTiles` el mapa ni se monta, que es lo que aquí interesa. */
 function montar() {
   return render(
     <TableroVivo
@@ -100,6 +86,11 @@ async function esperarSuscripcion() {
   await waitFor(() => expect(espia.cliente.channel).toHaveBeenCalledTimes(2));
 }
 
+/** Los topics que se pasaron a `removeChannel`, en el orden en que se retiraron. */
+function topicosRetirados(): string[] {
+  return espia.cliente.removeChannel.mock.calls.map(([canal]) => canal.topico);
+}
+
 beforeEach(() => {
   espia.reiniciar();
 });
@@ -111,12 +102,10 @@ describe("TableroVivo — suscripción en vivo", () => {
     montar();
     await esperarSuscripcion();
 
-    expect(espia.orden.indexOf("setAuth")).toBe(0);
-    expect(espia.orden.indexOf("setAuth")).toBeLessThan(
-      espia.orden.indexOf("channel:staff:visita"),
-    );
-    expect(espia.orden.indexOf("setAuth")).toBeLessThan(
-      espia.orden.indexOf("channel:staff:alerta"),
+    expect(espia.orden[0]).toBe("setAuth");
+    // Cuáles vienen después importa; en qué orden entre sí, no.
+    expect(espia.orden.slice(1)).toEqual(
+      expect.arrayContaining(["channel:staff:visita", "channel:staff:alerta"]),
     );
   });
 
@@ -148,8 +137,10 @@ describe("TableroVivo — suscripción en vivo", () => {
 
     unmount();
 
-    await waitFor(() => expect(espia.retirados).toHaveLength(2));
-    expect(espia.retirados).toEqual(
+    await waitFor(() =>
+      expect(espia.cliente.removeChannel).toHaveBeenCalledTimes(2),
+    );
+    expect(topicosRetirados()).toEqual(
       expect.arrayContaining(["staff:visita", "staff:alerta"]),
     );
   });
@@ -158,16 +149,23 @@ describe("TableroVivo — suscripción en vivo", () => {
     // La carrera real: el supervisor entra al tablero y navega fuera enseguida.
     // Si el efecto se suscribiera igual, nadie retiraría esos canales — la
     // limpieza ya se habría ejecutado.
-    espia.frenarSetAuth();
+    //
+    // La promesa se retiene aquí, no en el espía compartido: un interruptor
+    // global haría que olvidarse de soltarlo colgara otro test con un timeout
+    // en vez de con una aserción.
+    let contestar!: () => void;
+    espia.cliente.realtime.setAuth.mockImplementationOnce(
+      () => new Promise<void>((resolver) => (contestar = resolver)),
+    );
+
     const { unmount } = montar();
     unmount();
+    contestar();
 
-    espia.soltarSetAuth();
     await waitFor(() =>
       expect(espia.cliente.realtime.setAuth).toHaveBeenCalledTimes(1),
     );
-
     expect(espia.cliente.channel).not.toHaveBeenCalled();
-    expect(espia.retirados).toHaveLength(0);
+    expect(espia.cliente.removeChannel).not.toHaveBeenCalled();
   });
 });

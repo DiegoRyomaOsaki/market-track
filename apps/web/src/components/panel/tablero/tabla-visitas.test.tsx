@@ -46,7 +46,13 @@ describe("TablaVisitas", () => {
       ({ estado, texto }) => {
         render(<TablaVisitas filas={[fila({ estado })]} />);
 
-        expect(screen.getByText(texto)).toBeInTheDocument();
+        // Por ROL, no por texto. `getByText` solo mira el DOM: encontraría la
+        // pastilla igual aunque estuviera bajo un `aria-hidden`, y entonces este
+        // test diría «se lee» de algo que ningún lector de pantalla anuncia. Las
+        // consultas por rol sí pasan por `isInaccessible`. No es hipotético: el
+        // `Avatar` de esta misma tabla es `aria-hidden`, así que la regresión
+        // está a dos líneas de distancia.
+        expect(screen.getByRole("cell", { name: texto })).toBeInTheDocument();
       },
     );
 
@@ -75,9 +81,15 @@ describe("TablaVisitas", () => {
         />,
       );
 
-      expect(screen.getByText("visita completada")).toBeInTheDocument();
-      expect(screen.getByText("visita bloqueada")).toBeInTheDocument();
-      expect(screen.queryByText("visita en curso")).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("cell", { name: "visita completada" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("cell", { name: "visita bloqueada" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("cell", { name: "visita en curso" }),
+      ).not.toBeInTheDocument();
     });
   });
 
