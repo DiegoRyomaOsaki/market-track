@@ -24,6 +24,7 @@ import { mensajeDeError } from "@/lib/error";
 import { type FotoCapturada } from "@/lib/foto-captura";
 import { fotosPorEncolar, type RespuestaCruda } from "@/lib/formulario";
 import { dentroDeGeocerca, distanciaMetros } from "@/lib/geo";
+import { useRetiroDeTienda } from "@/lib/paradas-retiradas";
 import { useParada } from "@/lib/rutero";
 import {
   leerTransito,
@@ -47,6 +48,16 @@ export default function CheckIn() {
   const sesion = useSesion();
   const { paradaId } = useLocalSearchParams<{ paradaId: string }>();
   const { parada, cargando } = useParada(paradaId);
+
+  // La tienda que esta pantalla llegó a mostrar. Se recuerda porque la tabla de
+  // retiros no guarda el id de la parada: si el supervisor la quita mientras el
+  // mercaderista está aquí, la fila se va de la réplica y con ella el único
+  // puente hacia el retiro. Sin esto, "te la quitaron" sería una suposición.
+  const tiendaVista = useRef<string | null>(null);
+  useEffect(() => {
+    if (parada) tiendaVista.current = parada.tienda_id;
+  }, [parada]);
+  const retirada = useRetiroDeTienda(parada ? null : tiendaVista.current);
   const { versionId, campos } = useFormularioCheckIn(parada?.tenant_id ?? null);
 
   const [camara, setCamara] = useState<Camara | null>(null);
@@ -92,7 +103,22 @@ export default function CheckIn() {
   if (!parada) {
     return (
       <View style={e.centro}>
-        <Text style={e.aviso}>No se encontró la tienda.</Text>
+        {/* Distinguir "te la quitaron" de "no existe" es todo el punto: un
+            mercaderista al que la tienda se le esfuma bajo los pies no concluye
+            "me la quitaron", concluye que la app se equivocó — y esta pantalla
+            es donde esa frase es literal, porque ya venía a fichar.
+
+            Solo se afirma el retiro cuando hay PRUEBA: la tienda que esta misma
+            pantalla llegó a mostrar y que tiene un retiro registrado. Sin las
+            dos cosas se dice lo de siempre, que sigue siendo cierto. */}
+        <Text style={e.aviso}>
+          {retirada
+            ? `${retirada.tienda_nombre ?? "Esta tienda"} ya no está en tu ruta.`
+            : "No se encontró la tienda."}
+        </Text>
+        {retirada?.motivo ? (
+          <Text style={e.avisoNota}>Motivo: {retirada.motivo}</Text>
+        ) : null}
         <Pressable onPress={() => router.back()} style={e.botonSec}>
           <Text style={e.botonSecTexto}>Volver</Text>
         </Pressable>
@@ -490,6 +516,12 @@ const e = StyleSheet.create({
   punto: { width: 10, height: 10, borderRadius: 5 },
   notaAlerta: { color: colores.textoSuave, fontSize: 13, lineHeight: 18 },
   aviso: { color: colores.texto, fontSize: 15, textAlign: "center" },
+  avisoNota: {
+    color: colores.textoSuave,
+    fontSize: 13,
+    textAlign: "center",
+    marginTop: espacio.xs,
+  },
   avisoVivo: {
     color: colores.alertaTexto,
     fontSize: 13,

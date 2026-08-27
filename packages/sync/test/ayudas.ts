@@ -103,6 +103,15 @@ export const AppSchema = new Schema({
     levantamiento_id: column.text,
     total_pct: column.real,
   }),
+  // `retirada_por` se declara A PROPÓSITO aunque el stream no la proyecte: es la
+  // única forma de comprobar que NO baja. Sin declararla, la columna no existiría
+  // en la réplica y el test no distinguiría "no llegó" de "no la pedí".
+  rutero_parada_retirada: new Table({
+    tenant_id: column.text,
+    tienda_id: column.text,
+    motivo: column.text,
+    retirada_por: column.text,
+  }),
 });
 
 function anonKey(): string {
@@ -402,6 +411,64 @@ export const PUNTAJE_COMPANERO = {
   periodoAnterior: "2026-01-01",
   periodoActual: "2026-02-01",
 } as const;
+
+/**
+ * Retiros de parada sembrados directo en Postgres: el propio de José, el de un
+ * COMPAÑERO DEL MISMO CLIENTE y uno de José salido de un rutero en borrador.
+ *
+ * Las tres mitades son obligatorias. El seed no trae ni una fila de
+ * `rutero_parada_retirada`, así que sin la propia el test pasaría en verde con la
+ * regla rota —«no bajó nada ajeno» es trivialmente cierto cuando no baja nada—;
+ * sin la ajena no habría nada que aislar; y sin la del borrador no se probaría
+ * que una parada que NUNCA estuvo en el teléfono no se anuncia como perdida.
+ *
+ * El compañero es del MISMO cliente a propósito: contra otro tenant, el filtro
+ * por `tenant_id` ya bastaría y el test no probaría el acotado por usuario.
+ */
+export const RETIRO = {
+  companero: "55555555-5555-5555-5555-555555555555",
+  supervisor: "22222222-2222-2222-2222-222222222222",
+  tienda: "a0000002-0000-0000-0000-000000000001",
+  fecha: "2026-08-26",
+  propio: "d0000001-0000-0000-0000-00000000ab01",
+  ajeno: "d0000001-0000-0000-0000-00000000ab02",
+  deBorrador: "d0000001-0000-0000-0000-00000000ab03",
+  motivoPropio: "cobertura duplicada",
+} as const;
+
+export async function conRetiroDeCompanero<T>(
+  fn: () => Promise<T>,
+): Promise<T> {
+  const tenant = USUARIOS.joseMaracumango.tenant;
+  const jose = USUARIOS.joseMaracumango.id;
+  const R = RETIRO;
+  const pg = new Client({ connectionString: PG });
+  await pg.connect();
+  try {
+    const filas: [string, string, string, string][] = [
+      [R.propio, jose, "publicado", R.motivoPropio],
+      [R.ajeno, R.companero, "publicado", "ruta reasignada"],
+      [R.deBorrador, jose, "borrador", "planeacion a medio hacer"],
+    ];
+    for (const [id, merc, estado, motivo] of filas) {
+      await pg.query(
+        `insert into public.rutero_parada_retirada
+           (id, tenant_id, rutero_id, fecha, mercaderista_id, tienda_id, orden,
+            estado_rutero, retirada_por, motivo)
+         values ($1, $2, gen_random_uuid(), $3, $4, $5, 1, $6, $7, $8)
+         on conflict (id) do update set motivo = excluded.motivo`,
+        [id, tenant, R.fecha, merc, R.tienda, estado, R.supervisor, motivo],
+      );
+    }
+    return await fn();
+  } finally {
+    await pg.query(
+      "delete from public.rutero_parada_retirada where id in ($1, $2, $3)",
+      [R.propio, R.ajeno, R.deBorrador],
+    );
+    await pg.end();
+  }
+}
 
 export async function conPuntajeDeCompanero<T>(
   fn: () => Promise<T>,

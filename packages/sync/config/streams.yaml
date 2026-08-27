@@ -54,6 +54,24 @@ streams:
       - SELECT * FROM profile WHERE id = auth.user_id()
       - SELECT * FROM rutero WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND mercaderista_id = auth.user_id() AND estado <> 'borrador'
       - SELECT * FROM rutero_parada WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND rutero_id IN (SELECT id FROM rutero WHERE mercaderista_id = auth.user_id() AND estado <> 'borrador')
+      # Y cuando una parada SE VA, la baja tiene que llegar CON su explicación.
+      # PowerSync borra la fila de la réplica sin decir nada, y lo que el
+      # mercaderista concluye de una tienda que se le esfuma de la lista no es
+      # "me la quitaron": es que la app se equivocó. Esta tabla es
+      # solo-inserción y la escribe `quitar_parada_rutero` en la MISMA
+      # transacción que el `delete`, así que la baja y su motivo llegan al
+      # teléfono en el mismo checkpoint — no hay ventana en la que la parada ya
+      # no esté y el aviso todavía no.
+      #
+      # `estado_rutero <> 'borrador'`, igual que las dos líneas de arriba: una
+      # parada quitada de un borrador NUNCA estuvo en este teléfono, y anunciar
+      # su pérdida sería inventarla.
+      #
+      # Columnas EXPLÍCITAS, no `SELECT *`: `retirada_por` NO baja. Es el id de
+      # un perfil ajeno y este stream solo replica el propio; enseñar quién la
+      # quitó exigiría abrir una superficie de sincronización de perfiles
+      # ajenos que ningún criterio pide.
+      - SELECT id, tenant_id, fecha, tienda_id, retirada_at, motivo FROM rutero_parada_retirada WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND mercaderista_id = auth.user_id() AND estado_rutero <> 'borrador'
 
       # Su trabajo de campo: TODO acotado a las visitas PROPIAS, no solo al
       # tenant. La RLS no interviene en la bajada: lo que aquí no se acote llega

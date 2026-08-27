@@ -11,8 +11,10 @@ import {
   sesionAal1,
   sesionAal2,
   conPuntajeDeCompanero,
+  conRetiroDeCompanero,
   PG,
   PUNTAJE_COMPANERO,
+  RETIRO,
   TRABAJO_COMPANERO,
   USUARIOS,
 } from "./ayudas";
@@ -350,4 +352,56 @@ describe("aislamiento de las sync rules", () => {
       }
     });
   }, 120000);
+
+  it("el retiro que baja es SOLO el del propio mercaderista", async () => {
+    // El compañero es del MISMO cliente: el filtro por tenant no lo distingue,
+    // solo `auth.user_id()`. Con control positivo, porque «no bajó nada ajeno»
+    // es trivialmente cierto si no baja nada.
+    await conRetiroDeCompanero(async () => {
+      const sesion = await sesionAal2(USUARIOS.joseMaracumango.email);
+      const filas = await filasReplicadas<{ motivo: string }>(
+        sesion,
+        "rutero_parada_retirada",
+        "motivo",
+      );
+
+      expect(filas.map((f) => f.motivo)).toContain(RETIRO.motivoPropio);
+      expect(filas.map((f) => f.motivo)).not.toContain("ruta reasignada");
+    });
+  }, 60000);
+
+  it("quién quitó la parada NO baja al teléfono", async () => {
+    // La columna está declarada en el esquema del cliente y el stream no la
+    // proyecta: llega nula. Fija la decisión como CONTRATO, no como intención —
+    // enseñar el nombre exigiría replicar perfiles ajenos.
+    await conRetiroDeCompanero(async () => {
+      const sesion = await sesionAal2(USUARIOS.joseMaracumango.email);
+      const filas = await filasReplicadas<{ retirada_por: string | null }>(
+        sesion,
+        "rutero_parada_retirada",
+        "retirada_por",
+      );
+
+      expect(filas.length).toBeGreaterThan(0);
+      expect(filas.every((f) => f.retirada_por === null)).toBe(true);
+    });
+  }, 60000);
+
+  it("el retiro de un rutero en BORRADOR no baja", async () => {
+    // Una parada quitada de un borrador NUNCA estuvo en este teléfono:
+    // anunciar su pérdida sería inventarla.
+    await conRetiroDeCompanero(async () => {
+      const sesion = await sesionAal2(USUARIOS.joseMaracumango.email);
+      const filas = await filasReplicadas<{ motivo: string }>(
+        sesion,
+        "rutero_parada_retirada",
+        "motivo",
+      );
+
+      expect(filas.map((f) => f.motivo)).toContain(RETIRO.motivoPropio);
+      expect(filas.map((f) => f.motivo)).not.toContain(
+        "planeacion a medio hacer",
+      );
+    });
+  }, 60000);
 });
