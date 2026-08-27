@@ -1,3 +1,26 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+# Los paquetes a los que SÍ se les deja correr su script de instalación. pnpm los
+# bloquea todos por defecto —un `postinstall` es código arbitrario del registro—,
+# y estos dos compilan el SQLite nativo del que depende la réplica local.
+onlyBuiltDependencies:
+  - "@op-engineering/op-sqlite"
+  - "better-sqlite3"
+
+# NO BORRAR aunque parezca sobrante: esto es lo que impide un
+# `undefined is not a function` al construir `PowerSyncDatabase`.
+#
+# `@powersync/shared-internals` no declara de qué versión de `@powersync/common`
+# depende. En el monorepo conviven dos, y sin esta declaración Metro puede
+# resolver la que no toca — un fallo que solo se ve al ARRANCAR la app, no al
+# instalar ni al compilar.
+#
+# Y vive aquí, no en el campo `pnpm` de package.json, porque pnpm 11 dejó de
+# leer ese campo: allí se ignoraría EN SILENCIO, y la primera re-resolución del
+# lockfile se llevaría el arreglo por delante sin avisar.
+packageExtensions:
+  "@powersync/shared-internals":
+    dependencies:
+      "@powersync/common": "2.0.0"
