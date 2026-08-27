@@ -410,8 +410,25 @@ inspector_port = 8083
 # The Deno major version to use.
 deno_version = 2
 
-# [edge_runtime.secrets]
-# secret_key = "env(SECRET_VALUE)"
+# Los secretos que `supabase start` inyecta en el edge-runtime local.
+#
+# Hacen falta para que el hook del OTP (`enviar-otp`) funcione sin levantar
+# `functions serve` a mano: es lo que permite que el harness de sincronización
+# —que hace login con 2FA real— corra en CI.
+#
+# `OTP_DRY_RUN` sin valor equivale a "false", que es el comportamiento de
+# siempre: la función pide RESEND_API_KEY. Se pone a "true" solo en CI, donde no
+# hay proveedor de correo y el OTP se lee de la base.
+#
+# La variable del HOST se llama `MT_OTP_DRY_RUN`, con prefijo de proyecto, aunque
+# dentro del runtime la función siga leyendo `OTP_DRY_RUN`. El nombre a secas es
+# demasiado genérico: si alguien lo tuviera exportado en su shell por otra
+# herramienta, su `supabase start` activaría el dry-run EN SILENCIO y el código de
+# 2FA acabaría en texto plano en el log de la función. Un modo así se enciende
+# solo cuando se pide, no cuando se hereda.
+[edge_runtime.secrets]
+SEND_SMS_HOOK_SECRET = "env(SEND_SMS_HOOK_SECRET)"
+OTP_DRY_RUN = "env(MT_OTP_DRY_RUN)"
 
 # La invoca un Database Webhook (pg_net), que no manda un JWT de Supabase: su
 # puerta es el secreto compartido (x-webhook-secret), verificado dentro de la

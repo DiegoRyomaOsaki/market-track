@@ -168,13 +168,35 @@ insert into public.exhibicion_negociada (id, tenant_id, tienda_id, marca_id, tip
   ('a0000007-0000-0000-0000-000000000003', 'aaaaaaaa-0000-0000-0000-000000000001', 'a0000002-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-000000000001', 'jalavista', '2026-01-01', '2026-12-31'),
   ('a0000007-0000-0000-0000-000000000004', 'aaaaaaaa-0000-0000-0000-000000000001', 'a0000002-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-000000000001', 'activacion', '2026-01-01', '2026-12-31');
 
-insert into public.rutero (id, tenant_id, mercaderista_id, fecha) values
-  ('a0000008-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', '44444444-4444-4444-4444-444444444444', '2026-07-14'),
-  ('b0000008-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0000-000000000002', '66666666-6666-6666-6666-666666666666', '2026-07-14');
+-- El `estado` va EXPLÍCITO, no heredado del default. El harness de sync tiene un
+-- caso que exige un rutero publicado como control positivo, y con el default
+-- `borrador` no podía cumplirse nunca: un test imposible que además no se veía,
+-- porque `test:sync` no corría en CI.
+--
+-- Y hacen falta LOS DOS estados para el mismo mercaderista. Con solo el publicado
+-- no quedaría ningún borrador en la base, así que «no bajó ningún borrador» sería
+-- trivialmente cierto — el test seguiría verde aunque se borrara el filtro por
+-- estado de las sync rules. Se arreglaría una mentira instalando la contraria.
+insert into public.rutero (id, tenant_id, mercaderista_id, fecha, estado) values
+  ('a0000008-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', '44444444-4444-4444-4444-444444444444', '2026-07-14', 'borrador'),
+  ('b0000008-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0000-000000000002', '66666666-6666-6666-6666-666666666666', '2026-07-14', 'borrador'),
+  -- El control positivo. Fecha FUTURA a propósito: una parada publicada, pasada y
+  -- sin visita cuenta como falta en `puntualidad_paradas`, y eso movería el
+  -- Perfect Merchandiser de José desde el seed. Y fija, no calculada: una fecha
+  -- relativa colisionaría con las que fijan los tests el día que coincidieran.
+  ('a0000008-0000-0000-0000-000000000003', 'aaaaaaaa-0000-0000-0000-000000000001', '44444444-4444-4444-4444-444444444444', '2027-03-10', 'borrador');
 
 insert into public.rutero_parada (id, tenant_id, rutero_id, tienda_id, orden) values
   ('a0000009-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'a0000008-0000-0000-0000-000000000001', 'a0000002-0000-0000-0000-000000000001', 1),
-  ('b0000009-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0000-000000000002', 'b0000008-0000-0000-0000-000000000002', 'b0000002-0000-0000-0000-000000000002', 1);
+  ('b0000009-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0000-000000000002', 'b0000008-0000-0000-0000-000000000002', 'b0000002-0000-0000-0000-000000000002', 1),
+  ('a0000009-0000-0000-0000-000000000003', 'aaaaaaaa-0000-0000-0000-000000000001', 'a0000008-0000-0000-0000-000000000003', 'a0000002-0000-0000-0000-000000000001', 1);
+
+-- Se publica DESPUÉS de sembrar su parada, y el orden no es estético: el trigger
+-- `parada_solo_se_planifica_en_borrador` rechaza un INSERT de parada sobre un
+-- rutero que ya está publicado. Ponerlo publicado arriba abortaría el `db reset`
+-- entero en la línea de las paradas.
+update public.rutero set estado = 'publicado'
+ where id = 'a0000008-0000-0000-0000-000000000003';
 
 insert into public.visita (id, tenant_id, rutero_parada_id, mercaderista_id, tienda_id, check_in_geo) values
   ('a0000010-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'a0000009-0000-0000-0000-000000000001', '44444444-4444-4444-4444-444444444444', 'a0000002-0000-0000-0000-000000000001', 'SRID=4326;POINT(-76.94 -12.08)'::extensions.geography),

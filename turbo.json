@@ -39,8 +39,16 @@
       "dependsOn": ["^build"],
       // El harness de aislamiento del móvil: habla con el servicio PowerSync
       // autohospedado y con Supabase. No se cachea (mismo motivo que test:db) y
-      // exige `sync:up` + `supabase start` + `functions serve`.
-      "cache": false
+      // exige `sync:up` + `supabase start`.
+      "cache": false,
+      // Turbo NO pasa las variables que no estén declaradas: sin esto, el harness
+      // recibe el entorno sin `ANON_KEY` y aborta diciendo que falta, aunque quien
+      // lo lanzó la tuviera exportada. Se descubrió en CI, donde se corre por turbo;
+      // en local, lanzándolo con `pnpm --filter`, no se ve.
+      //
+      // `passThroughEnv` y no `env`: la tarea no se cachea, así que la clave no
+      // tiene por qué entrar en el hash.
+      "passThroughEnv": ["ANON_KEY"]
     },
     "//#lint": {
       "inputs": [

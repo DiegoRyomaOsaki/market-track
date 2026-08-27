@@ -4,11 +4,13 @@
 import { assert, assertEquals, assertMatch } from "jsr:@std/assert@1";
 
 import {
+  falloAlEmitir,
   generarCodigo,
   hashCodigo,
   paseQueCoincide,
   type PerfilAutz,
   puedeEmitirPase,
+  SQLSTATE_TOPE_ALCANZADO,
 } from "./pase.ts";
 
 const admin: PerfilAutz = { id: "admin-1", rol: "admin", supervisor_id: null };
@@ -154,3 +156,33 @@ Deno.test(
     );
   },
 );
+
+// --- La traducción del rechazo del tope ---------------------------------------
+//
+// El tope lo impone el trigger de la base; esto es lo único que queda de este
+// lado, y decide entre "el cliente pidió de más" (429) y "algo se rompió" (500).
+// Sin estos casos, esa rama no la prueba nadie: ninguna Edge Function del repo
+// tiene test de handler.
+
+Deno.test("el rechazo del tope se traduce a 429 con su mensaje", () => {
+  const fallo = falloAlEmitir(SQLSTATE_TOPE_ALCANZADO);
+
+  assertEquals(fallo.estado, 429);
+  assertMatch(fallo.error, /límite diario/);
+});
+
+Deno.test("cualquier OTRO fallo del insert es 500, no un 429 engañoso", () => {
+  // A estas alturas la existencia, el rol y la forma ya se validaron: un fallo
+  // de insert no puede ser culpa de quien llama. Decirle 429 le haría esperar
+  // 24 h por un problema de infraestructura.
+  for (const codigo of [
+    "23503", // FK
+    "23502", // NOT NULL
+    "23514", // CHECK — el del pase fechado en el futuro cae aquí
+    "42501", // permiso denegado
+    "53300", // otro de la MISMA clase que el tope
+    undefined, // sin código: una caída de red
+  ]) {
+    assertEquals(falloAlEmitir(codigo).estado, 500, `código ${codigo}`);
+  }
+});
