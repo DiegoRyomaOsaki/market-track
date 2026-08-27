@@ -147,54 +147,40 @@ export function paseQueCoincide(
 
 // --- Cota antiabuso -----------------------------------------------------------
 
-/** Cuántos pases se pueden emitir a un mismo usuario dentro de la ventana. */
-export const LIMITE_DIARIO = 3;
-
-/** La ventana del tope: 24 h. */
-export const VENTANA_MS = 24 * 60 * 60 * 1000;
-
-/** Lo mínimo del cliente de Supabase que necesita el conteo. Se declara aquí
- *  para poder doblarlo en los tests con un cliente que aplique los filtros de
- *  verdad: uno que los ignorase daría verde con la consulta correcta y con la
- *  rota. */
-type ConsultaFiltrable = {
-  eq(columna: string, valor: string): ConsultaFiltrable;
-  is(columna: string, valor: null): ConsultaFiltrable;
-  gte(columna: string, valor: string): ConsultaFiltrable;
-  abortSignal(
-    senal: AbortSignal,
-  ): PromiseLike<{ count: number | null; error: unknown }>;
-};
-
-export type ClienteDeConteo = {
-  from(tabla: string): {
-    select(
-      columnas: string,
-      opciones: { count: "exact"; head: true },
-    ): ConsultaFiltrable;
-  };
-};
+/**
+ * El SQLSTATE con el que la base rechaza una emisión por encima del tope.
+ *
+ * El tope y su ventana viven en el trigger `pase_tope_por_ventana`, no aquí: si
+ * los contara también esta función, serían dos definiciones del mismo número —y
+ * la que se salta el rodeo por PostgREST es la de la base. Lo único que queda de
+ * este lado es traducir el rechazo al 429 que el cliente espera.
+ *
+ * Se compara por CÓDIGO y no por el texto del mensaje: el mensaje es copy y
+ * cambia; el SQLSTATE es el contrato.
+ */
+export const SQLSTATE_TOPE_ALCANZADO = "53400";
 
 /**
- * Cuántos pases se han GENERADO para este usuario dentro de la ventana.
+ * Qué responde `emitir-pase` cuando el `insert` falla.
  *
- * Cuenta TODOS, revocados incluidos. No filtrar por `revocado_at` es la decisión
- * del control, no un olvido: contar solo los vivos convertía el tope en
- * orientativo desde que el panel estrena el botón de revocar — se emiten tres,
- * se revocan dos y se emiten dos más. Un límite que se puede reiniciar no es un
- * límite, y cada emisión ya queda auditada con su motivo y su emisor, así que
- * revocar no puede además borrar el rastro del cupo consumido.
+ * Vive aquí y no dentro del handler porque es la única lógica del camino de
+ * emisión que decide entre "el cliente pidió de más" y "algo se rompió", y en un
+ * `index.ts` nacería sin cobertura: ninguna Edge Function del repo tiene test de
+ * handler.
+ *
+ * Solo el rechazo del tope es un 429. Todo lo demás —una FK, un NOT NULL, un
+ * CHECK, una caída de red— es infraestructura: a estas alturas la existencia, el
+ * rol y la forma ya se validaron, así que no puede ser culpa del cliente.
  */
-export function contarPasesDeLaVentana(
-  servicio: ClienteDeConteo,
-  profileId: string,
-  desdeIso: string,
-  senal: AbortSignal,
-): PromiseLike<{ count: number | null; error: unknown }> {
-  return servicio
-    .from("pase_acceso_temporal")
-    .select("id", { count: "exact", head: true })
-    .eq("profile_id", profileId)
-    .gte("generado_at", desdeIso)
-    .abortSignal(senal);
+export function falloAlEmitir(codigo: string | undefined): {
+  estado: 429 | 500;
+  error: string;
+} {
+  if (codigo === SQLSTATE_TOPE_ALCANZADO) {
+    return {
+      estado: 429,
+      error: "límite diario de pases alcanzado para este usuario",
+    };
+  }
+  return { estado: 500, error: "no se pudo emitir el pase" };
 }

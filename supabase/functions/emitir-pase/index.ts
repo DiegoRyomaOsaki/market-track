@@ -24,13 +24,10 @@ import {
   json,
 } from "../_shared/supabase.ts";
 import {
-  type ClienteDeConteo,
-  contarPasesDeLaVentana,
+  falloAlEmitir,
   generarCodigo,
   hashCodigo,
-  LIMITE_DIARIO,
   puedeEmitirPase,
-  VENTANA_MS,
 } from "../_shared/pase.ts";
 
 // Fail-closed: sin el secreto no se puede acuñar el hash del código, así que la
@@ -99,29 +96,6 @@ Deno.serve(async (req) => {
     return json(decision.status, { error: decision.error });
   }
 
-  // Límite diario por usuario objetivo: TODOS los pases emitidos en las últimas
-  // 24 h, revocados incluidos. El porqué vive en `contarPasesDeLaVentana`.
-  const desde = new Date(Date.now() - VENTANA_MS).toISOString();
-  const { count, error: errConteo } = await contarPasesDeLaVentana(
-    // El estrechamiento es para el compilador, no para saltarse nada: los tipos
-    // de supabase-js son tan genéricos que emparejarlos estructuralmente con la
-    // interfaz mínima del conteo agota al comprobador (TS2589). La interfaz
-    // existe para que el test pueda doblar el cliente con uno que aplique los
-    // filtros de verdad, que es lo que hace significativo el test del tope.
-    servicio as unknown as ClienteDeConteo,
-    profile_id,
-    desde,
-    AbortSignal.timeout(DB_TIMEOUT_MS),
-  );
-  if (errConteo) {
-    return json(500, { error: "no se pudo verificar el límite diario" });
-  }
-  if ((count ?? 0) >= LIMITE_DIARIO) {
-    return json(429, {
-      error: "límite diario de pases alcanzado para este usuario",
-    });
-  }
-
   // Código de 6 dígitos + su HMAC. El código se revela UNA vez; se guarda el hash.
   const codigo = generarCodigo();
   const codigo_hash = await hashCodigo(codigo, PASE_HASH_SECRET);
@@ -134,12 +108,22 @@ Deno.serve(async (req) => {
     .abortSignal(AbortSignal.timeout(DB_TIMEOUT_MS))
     .single();
   if (errInsert || !creado) {
-    // Aquí todo lo previo (existencia, rol, límite, forma) ya se validó: un fallo
-    // de insert es de infraestructura, no del cliente → 500.
-    return json(500, {
-      error: "no se pudo emitir el pase",
-      // Recortado: los mensajes de infra pueden arrastrar contenido de más.
-      detalle: errInsert?.message.slice(0, 200),
+    // El tope lo impone el trigger `pase_tope_por_ventana`, no esta función: es
+    // la única forma de que no se pueda rodear insertando directo por PostgREST,
+    // y de que dos emisiones simultáneas no pasen las dos. Aquí solo se traduce
+    // su rechazo al 429 que el cliente ya esperaba.
+    //
+    // Por el CÓDIGO y no por el texto del mensaje: un mensaje es copy y cambia;
+    // el SQLSTATE es el contrato.
+    const fallo = falloAlEmitir(errInsert?.code);
+    return json(fallo.estado, {
+      error: fallo.error,
+      // El detalle solo acompaña al 500: en el 429 la causa ya la dice el
+      // mensaje, y adjuntar el error de infraestructura no le aporta nada a
+      // quien llama. Recortado, porque puede arrastrar contenido de más.
+      ...(fallo.estado === 500
+        ? { detalle: errInsert?.message.slice(0, 200) }
+        : {}),
     });
   }
 
