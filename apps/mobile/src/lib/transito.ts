@@ -1,5 +1,7 @@
 import * as FileSystem from "expo-file-system/legacy";
 
+import { RUTA_TRANSITO as RUTA } from "./limpieza-dispositivo";
+
 // Modo tránsito: el tiempo de traslado ENTRE tiendas. El cronómetro arranca al
 // hacer check-out de una tienda y se cierra al hacer check-in en la siguiente,
 // donde los minutos quedan en `visita.tiempo_traslado_min` de la visita que
@@ -7,8 +9,6 @@ import * as FileSystem from "expo-file-system/legacy";
 //
 // Se persiste en disco: un traslado puede cruzar un cierre de la app o un tramo
 // sin señal, como todo lo demás en el offline-first.
-
-const RUTA = `${FileSystem.documentDirectory}transito.json`;
 
 export async function iniciarTransito(desdeIso: string): Promise<void> {
   await FileSystem.writeAsStringAsync(

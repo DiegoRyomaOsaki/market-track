@@ -104,7 +104,6 @@ jest.mock("./supabase", () => ({
 import {
   colaFotos,
   encolarFoto,
-  limpiarFotosDelDispositivo,
   reconciliarFotos,
   rutaDeFoto,
 } from "./cola-fotos-instancia";
@@ -295,17 +294,5 @@ describe("reconciliarFotos", () => {
 
     expect(await reconciliarFotos(YO)).toBe(0);
     expect(await colaFotos.contarPendientes()).toBe(0);
-  });
-});
-
-describe("limpiarFotosDelDispositivo", () => {
-  it("borra los binarios y el manifiesto al cambiar de mercaderista", async () => {
-    // La revocación tiene que alcanzar a lo capturado, no solo a lo leído.
-    await limpiarFotosDelDispositivo();
-
-    expect(mockEstado.borrados).toEqual([
-      "file:///docs/fotos",
-      "file:///docs/cola-fotos.json",
-    ]);
   });
 });

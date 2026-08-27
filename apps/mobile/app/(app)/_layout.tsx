@@ -7,10 +7,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { IndicadorConexion } from "@/componentes/indicador-conexion";
 import {
   fijarUsuarioDeFotos,
-  limpiarFotosDelDispositivo,
   reconciliarFotos,
   subidorFotos,
 } from "@/lib/cola-fotos-instancia";
+import { limpiarDispositivo } from "@/lib/limpieza-dispositivo";
 import { ConectorSupabase } from "@/lib/powersync/conector";
 import { db } from "@/lib/powersync/db";
 import {
@@ -40,9 +40,10 @@ export default function LayoutApp() {
       const anterior = await leerUltimoUsuario();
       if (debeLimpiarReplica(anterior, id)) {
         await db.disconnectAndClear();
-        // La evidencia capturada se va con la réplica: si no, quedan fotos del
-        // mercaderista anterior en un teléfono que ya no es su contexto.
-        await limpiarFotosDelDispositivo();
+        // Y lo que hay en disco se va con la réplica: si no, quedan ficheros
+        // del mercaderista anterior en un teléfono que ya no es su contexto.
+        // Qué se borra lo enumera `limpieza-dispositivo`, en un solo sitio.
+        await limpiarDispositivo();
       }
       await guardarUltimoUsuario(id);
       if (cancelado) return;

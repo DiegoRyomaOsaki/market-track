@@ -1,6 +1,8 @@
 import { useQuery } from "@powersync/react-native";
 import * as FileSystem from "expo-file-system/legacy";
 
+import { RUTA_DESCARTES } from "./limpieza-dispositivo";
+
 // Las paradas que el supervisor quitó de la ruta, para que no desaparezcan en
 // silencio.
 //
@@ -166,7 +168,7 @@ const SQL_SIN_TIENDA = "SELECT NULL AS id WHERE 0";
 // El descarte, en disco y acotado al día
 // ---------------------------------------------------------------------------
 
-const RUTA = `${FileSystem.documentDirectory}descartes-retiro.json`;
+const RUTA = RUTA_DESCARTES;
 
 export type DescartesGuardados = { fecha: string; ids: string[] };
 
