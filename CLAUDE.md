@@ -316,6 +316,19 @@ Aún no hay `.env`. Al scaffoldear, crear `.env.example` por app. Previstas:
 - **Nunca poner `passWithNoTests: true` en Vitest.** El default (`false`) es lo
   único que impide que la suite vuelva a ser un verde falso: si alguien borra el
   último test, Vitest sale con exit 1 en vez de fingir que todo está bien.
+- **En el móvil, `render()` y `fireEvent` de Testing Library son ASÍNCRONOS: sin
+  `await` no montan nada.** RNTL 14 devuelve una promesa, y `Object.keys()` sobre
+  una promesa da `[]` — que se lee como «`render()` devuelve un objeto vacío» y
+  llevó a dar por imposible el test de componente del móvil durante meses. **No es
+  imposible: la combinación instalada funciona** (medido el 27 ago 2026 con RNTL
+  14.0.1, React 19.2.3, RN 0.86.0, jest-expo 57.0.2 y `react-test-renderer`
+  19.2.3). Con `await` el árbol se monta de verdad y las consultas encuentran.
+  Las dos formas de caer ya las atrapan los gates —`tsc` rechaza
+  `render(...).getByText` (*Property 'getByText' does not exist on type
+  'Promise<…>'*) y `no-floating-promises` (vía `recommendedTypeChecked`) rechaza
+  el `render(...)` o el `fireEvent(...)` sueltos—, y por eso ninguno de los dos se
+  toca: sin ellos, un `render(...)` sin `await` seguido de `queryBy…()` que se
+  espera `null` pasa en verde contra un árbol que nunca existió.
 - **Un `vitest.config.ts` en un workspace rompe `pnpm lint`** (`not found by the
   project service`) salvo que se añada `"*.ts"` al `include` de su
   `tsconfig.json` — ESLint y `tsc` tienen que ver los mismos archivos. Hoy
