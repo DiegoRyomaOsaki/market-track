@@ -23,7 +23,15 @@ import {
   clienteServicio,
   json,
 } from "../_shared/supabase.ts";
-import { generarCodigo, hashCodigo, puedeEmitirPase } from "../_shared/pase.ts";
+import {
+  type ClienteDeConteo,
+  contarPasesDeLaVentana,
+  generarCodigo,
+  hashCodigo,
+  LIMITE_DIARIO,
+  puedeEmitirPase,
+  VENTANA_MS,
+} from "../_shared/pase.ts";
 
 // Fail-closed: sin el secreto no se puede acuñar el hash del código, así que la
 // función NO arranca — nunca un fallback que lo abra (igual que el webhook).
@@ -33,10 +41,6 @@ if (!PASE_HASH_SECRET) {
     "PASE_HASH_SECRET no configurado: la función no arranca (fail-closed)",
   );
 }
-
-// Cota antiabuso: cuántos pases se pueden emitir a un mismo usuario en 24 h.
-const LIMITE_DIARIO = 3;
-const VENTANA_MS = 24 * 60 * 60 * 1000;
 
 // Deadline de las consultas: una llamada colgada a Postgres no debe bloquear la
 // respuesta ni consumir el presupuesto de la función (Deno `fetch` no trae timeout).
@@ -95,15 +99,20 @@ Deno.serve(async (req) => {
     return json(decision.status, { error: decision.error });
   }
 
-  // Límite diario por usuario objetivo: pases no revocados en las últimas 24 h.
+  // Límite diario por usuario objetivo: TODOS los pases emitidos en las últimas
+  // 24 h, revocados incluidos. El porqué vive en `contarPasesDeLaVentana`.
   const desde = new Date(Date.now() - VENTANA_MS).toISOString();
-  const { count, error: errConteo } = await servicio
-    .from("pase_acceso_temporal")
-    .select("id", { count: "exact", head: true })
-    .eq("profile_id", profile_id)
-    .is("revocado_at", null)
-    .gte("generado_at", desde)
-    .abortSignal(AbortSignal.timeout(DB_TIMEOUT_MS));
+  const { count, error: errConteo } = await contarPasesDeLaVentana(
+    // El estrechamiento es para el compilador, no para saltarse nada: los tipos
+    // de supabase-js son tan genéricos que emparejarlos estructuralmente con la
+    // interfaz mínima del conteo agota al comprobador (TS2589). La interfaz
+    // existe para que el test pueda doblar el cliente con uno que aplique los
+    // filtros de verdad, que es lo que hace significativo el test del tope.
+    servicio as unknown as ClienteDeConteo,
+    profile_id,
+    desde,
+    AbortSignal.timeout(DB_TIMEOUT_MS),
+  );
   if (errConteo) {
     return json(500, { error: "no se pudo verificar el límite diario" });
   }
