@@ -112,9 +112,17 @@ describe("FeedContingencias", () => {
       "No encontrado o sin permiso",
     );
     expect(onAtendida).not.toHaveBeenCalled();
-    expect(
-      screen.getByRole("button", { name: /marcar atendida/i }),
-    ).toBeEnabled();
+    // Esperado, no comprobado a secas: `setError` va DENTRO de `iniciar(...)`,
+    // así que el botón se vuelve a habilitar cuando termina la transición, que
+    // no tiene por qué ser el mismo render en el que aparece la alerta.
+    // Asertarlo de forma síncrona daba por hecho que React vacía las dos cosas a
+    // la vez; en una máquina lenta no siempre, y el test se caía enseñando el
+    // botón todavía en «Marcando…».
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /marcar atendida/i }),
+      ).toBeEnabled(),
+    );
   });
 
   it("la ya atendida muestra su confirmación en vez del botón", () => {
