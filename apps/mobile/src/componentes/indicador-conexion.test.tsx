@@ -139,18 +139,22 @@ describe("IndicadorConexion", () => {
   it("lleva a la pantalla de sincronización al tocarlo", async () => {
     await render(<IndicadorConexion />);
 
-    // `fireEvent` también devuelve promesa en RNTL 14, igual que `render`.
+    // Por rol + nombre, no solo por etiqueta: así el test también se cae si
+    // alguien quita el `accessibilityRole` y deja la etiqueta puesta.
+    // `fireEvent` devuelve promesa en RNTL 14, igual que `render`.
     await fireEvent.press(
-      screen.getByLabelText("Ver estado de sincronización"),
+      screen.getByRole("button", { name: "Ver estado de sincronización" }),
     );
 
     expect(push).toHaveBeenCalledWith("/sincronizacion");
   });
 
-  // Control negativo del ARNÉS, no del componente: si `render()` dejara de
-  // montar de verdad (el fallo que motivó este archivo — ver CLAUDE.md), las
-  // aserciones de arriba pasarían en vacío contra un árbol inexistente. Esta
-  // prueba falla si el árbol NO se montó, así que es la que sostiene a las demás.
+  // Control negativo del ARNÉS, no del componente. Ojo con lo que NO es: el
+  // fallo que motivó este archivo —un `render()` sin `await`— lo atrapan antes
+  // `tsc` y `no-floating-promises`, no esta prueba (ver CLAUDE.md). Lo que sí
+  // cubre es el caso genérico de que las consultas acierten contra un árbol que
+  // no es el del componente: un árbol en blanco haría pasar en vacío a las
+  // aserciones negativas de arriba, y esta se cae.
   it("el arnés monta un árbol real: una consulta imposible falla", async () => {
     await render(<IndicadorConexion />);
 
