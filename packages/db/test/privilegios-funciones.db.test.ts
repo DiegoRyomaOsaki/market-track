@@ -10,6 +10,14 @@ import { conectar } from "./ayudas";
 // está escrito en ninguna migración, así que no se ve leyendo el diff que crea
 // la función. Solo se ve preguntándole al catálogo, que es lo que hace esto.
 //
+// OJO CON LO QUE ESTE ARCHIVO NO PUEDE VER: corre contra el Postgres local, y
+// los dos entornos conceden por caminos DISTINTOS — en local el default de
+// Postgres (EXECUTE a PUBLIC, que `anon` hereda) y en la nube un default
+// privilege de Supabase que estampa un grant explícito `anon=X`. Una migración
+// que revoque solo de `public` deja el agujero abierto en la nube Y PASA ESTE
+// TEST EN VERDE. Por eso la migración revoca de los dos, y por eso el contrato
+// de la nube se comprueba contra la nube (advisors), no aquí.
+//
 // Ninguna de estas funciones era explotable: las que autorizan abren con un
 // guardia de staff, y las de trigger mueren si se las llama por RPC. Lo que se
 // fija aquí es que la puerta no sea más ancha que lo que hace falta.
@@ -74,7 +82,7 @@ describe("`anon` y las funciones de public", () => {
     expect(deTrigger.rows.filter((f) => f.puede)).toEqual([]);
   });
 
-  it("las tres que delataron los advisors siguen fuera de su alcance", async () => {
+  it("las cuatro del caso conocido siguen fuera de su alcance", async () => {
     // Fijadas por nombre a propósito, además del barrido de arriba: si alguien
     // recrea una de ellas sin revocar, el barrido lo dice pero no dice CUÁL era
     // el caso conocido.
@@ -83,11 +91,12 @@ describe("`anon` y las funciones de public", () => {
        from (values
          ('public.fijar_hora_parada(uuid, time)'),
          ('public.recalcular_puntaje_merchandiser(public.periodo_puntaje, date, uuid, uuid)'),
+         ('public.parada_solo_se_planifica_en_borrador()'),
          ('public.marcar_desactivacion()')
        ) as f(funcion)`,
     );
 
-    expect(r.rows).toHaveLength(3);
+    expect(r.rows).toHaveLength(4);
     expect(r.rows.filter((x) => x.puede)).toEqual([]);
   });
 
