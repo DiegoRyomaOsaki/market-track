@@ -1,6 +1,7 @@
 import type { TipoFoto } from "@market-track/shared";
 import * as Crypto from "expo-crypto";
 import * as FileSystem from "expo-file-system/legacy";
+
 import { useEffect, useState } from "react";
 
 import {
@@ -8,6 +9,11 @@ import {
   ColaFotos,
   type FotoPendiente,
 } from "./cola-fotos";
+import {
+  DIR_FOTOS,
+  RUTA_MANIFIESTO_FOTOS as RUTA_MANIFIESTO,
+  RUTA_MANIFIESTO_TEMPORAL as TEMPORAL,
+} from "./limpieza-dispositivo";
 import type { FotoCapturada } from "./foto-captura";
 import { puntoAEwkt } from "./geo";
 import { db } from "./powersync/db";
@@ -23,10 +29,6 @@ import { supabase } from "./supabase";
 // `manipulateAsync` lo deja en caché, y Android purga la caché bajo presión de
 // almacenamiento — una foto tomada en un sótano y subida tres días después puede
 // no tener archivo.
-
-const RUTA_MANIFIESTO = `${FileSystem.documentDirectory}cola-fotos.json`;
-const DIR_FOTOS = `${FileSystem.documentDirectory}fotos`;
-const TEMPORAL = `${RUTA_MANIFIESTO}.tmp`;
 
 const almacenDisco: AlmacenManifiesto = {
   async leer() {
@@ -56,19 +58,6 @@ let usuarioActual: string | null = null;
 
 export function fijarUsuarioDeFotos(id: string | null): void {
   usuarioActual = id;
-}
-
-/**
- * Borra la cola y los binarios del mercaderista anterior.
- *
- * Se llama junto a `disconnectAndClear()`: si la réplica del otro usuario se
- * limpia pero sus fotos se quedan, este teléfono conserva evidencia de campo
- * —con geo y hora— de alguien que ya no debería tener contexto aquí. La
- * revocación tiene que alcanzar también a lo capturado, no solo a lo leído.
- */
-export async function limpiarFotosDelDispositivo(): Promise<void> {
-  await FileSystem.deleteAsync(DIR_FOTOS, { idempotent: true });
-  await FileSystem.deleteAsync(RUTA_MANIFIESTO, { idempotent: true });
 }
 
 /** Pide la URL PUT prefirmada a la Edge Function. */

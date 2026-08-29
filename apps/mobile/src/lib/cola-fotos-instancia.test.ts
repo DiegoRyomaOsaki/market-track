@@ -26,7 +26,6 @@ type FilaFoto = {
 var mockEstado: {
   movidos: { from: string; to: string }[];
   existentes: Set<string>;
-  borrados: string[];
   manifiesto: string | null;
   sql: { sql: string; args: unknown[] }[];
   visitas: Record<string, string>;
@@ -55,10 +54,7 @@ jest.mock("expo-file-system/legacy", () => ({
     mockEstado.existentes.add(to);
     return Promise.resolve();
   },
-  deleteAsync: (ruta: string) => {
-    mockEstado.borrados.push(ruta);
-    return Promise.resolve();
-  },
+  deleteAsync: () => Promise.resolve(),
   makeDirectoryAsync: () => Promise.resolve(),
   uploadAsync: () => Promise.resolve({ status: 200 }),
 }));
@@ -104,7 +100,6 @@ jest.mock("./supabase", () => ({
 import {
   colaFotos,
   encolarFoto,
-  limpiarFotosDelDispositivo,
   reconciliarFotos,
   rutaDeFoto,
 } from "./cola-fotos-instancia";
@@ -113,7 +108,6 @@ beforeEach(() => {
   mockEstado = {
     movidos: [],
     existentes: new Set(),
-    borrados: [],
     manifiesto: null,
     sql: [],
     visitas: { [VISITA]: YO },
@@ -295,17 +289,5 @@ describe("reconciliarFotos", () => {
 
     expect(await reconciliarFotos(YO)).toBe(0);
     expect(await colaFotos.contarPendientes()).toBe(0);
-  });
-});
-
-describe("limpiarFotosDelDispositivo", () => {
-  it("borra los binarios y el manifiesto al cambiar de mercaderista", async () => {
-    // La revocación tiene que alcanzar a lo capturado, no solo a lo leído.
-    await limpiarFotosDelDispositivo();
-
-    expect(mockEstado.borrados).toEqual([
-      "file:///docs/fotos",
-      "file:///docs/cola-fotos.json",
-    ]);
   });
 });
