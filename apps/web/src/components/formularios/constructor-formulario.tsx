@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import {
   type TipoCampoFormulario,
@@ -57,6 +57,26 @@ function nuevoId(): string {
   return crypto.randomUUID();
 }
 
+// Ids del DOM para devolver el foco tras agregar o eliminar. Se derivan del id
+// del elemento, que es estable, en vez de pasar refs por las tres capas de
+// componentes que hay hasta el input.
+const idTituloPaso = (pasoId: string) => `paso-${pasoId}-titulo`;
+const idEtiquetaCampo = (campoId: string) => `campo-${campoId}-etiqueta`;
+const idAgregarCampo = (pasoId: string) => `paso-${pasoId}-agregar-campo`;
+const ID_AGREGAR_PASO = "constructor-agregar-paso";
+
+/**
+ * "Quedan 3 campos." — el recuento va en el anuncio por dos motivos: le dice a
+ * quien no ve la pantalla cuánto queda, y hace que dos borrados seguidos no
+ * produzcan el MISMO texto. Una región viva cuyo texto no cambia no se vuelve a
+ * anunciar, así que sin esto el segundo borrado sería mudo.
+ */
+function cuantosQuedan(n: number, singular: string, plural: string): string {
+  if (n === 0) return `No queda ningún ${singular}.`;
+  if (n === 1) return `Queda 1 ${singular}.`;
+  return `Quedan ${n} ${plural}.`;
+}
+
 /** Intercambia dos elementos sin salirse del array (respeta noUncheckedIndexedAccess). */
 function mover<T>(arr: readonly T[], idx: number, dir: -1 | 1): T[] {
   const copia = [...arr];
@@ -104,12 +124,25 @@ export function ConstructorFormulario({
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [sinGuardar, setSinGuardar] = useState(false);
+  const [anuncio, setAnuncio] = useState("");
+  const [foco, setFoco] = useState<string | null>(null);
 
   const router = useRouter();
+
+  // El foco se mueve DESPUÉS de que React pinte la lista nueva: dentro del
+  // manejador el input recién agregado todavía no existe en el DOM.
+  useEffect(() => {
+    if (foco === null) return;
+    document.getElementById(foco)?.focus();
+    setFoco(null);
+  }, [foco]);
 
   const problemas = useMemo(() => problemasDeDefinicion(pasos), [pasos]);
   const esValido = problemas.length === 0;
 
+  // Ojo: NO toca `anuncio`. Todo borrado llama aquí al final, así que meter el
+  // anuncio en `mensaje` lo pondría y lo borraría en la misma tanda — el lector
+  // no llegaría a decir nada. Por eso son dos estados y no uno.
   function tocar() {
     setSinGuardar(true);
     setMensaje(null);
@@ -143,12 +176,28 @@ export function ConstructorFormulario({
   }
 
   function agregarPaso() {
-    setPasos((prev) => [...prev, { id: nuevoId(), titulo: "", campos: [] }]);
+    const nuevo: PasoEditable = { id: nuevoId(), titulo: "", campos: [] };
+    setPasos((prev) => [...prev, nuevo]);
+    // Al input del paso nuevo: el lector lo anuncia al recibir el foco, así que
+    // no hace falta además decir "paso agregado".
+    setFoco(idTituloPaso(nuevo.id));
     tocar();
   }
 
   function eliminarPaso(idx: number) {
+    const eliminado = pasos[idx];
+    // Al que PASA A OCUPAR el sitio; si se borró el último, al de arriba. Salir
+    // de la lista (al botón de agregar) solo cuando ya no queda ninguno: mandar
+    // el foco ahí teniendo vecinos obliga a subir de nuevo por toda la lista.
+    const vecino = pasos[idx + 1] ?? pasos[idx - 1];
     setPasos((prev) => prev.filter((_, i) => i !== idx));
+    // El botón `✕` que tenía el foco se va con su fila. Sin esto el foco cae al
+    // `<body>` y quien navega con teclado pierde su sitio en la lista.
+    setFoco(vecino ? idTituloPaso(vecino.id) : ID_AGREGAR_PASO);
+    setAnuncio(
+      `Paso ${eliminado?.titulo.trim() || idx + 1} eliminado. ` +
+        cuantosQuedan(pasos.length - 1, "paso", "pasos"),
+    );
     tocar();
   }
 
@@ -158,21 +207,39 @@ export function ConstructorFormulario({
   }
 
   function agregarCampo(pasoIdx: number) {
+    const nuevo = campoNuevo();
     setPasos((prev) =>
       prev.map((p, i) =>
-        i === pasoIdx ? { ...p, campos: [...p.campos, campoNuevo()] } : p,
+        i === pasoIdx ? { ...p, campos: [...p.campos, nuevo] } : p,
       ),
     );
+    setFoco(idEtiquetaCampo(nuevo.id));
     tocar();
   }
 
   function eliminarCampo(pasoIdx: number, campoIdx: number) {
+    const paso = pasos[pasoIdx];
+    const eliminado = paso?.campos[campoIdx];
+    // Mismo criterio que en los pasos: al que pasa a ocupar el sitio, si no al
+    // de arriba, y solo al botón de agregar cuando el paso se queda sin campos.
+    const vecino = paso?.campos[campoIdx + 1] ?? paso?.campos[campoIdx - 1];
     setPasos((prev) =>
       prev.map((p, i) =>
         i === pasoIdx
           ? { ...p, campos: p.campos.filter((_, j) => j !== campoIdx) }
           : p,
       ),
+    );
+    setFoco(
+      vecino
+        ? idEtiquetaCampo(vecino.id)
+        : paso
+          ? idAgregarCampo(paso.id)
+          : null,
+    );
+    setAnuncio(
+      `Campo ${eliminado?.etiqueta.trim() || campoIdx + 1} eliminado. ` +
+        cuantosQuedan((paso?.campos.length ?? 1) - 1, "campo", "campos"),
     );
     tocar();
   }
@@ -287,19 +354,39 @@ export function ConstructorFormulario({
         </button>
       </div>
 
-      {error && (
-        <p
-          role="alert"
-          className="rounded-[9px] bg-alerta-suave px-3 py-2 text-[13px] font-semibold text-alerta-texto"
-        >
-          {error}
-        </p>
-      )}
-      {mensaje && (
-        <p className="rounded-[9px] bg-completado-suave px-3 py-2 text-[13px] font-semibold text-completado-texto">
-          {mensaje}
-        </p>
-      )}
+      {/* Las tres regiones se montan SIEMPRE y solo cambia su texto. Una que
+          aparece al terminar la operación se anuncia en el mismo instante en
+          que se inserta, y algunos lectores de pantalla se la pierden — justo
+          en el primer intento, que es el que importa.
+
+          `empty:hidden` es lo que evita que se vea la caja vacía: un hijo de
+          cadena vacía no crea nodo de texto, así que `:empty` casa (Selectors
+          nivel 4 excluye los nodos de texto de longitud cero). NO se cambia por
+          `hidden={!mensaje}`: eso volvería a sacar el elemento del árbol y
+          reintroduciría exactamente el fallo que este bloque arregla.
+
+          Cada región lleva nombre porque hay dos `status` a la vez: con nombre
+          se distinguen al navegar por regiones, y no hay que adivinar cuál sonó. */}
+      <p
+        role="alert"
+        aria-label="Error de la operación"
+        className="rounded-[9px] bg-alerta-suave px-3 py-2 text-[13px] font-semibold text-alerta-texto empty:hidden"
+      >
+        {error ?? ""}
+      </p>
+      <p
+        role="status"
+        aria-label="Resultado de la operación"
+        className="rounded-[9px] bg-completado-suave px-3 py-2 text-[13px] font-semibold text-completado-texto empty:hidden"
+      >
+        {mensaje ?? ""}
+      </p>
+      {/* Lo que se elimina no deja rastro en pantalla, así que se dice aquí: el
+          botón `✕` que tenía el foco desaparece con su fila, y sin esto el
+          lector no anuncia nada de lo ocurrido. */}
+      <p role="status" aria-label="Cambios en la lista" className="sr-only">
+        {anuncio}
+      </p>
 
       {vista === "previsualizacion" ? (
         <VistaPrevia pasos={pasos} />
@@ -494,6 +581,7 @@ function Editor({
 
       <button
         type="button"
+        id={ID_AGREGAR_PASO}
         onClick={onAgregarPaso}
         className={`${botonSecundario} self-start`}
       >
@@ -534,6 +622,7 @@ function PasoTarjeta({
         <label className="flex flex-1 flex-col gap-1.5">
           <span className={etiqueta}>Título del paso {indice + 1}</span>
           <input
+            id={idTituloPaso(paso.id)}
             value={paso.titulo}
             onChange={(e) => onEditar({ titulo: e.target.value })}
             placeholder="p. ej. Datos adicionales"
@@ -572,6 +661,7 @@ function PasoTarjeta({
 
       <button
         type="button"
+        id={idAgregarCampo(paso.id)}
         onClick={onAgregarCampo}
         className={`${botonSecundario} self-start`}
       >
@@ -604,6 +694,7 @@ function CampoTarjeta({
         <label className="flex flex-1 flex-col gap-1.5">
           <span className={etiqueta}>Etiqueta</span>
           <input
+            id={idEtiquetaCampo(c.id)}
             value={c.etiqueta}
             onChange={(e) => onEditar({ etiqueta: e.target.value })}
             placeholder="Lo que lee el mercaderista"
