@@ -186,6 +186,33 @@ const exhibicion = new Table({
   foto_id: column.text,
 });
 
+// La incidencia de VISITA: el hallazgo que el mercaderista tiene que atender
+// antes de salir, venga del módulo que venga. La CREA el servidor a partir del
+// dato levantado —`authenticated` no tiene INSERT—, así que la app la lee y solo
+// le escribe la resolución.
+//
+// Se declara aquí y no en el ticket de la pantalla porque sin la tabla en el
+// esquema local, PowerSync baja las filas a `ps_untyped` y ninguna consulta las
+// encuentra: el stream existiría y la lista seguiría vacía.
+const incidencia = new Table({
+  tenant_id: column.text,
+  visita_id: column.text,
+  levantamiento_id: column.text,
+  marca_id: column.text,
+  sku_id: column.text,
+  exhibicion_negociada_id: column.text,
+  origen: column.text,
+  estado: column.text,
+  // Los números del hallazgo, escritos por el único dueño de la regla. Se
+  // pintan; no se recalculan aquí.
+  detalle: column.text,
+  accion_tomada: column.text,
+  motivo: column.text,
+  foto_resolucion_id: column.text,
+  atendida_at: column.text,
+  creado_at: column.text,
+});
+
 const contingencia = new Table({
   tenant_id: column.text,
   visita_id: column.text,
@@ -379,6 +406,7 @@ export const AppSchema = new Schema({
   exhibicion_negociada,
   exhibicion,
   contingencia,
+  incidencia,
   solicitud_cambio_ruta,
   profile,
   formulario_levantamiento,

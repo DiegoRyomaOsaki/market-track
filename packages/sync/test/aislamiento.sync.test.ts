@@ -42,6 +42,10 @@ const TABLAS = [
   // gate, una sesión sin segundo factor bajaría el puntaje y nadie se enteraría
   // — la RLS no interviene en la bajada.
   "puntaje_merchandiser",
+  // Y la incidencia por lo mismo: la crea el servidor y baja por un stream, así
+  // que una sesión sin segundo factor que la replicase se llevaría la lista de
+  // hallazgos sin haberlo completado.
+  "incidencia",
 ] as const;
 
 describe("aislamiento de las sync rules", () => {
@@ -213,6 +217,41 @@ describe("aislamiento de las sync rules", () => {
       expect(
         exhibiciones.filter((x) => !suyos.has(x.levantamiento_id)),
       ).toEqual([]);
+    });
+  }, 180000);
+
+  it("la incidencia que baja es solo la de SUS visitas", async () => {
+    // La incidencia la CREA el servidor (un trigger sobre el dato levantado), y
+    // la RLS no interviene en la bajada: si esta regla se quedara en el filtro
+    // por tenant, cada teléfono bajaría la lista de hallazgos de todos sus
+    // compañeros — dónde falló cada uno, tienda por tienda.
+    //
+    // El seed le deja a José un `levantamiento_sku` en quiebre (20 de sistema, 0
+    // de piso), así que su incidencia existe sin sembrar nada: es el control
+    // positivo. Y `conTrabajoDeCompanero` siembra un sku con diferencia y una
+    // exhibición negociada sin instalar, así que el motor produce solas las del
+    // compañero — el mismo seed prueba el motor y la bajada.
+    await conTrabajoDeCompanero(async () => {
+      const sesion = await sesionAal2(USUARIOS.joseMaracumango.email);
+      const [visitas, incidencias] = await Promise.all([
+        filasReplicadas<{ id: string }>(sesion, "visita", "id"),
+        filasReplicadas<{ id: string; visita_id: string; origen: string }>(
+          sesion,
+          "incidencia",
+          "id, visita_id, origen",
+        ),
+      ]);
+
+      // Control positivo: la suya SÍ baja. Sin él, "no bajó nada ajeno" sería
+      // trivialmente cierto con la regla rota — o con el motor sin disparar.
+      expect(incidencias.map((i) => i.origen)).toContain("quiebre");
+
+      // Y todas las que bajan cuelgan de una visita propia, sin excepción.
+      const suyas = new Set(visitas.map((v) => v.id));
+      expect(incidencias.filter((i) => !suyas.has(i.visita_id))).toEqual([]);
+      expect(incidencias.map((i) => i.visita_id)).not.toContain(
+        TRABAJO_COMPANERO.visita,
+      );
     });
   }, 180000);
 

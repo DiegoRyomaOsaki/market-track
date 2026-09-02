@@ -108,6 +108,19 @@ streams:
       # app la ESCRIBE (el trigger de MAR-28 dispara la alerta al supervisor) y
       # la relee para mostrar los pasos "⚠ Omitido".
       - SELECT * FROM contingencia WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND visita_id IN (SELECT id FROM visita WHERE mercaderista_id = auth.user_id())
+      # Las incidencias de SUS visitas: la lista global que tiene que atender
+      # antes de salir, venga del módulo que venga. La app las LEE (no las crea:
+      # `authenticated` no tiene INSERT) y les escribe la resolución.
+      #
+      # Acotada por las visitas propias, igual que la contingencia y la foto. La
+      # RLS no interviene en la bajada —PowerSync replica con un rol BYPASSRLS—,
+      # así que lo que aquí no se acote llega al teléfono de cada compañero y
+      # sobrevive al robo del dispositivo.
+      #
+      # `SELECT *` y no una proyección: cada columna de esta tabla es para el
+      # mercaderista. No hay aquí un monto de bono ni un contador de operación
+      # que dejar fuera.
+      - SELECT * FROM incidencia WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND visita_id IN (SELECT id FROM visita WHERE mercaderista_id = auth.user_id())
       # Solicitudes de cambio de ruta: la app las ESCRIBE y las relee para mostrar
       # su estado. Solo las PROPIAS (acotadas al usuario, no por parámetro del
       # cliente): la RLS deja al staff verlas todas, pero al teléfono solo bajan

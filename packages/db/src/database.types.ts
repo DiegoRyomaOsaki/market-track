@@ -797,6 +797,110 @@ export type Database = {
           },
         ]
       }
+      incidencia: {
+        Row: {
+          accion_tomada: string | null
+          atendida_at: string | null
+          creado_at: string
+          detalle: Json
+          estado: Database["public"]["Enums"]["estado_incidencia"]
+          exhibicion_negociada_id: string | null
+          foto_resolucion_id: string | null
+          id: string
+          levantamiento_id: string | null
+          marca_id: string | null
+          motivo: string | null
+          origen: Database["public"]["Enums"]["origen_incidencia"]
+          sku_id: string | null
+          tenant_id: string
+          visita_id: string
+        }
+        Insert: {
+          accion_tomada?: string | null
+          atendida_at?: string | null
+          creado_at?: string
+          detalle?: Json
+          estado?: Database["public"]["Enums"]["estado_incidencia"]
+          exhibicion_negociada_id?: string | null
+          foto_resolucion_id?: string | null
+          id?: string
+          levantamiento_id?: string | null
+          marca_id?: string | null
+          motivo?: string | null
+          origen: Database["public"]["Enums"]["origen_incidencia"]
+          sku_id?: string | null
+          tenant_id: string
+          visita_id: string
+        }
+        Update: {
+          accion_tomada?: string | null
+          atendida_at?: string | null
+          creado_at?: string
+          detalle?: Json
+          estado?: Database["public"]["Enums"]["estado_incidencia"]
+          exhibicion_negociada_id?: string | null
+          foto_resolucion_id?: string | null
+          id?: string
+          levantamiento_id?: string | null
+          marca_id?: string | null
+          motivo?: string | null
+          origen?: Database["public"]["Enums"]["origen_incidencia"]
+          sku_id?: string | null
+          tenant_id?: string
+          visita_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "incidencia_exh_neg_fk"
+            columns: ["exhibicion_negociada_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "exhibicion_negociada"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "incidencia_foto_fk"
+            columns: ["foto_resolucion_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "foto"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "incidencia_lev_fk"
+            columns: ["levantamiento_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "levantamiento"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "incidencia_marca_fk"
+            columns: ["marca_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "marca"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "incidencia_sku_fk"
+            columns: ["sku_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "sku"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "incidencia_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "incidencia_visita_fk"
+            columns: ["visita_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "visita"
+            referencedColumns: ["id", "tenant_id"]
+          },
+        ]
+      }
       levantamiento: {
         Row: {
           creado_at: string
@@ -2802,6 +2906,7 @@ export type Database = {
         | "previsualizada"
         | "aplicada"
         | "cancelada"
+      estado_incidencia: "pendiente" | "resuelta" | "no_resuelta" | "anulada"
       estado_levantamiento: "pendiente" | "en_curso" | "completado" | "omitido"
       estado_parada: "pendiente" | "en_curso" | "completada"
       estado_pase: "vigente" | "usado" | "vencido" | "revocado"
@@ -2824,6 +2929,13 @@ export type Database = {
         | "perfect_store"
       nivel_orden: "bien" | "regular" | "mal"
       nivel_perfect_store: "categoria" | "tipo_tienda" | "cadena" | "tienda"
+      origen_incidencia:
+        | "quiebre"
+        | "diferencia_stock"
+        | "desviacion_precio"
+        | "promo_no_comunicada"
+        | "exhibicion_no_instalada"
+        | "incumplimiento_planograma"
       paso_levantamiento:
         | "checkin"
         | "foto_antes"
@@ -3012,6 +3124,7 @@ export const Constants = {
         "aplicada",
         "cancelada",
       ],
+      estado_incidencia: ["pendiente", "resuelta", "no_resuelta", "anulada"],
       estado_levantamiento: ["pendiente", "en_curso", "completado", "omitido"],
       estado_parada: ["pendiente", "en_curso", "completada"],
       estado_pase: ["vigente", "usado", "vencido", "revocado"],
@@ -3036,6 +3149,14 @@ export const Constants = {
       ],
       nivel_orden: ["bien", "regular", "mal"],
       nivel_perfect_store: ["categoria", "tipo_tienda", "cadena", "tienda"],
+      origen_incidencia: [
+        "quiebre",
+        "diferencia_stock",
+        "desviacion_precio",
+        "promo_no_comunicada",
+        "exhibicion_no_instalada",
+        "incumplimiento_planograma",
+      ],
       paso_levantamiento: [
         "checkin",
         "foto_antes",

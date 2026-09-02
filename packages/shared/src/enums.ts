@@ -83,6 +83,20 @@ export const TIPOS_TIENDA = Constants.public.Enums.tipo_tienda;
 export const estadoImportacionSchema = z.enum(
   Constants.public.Enums.estado_importacion,
 );
+
+// La incidencia de VISITA: el hallazgo que el mercaderista tiene que atender
+// antes de salir. La genera el motor a partir del dato levantado, no la declara
+// él — por eso aquí solo hay vocabulario, y ninguna lista de "qué se puede
+// crear".
+export const origenIncidenciaSchema = z.enum(
+  Constants.public.Enums.origen_incidencia,
+);
+/** Los valores del enum, para pintar un filtro sin escribirlos a mano. */
+export const ORIGENES_INCIDENCIA = Constants.public.Enums.origen_incidencia;
+export const estadoIncidenciaSchema = z.enum(
+  Constants.public.Enums.estado_incidencia,
+);
+export const ESTADOS_INCIDENCIA = Constants.public.Enums.estado_incidencia;
 // Los módulos (secciones) del portal cliente que el admin habilita por cliente
 // (MAR-74). Es el contrato tipado que consumen el shell (MAR-54) y el toggle
 // admin (MAR-81) sin redefinir la lista.
@@ -111,5 +125,7 @@ export type CanalOtp = z.infer<typeof canalOtpSchema>;
 export type EstadoPase = z.infer<typeof estadoPaseSchema>;
 export type TipoTienda = z.infer<typeof tipoTiendaSchema>;
 export type EstadoImportacion = z.infer<typeof estadoImportacionSchema>;
+export type OrigenIncidencia = z.infer<typeof origenIncidenciaSchema>;
+export type EstadoIncidencia = z.infer<typeof estadoIncidenciaSchema>;
 export type ModuloPortal = z.infer<typeof moduloPortalSchema>;
 export type AmbitoFormulario = z.infer<typeof ambitoFormularioSchema>;
