@@ -41,12 +41,15 @@ afterAll(async () => {
   await db.end();
 });
 
+// `null` es un valor con significado, no la ausencia del campo: es lo que
+// escribe el mercaderista cuando BORRA el precio, y el motor tiene que anular
+// las incidencias que ese precio sostenía.
 type CamposSku = {
-  stock_sistema?: number;
-  stock_piso?: number;
-  precio_registrado?: number;
-  hay_promo?: boolean;
-  promo_comunicada?: boolean;
+  stock_sistema?: number | null;
+  stock_piso?: number | null;
+  precio_registrado?: number | null;
+  hay_promo?: boolean | null;
+  promo_comunicada?: boolean | null;
 };
 
 type Cadena = {
@@ -330,6 +333,47 @@ describe("motor de incidencias — un hallazgo, una incidencia", () => {
     });
   });
 
+  it("mientras sigue pendiente, el detalle se refresca con los números de ahora", async () => {
+    // El hallazgo sigue siendo el mismo (piso 0), así que la incidencia no se
+    // duplica; pero el sistema pasó de 10 a 15 y el teléfono tiene que enseñar
+    // el número de ahora. Es la mitad del predicado del upsert que los tests de
+    // idempotencia no ejercitan: ellos reenvían siempre los MISMOS valores.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await levantarEnPasos(c, "b5", {
+        stock_sistema: 10,
+        stock_piso: 0,
+      });
+      await pasoActualiza(c, cadena, { stock_sistema: 15, stock_piso: 0 });
+      const incidencias = await incidenciasDe(c, cadena.visita);
+      expect(incidencias).toHaveLength(1);
+      expect(incidencias[0]?.detalle).toMatchObject({ stock_sistema: 15 });
+    });
+  });
+
+  it("una vez atendida, el detalle queda congelado con lo que se resolvió", async () => {
+    // El detalle es la foto del hallazgo tal como estaba cuando el mercaderista
+    // lo resolvió, y el puntaje condicional puntuará sobre ella. Refrescarlo
+    // después dejaría una acción tomada explicando unos números que la fila ya
+    // no enseña.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await levantarEnPasos(c, "b6", {
+        stock_sistema: 10,
+        stock_piso: 0,
+      });
+      await c.query(
+        `update public.incidencia
+            set estado = 'resuelta', accion_tomada = 'Repuse 10 unidades',
+                atendida_at = now()
+          where visita_id = $1`,
+        [cadena.visita],
+      );
+      await pasoActualiza(c, cadena, { stock_sistema: 15, stock_piso: 0 });
+      const incidencias = await incidenciasDe(c, cadena.visita);
+      expect(incidencias[0]?.estado).toBe("resuelta");
+      expect(incidencias[0]?.detalle).toMatchObject({ stock_sistema: 10 });
+    });
+  });
+
   it("volver a guardar el paso NO pisa lo que el mercaderista ya atendió", async () => {
     await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
       const cadena = await levantarEnPasos(c, "b4", {
@@ -409,6 +453,76 @@ describe("motor de incidencias — el hallazgo que deja de existir", () => {
       await pasoActualiza(c, cadena, { precio_registrado: 6.9 });
       const incidencias = await incidenciasDe(c, cadena.visita);
       expect(incidencias.map((i) => i.estado)).toEqual(["anulada"]);
+    });
+  });
+
+  it("borrar el precio anula LAS DOS incidencias de precio", async () => {
+    // La rama que se dispara cuando el mercaderista deja el precio vacío: sin
+    // ella, las dos incidencias de precio sobreviven a la corrección que las
+    // desmiente y la verja de check-out se cierra sobre un hallazgo que ya no
+    // existe. Se siembran las dos a la vez (un precio bajo el regular con promo
+    // vista y no comunicada da `promo_no_comunicada`; el sobreprecio posterior
+    // deja `desviacion_precio`) para que la anulación tenga que alcanzar a ambas.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await levantarEnPasos(c, "c6", {
+        precio_registrado: 5.0,
+        hay_promo: true,
+        promo_comunicada: false,
+      });
+      await pasoActualiza(c, cadena, {
+        precio_registrado: 8.9,
+        hay_promo: false,
+        promo_comunicada: false,
+      });
+      expect(
+        (await incidenciasDe(c, cadena.visita)).map((i) => i.origen),
+      ).toEqual(["desviacion_precio", "promo_no_comunicada"]);
+
+      await pasoActualiza(c, cadena, { precio_registrado: null });
+      const incidencias = await incidenciasDe(c, cadena.visita);
+      expect(incidencias.map((i) => i.estado)).toEqual(["anulada", "anulada"]);
+    });
+  });
+
+  it("comunicar la promo anula la incidencia de promo sin tocar el precio", async () => {
+    // El veredicto deja de ser `promo_no_comunicada` sin que el precio cambie:
+    // la anulación tiene que colgar del veredicto, no de que el precio se mueva.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await levantarEnPasos(c, "c7", {
+        precio_registrado: 5.0,
+        hay_promo: true,
+        promo_comunicada: false,
+      });
+      expect(
+        (await incidenciasDe(c, cadena.visita)).map((i) => i.origen),
+      ).toEqual(["promo_no_comunicada"]);
+
+      await pasoActualiza(c, cadena, { promo_comunicada: true });
+      const incidencias = await incidenciasDe(c, cadena.visita);
+      // Sin promo vigente comunicada en el maestro, el veredicto pasa a
+      // `subvaluado_sin_promo`: la de promo se anula y nace la de desviación.
+      expect(incidencias.map((i) => [i.origen, i.estado])).toEqual([
+        ["desviacion_precio", "pendiente"],
+        ["promo_no_comunicada", "anulada"],
+      ]);
+    });
+  });
+
+  it("una exhibición negociada YA instalada no genera incidencia", async () => {
+    // El caso negativo del motor de exhibiciones, gemelo del de SKU: sin él, un
+    // motor que la creara siempre pasaría el test de "sin instalar" igual.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await abrirVisita(c, "c8");
+      await c.query(
+        `insert into public.exhibicion (id, levantamiento_id, exhibicion_negociada_id, instalada, completa)
+         values ($1,$2,$3,true,true)`,
+        [
+          "e0000013-0000-0000-0000-0000000000c8",
+          cadena.levantamiento,
+          EXH_NEGOCIADA,
+        ],
+      );
+      expect(await incidenciasDe(c, cadena.visita)).toEqual([]);
     });
   });
 

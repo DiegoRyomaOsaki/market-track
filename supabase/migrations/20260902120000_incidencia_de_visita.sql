@@ -168,6 +168,11 @@ create policy incidencia_staff_lee on public.incidencia for select to authentica
 -- Mismo CASE por rol que el trabajo de campo acotado al dueño, y sin rama ELSE a
 -- propósito: un rol nuevo cae en NULL, y NULL en una política es denegar.
 --
+-- Las ramas de supervisor y admin se conservan por simetría con las otras siete
+-- tablas, pero no son las que dejan pasar al staff: admin y supervisor tienen
+-- `tenant_id` nulo, así que el `tenant_id = app.tenant_actual()` de arriba corta
+-- antes. Quien les da acceso es `incidencia_staff_lee`.
+--
 -- SIN rama 'cliente' a propósito. La vista del portal es de otro ticket, y la
 -- decide su política: excluir el rol en la consulta que agrupa solo lo
 -- escondería de esa pantalla, dejándolo legible por PostgREST.
@@ -185,7 +190,7 @@ create policy incidencia_usuario_lee_su_tenant on public.incidencia for select t
   );
 
 comment on policy incidencia_usuario_lee_su_tenant on public.incidencia is
-  'El mercaderista lee SOLO las incidencias de sus propias visitas; el staff, todas las de su cliente. El cliente-marca no lee ninguna hasta que la vista del portal traiga su propia rama.';
+  'El mercaderista lee SOLO las incidencias de sus propias visitas. Al staff lo deja pasar `incidencia_staff_lee`, no esta política: admin y supervisor no tienen tenant_id, así que su rama del CASE nunca se cumple. El cliente-marca no lee ninguna hasta que la vista del portal traiga su propia rama.';
 
 -- El dueño de la visita ATIENDE la incidencia. El `with check` niega `anulada`:
 -- es el único estado que vacía la lista sin atenderla, y la verja de check-out
@@ -249,13 +254,17 @@ as $$
   -- `nulls not distinct` se lee explícita así, y nadie tiene que deducirla.
   on conflict on constraint incidencia_hallazgo_uq do update
      set detalle = excluded.detalle,
-         -- Lo que el mercaderista ya ATENDIÓ no se toca nunca. Solo revive lo
-         -- anulado: el hallazgo volvió porque volvió a cambiar el dato.
+         -- Revive lo anulado: el hallazgo volvió porque volvió a cambiar el dato.
          estado = case when inc.estado = 'anulada'
                        then 'pendiente'::public.estado_incidencia
                        else inc.estado end
+   -- Lo que el mercaderista ya ATENDIÓ no se toca: ni el estado ni el DETALLE.
+   -- El detalle es la foto del hallazgo tal como estaba cuando lo resolvió, y el
+   -- puntaje condicional puntuará sobre ella; refrescarlo después dejaría una
+   -- acción tomada explicando unos números que la fila ya no enseña.
    where inc.estado = 'anulada'
-      or inc.detalle is distinct from excluded.detalle;
+      or (inc.estado = 'pendiente'
+          and inc.detalle is distinct from excluded.detalle);
 $$;
 
 /*
@@ -334,98 +343,125 @@ declare
   v_fecha     date;
   v_regular   numeric;
   v_veredicto public.evaluacion_precio;
+  -- El `update of <columnas>` del trigger acota CUÁNDO se dispara; esto acota
+  -- QUÉ bloque corre. Sin ellas, la pasada del stock ejecuta las dos
+  -- anulaciones de precio sobre incidencias que nunca existieron, y la pasada
+  -- del precio reevalúa un quiebre que nadie tocó: cuatro consultas de sobra
+  -- por SKU, cuarenta SKUs por visita.
+  v_stock_cambio  boolean;
+  v_precio_cambio boolean;
 begin
   select l.marca_id, l.visita_id into lev
   from public.levantamiento l where l.id = new.levantamiento_id;
 
+  v_stock_cambio := tg_op = 'INSERT'
+    or new.stock_sistema is distinct from old.stock_sistema
+    or new.stock_piso is distinct from old.stock_piso;
+  -- Se mira la columna CRUDA y no el flag `quiebre`: con el piso en 0 y el
+  -- sistema pasando de 10 a 15 el flag no cambia, pero el detalle sí, y el
+  -- hallazgo tiene que llegar al teléfono con los números de ahora.
+  v_precio_cambio := tg_op = 'INSERT'
+    or new.precio_registrado is distinct from old.precio_registrado
+    or new.hay_promo is distinct from old.hay_promo
+    or new.promo_comunicada is distinct from old.promo_comunicada;
+
   -- Quiebre y diferencia: los flags ya vienen calculados (columnas generadas).
-  if new.quiebre then
-    perform app.crear_incidencia(new.tenant_id, lev.visita_id, new.levantamiento_id,
-      lev.marca_id, new.sku_id, null, 'quiebre',
-      jsonb_build_object('stock_sistema', new.stock_sistema, 'stock_piso', new.stock_piso));
-    if tg_op = 'INSERT' then
-      perform app.crear_alerta(new.tenant_id, 'quiebre', lev.marca_id, lev.visita_id, 'alta',
-        jsonb_build_object('sku_id', new.sku_id,
-          'stock_sistema', new.stock_sistema, 'stock_piso', new.stock_piso));
-    end if;
-  elsif tg_op = 'UPDATE' then
-    perform app.anular_incidencia(new.tenant_id, lev.visita_id, new.levantamiento_id,
-      new.sku_id, null, 'quiebre');
-  end if;
-
-  if new.diferencia then
-    perform app.crear_incidencia(new.tenant_id, lev.visita_id, new.levantamiento_id,
-      lev.marca_id, new.sku_id, null, 'diferencia_stock',
-      jsonb_build_object('stock_sistema', new.stock_sistema, 'stock_piso', new.stock_piso,
-        'delta', new.stock_piso - new.stock_sistema));
-    if tg_op = 'INSERT' then
-      perform app.crear_alerta(new.tenant_id, 'diferencia_stock', lev.marca_id, lev.visita_id, 'info',
-        jsonb_build_object('sku_id', new.sku_id,
-          'stock_sistema', new.stock_sistema, 'stock_piso', new.stock_piso,
-          'delta', new.stock_piso - new.stock_sistema));
-    end if;
-  elsif tg_op = 'UPDATE' then
-    perform app.anular_incidencia(new.tenant_id, lev.visita_id, new.levantamiento_id,
-      new.sku_id, null, 'diferencia_stock');
-  end if;
-
-  if new.precio_registrado is not null then
-    -- El día del negocio es el de Lima, no el de UTC: entre las 19:00 y
-    -- medianoche, `current_date` ya rodó al día siguiente y la promo de ayer
-    -- dejaría de encontrarse.
-    select t.cadena_id, (v.check_in_recibido_at at time zone 'America/Lima')::date
-      into v_cadena, v_fecha
-    from public.visita v join public.tienda t on t.id = v.tienda_id
-    where v.id = lev.visita_id;
-
-    select * into v_veredicto, v_regular
-    from app.evaluar_precio_sku(
-      new.tenant_id, new.sku_id, lev.marca_id, v_cadena, new.precio_registrado,
-      new.hay_promo, new.promo_comunicada, v_fecha);
-
-    if v_veredicto in ('sobreprecio', 'subvaluado_sin_promo') then
+  if v_stock_cambio then
+    if new.quiebre then
       perform app.crear_incidencia(new.tenant_id, lev.visita_id, new.levantamiento_id,
-        lev.marca_id, new.sku_id, null, 'desviacion_precio',
-        jsonb_build_object('precio_registrado', new.precio_registrado,
-          'precio_regular', v_regular, 'motivo', v_veredicto));
+        lev.marca_id, new.sku_id, null, 'quiebre',
+        jsonb_build_object('stock_sistema', new.stock_sistema, 'stock_piso', new.stock_piso));
       if tg_op = 'INSERT' then
-        perform app.crear_alerta(new.tenant_id, 'desviacion_precio', lev.marca_id, lev.visita_id, 'alta',
-          jsonb_build_object('sku_id', new.sku_id, 'precio_registrado', new.precio_registrado,
-            'precio_regular', v_regular, 'motivo', v_veredicto));
+        perform app.crear_alerta(new.tenant_id, 'quiebre', lev.marca_id, lev.visita_id, 'alta',
+          jsonb_build_object('sku_id', new.sku_id,
+            'stock_sistema', new.stock_sistema, 'stock_piso', new.stock_piso));
       end if;
     elsif tg_op = 'UPDATE' then
       perform app.anular_incidencia(new.tenant_id, lev.visita_id, new.levantamiento_id,
-        new.sku_id, null, 'desviacion_precio');
+        new.sku_id, null, 'quiebre');
     end if;
 
-    if v_veredicto = 'promo_no_comunicada' then
+    if new.diferencia then
       perform app.crear_incidencia(new.tenant_id, lev.visita_id, new.levantamiento_id,
-        lev.marca_id, new.sku_id, null, 'promo_no_comunicada',
-        jsonb_build_object('precio_registrado', new.precio_registrado,
-          'precio_regular', v_regular));
+        lev.marca_id, new.sku_id, null, 'diferencia_stock',
+        jsonb_build_object('stock_sistema', new.stock_sistema, 'stock_piso', new.stock_piso,
+          'delta', new.stock_piso - new.stock_sistema));
       if tg_op = 'INSERT' then
-        perform app.crear_alerta(new.tenant_id, 'promo_no_activa', lev.marca_id, lev.visita_id, 'alta',
-          jsonb_build_object('sku_id', new.sku_id, 'precio_registrado', new.precio_registrado,
-            'precio_regular', v_regular));
+        perform app.crear_alerta(new.tenant_id, 'diferencia_stock', lev.marca_id, lev.visita_id, 'info',
+          jsonb_build_object('sku_id', new.sku_id,
+            'stock_sistema', new.stock_sistema, 'stock_piso', new.stock_piso,
+            'delta', new.stock_piso - new.stock_sistema));
       end if;
     elsif tg_op = 'UPDATE' then
+      perform app.anular_incidencia(new.tenant_id, lev.visita_id, new.levantamiento_id,
+        new.sku_id, null, 'diferencia_stock');
+    end if;
+  end if;
+
+  if v_precio_cambio then
+    if new.precio_registrado is not null then
+      -- El día del negocio es el de Lima, no el de UTC: entre las 19:00 y
+      -- medianoche, `current_date` ya rodó al día siguiente y la promo de ayer
+      -- dejaría de encontrarse.
+      select t.cadena_id, (v.check_in_recibido_at at time zone 'America/Lima')::date
+        into v_cadena, v_fecha
+      from public.visita v join public.tienda t on t.id = v.tienda_id
+      where v.id = lev.visita_id;
+
+      select * into v_veredicto, v_regular
+      from app.evaluar_precio_sku(
+        new.tenant_id, new.sku_id, lev.marca_id, v_cadena, new.precio_registrado,
+        new.hay_promo, new.promo_comunicada, v_fecha);
+
+      if v_veredicto in ('sobreprecio', 'subvaluado_sin_promo') then
+        perform app.crear_incidencia(new.tenant_id, lev.visita_id, new.levantamiento_id,
+          lev.marca_id, new.sku_id, null, 'desviacion_precio',
+          jsonb_build_object('precio_registrado', new.precio_registrado,
+            'precio_regular', v_regular, 'motivo', v_veredicto));
+        if tg_op = 'INSERT' then
+          perform app.crear_alerta(new.tenant_id, 'desviacion_precio', lev.marca_id, lev.visita_id, 'alta',
+            jsonb_build_object('sku_id', new.sku_id, 'precio_registrado', new.precio_registrado,
+              'precio_regular', v_regular, 'motivo', v_veredicto));
+        end if;
+      elsif tg_op = 'UPDATE' then
+        perform app.anular_incidencia(new.tenant_id, lev.visita_id, new.levantamiento_id,
+          new.sku_id, null, 'desviacion_precio');
+      end if;
+
+      if v_veredicto = 'promo_no_comunicada' then
+        perform app.crear_incidencia(new.tenant_id, lev.visita_id, new.levantamiento_id,
+          lev.marca_id, new.sku_id, null, 'promo_no_comunicada',
+          jsonb_build_object('precio_registrado', new.precio_registrado,
+            'precio_regular', v_regular));
+        if tg_op = 'INSERT' then
+          perform app.crear_alerta(new.tenant_id, 'promo_no_activa', lev.marca_id, lev.visita_id, 'alta',
+            jsonb_build_object('sku_id', new.sku_id, 'precio_registrado', new.precio_registrado,
+              'precio_regular', v_regular));
+        end if;
+      elsif tg_op = 'UPDATE' then
+        perform app.anular_incidencia(new.tenant_id, lev.visita_id, new.levantamiento_id,
+          new.sku_id, null, 'promo_no_comunicada');
+      end if;
+    elsif tg_op = 'UPDATE' then
+      -- El precio se borró: no hay veredicto que sostenga las dos incidencias de
+      -- precio. Sin esta rama sobrevivirían a la corrección que las desmiente.
+      perform app.anular_incidencia(new.tenant_id, lev.visita_id, new.levantamiento_id,
+        new.sku_id, null, 'desviacion_precio');
       perform app.anular_incidencia(new.tenant_id, lev.visita_id, new.levantamiento_id,
         new.sku_id, null, 'promo_no_comunicada');
     end if;
-  elsif tg_op = 'UPDATE' then
-    -- El precio se borró: no hay veredicto que sostenga las dos incidencias de
-    -- precio. Sin esta rama sobrevivirían a la corrección que las desmiente.
-    perform app.anular_incidencia(new.tenant_id, lev.visita_id, new.levantamiento_id,
-      new.sku_id, null, 'desviacion_precio');
-    perform app.anular_incidencia(new.tenant_id, lev.visita_id, new.levantamiento_id,
-      new.sku_id, null, 'promo_no_comunicada');
   end if;
 
   return null;
 end;
 $$;
 
-revoke execute on function app.derivados_levantamiento_sku() from public;
+-- Los dos revokes, como en las funciones de arriba: Postgres concede EXECUTE a
+-- PUBLIC al crear, y en la nube Supabase estampa además un grant a `anon`. Que
+-- Postgres rechace invocar una función de tipo trigger fuera de un trigger es
+-- una segunda verja, no la primera.
+revoke execute on function app.derivados_levantamiento_sku()
+  from public, anon, authenticated, service_role;
 
 drop trigger alertas_levantamiento_sku on public.levantamiento_sku;
 create trigger derivados_levantamiento_sku
@@ -476,7 +512,8 @@ begin
 end;
 $$;
 
-revoke execute on function app.derivados_exhibicion() from public;
+revoke execute on function app.derivados_exhibicion()
+  from public, anon, authenticated, service_role;
 
 drop trigger alertas_exhibicion on public.exhibicion;
 create trigger derivados_exhibicion
