@@ -118,12 +118,3 @@ export function construirPasos(
   const corte = PASOS.findIndex((p) => p.id === "despues");
   return [...PASOS.slice(0, corte), ...configurables, ...PASOS.slice(corte)];
 }
-
-/** ¿Está el levantamiento terminado? Todos los pasos hechos u omitidos. */
-export function levantamientoCompleto(
-  pasos: readonly PasoWizard[],
-  hechos: ReadonlySet<string>,
-  omitidos: ReadonlySet<string>,
-): boolean {
-  return pasos.every((p) => hechos.has(p.id) || omitidos.has(p.id));
-}

@@ -95,6 +95,13 @@ export const AppSchema = new Schema({
     origen: column.text,
     estado: column.text,
   }),
+  // Los módulos ya cerrados. `paso` se declara para poder señalar CUÁL bajó como
+  // control positivo, no solo contar filas.
+  levantamiento_paso: new Table({
+    tenant_id: column.text,
+    levantamiento_id: column.text,
+    paso: column.text,
+  }),
   // El plan de lealtad. Aquí sí hacen falta más columnas que `tenant_id`: el
   // caso a demostrar es un COMPAÑERO DEL MISMO CLIENTE, así que el tenant no
   // distingue nada y hay que mirar `mercaderista_id`. Y `periodo_inicio` porque
@@ -345,6 +352,9 @@ export const TRABAJO_COMPANERO = {
   /** Una respuesta PROPIA de José, en su levantamiento del seed: el control
    * positivo de que la réplica ya asentó lo sembrado antes de afirmar nada. */
   respuestaPropiaDeJose: "f0000047-0000-0000-0000-000000000095",
+  /** Un módulo cerrado del compañero, y otro propio de José como control. */
+  moduloCompanero: "f0000048-0000-0000-0000-000000000096",
+  moduloPropioDeJose: "f0000048-0000-0000-0000-000000000095",
 } as const;
 
 export async function conTrabajoDeCompanero<T>(
@@ -386,6 +396,20 @@ export async function conTrabajoDeCompanero<T>(
        values ($1, $2, $3, 'precios', 'harness: bypass del compañero', now())`,
       [T.contingencia, tenant, T.visita],
     );
+    // Un módulo cerrado del COMPAÑERO y otro PROPIO de José: sin el propio, el
+    // "no bajó nada ajeno" del test sería trivialmente cierto con la regla rota.
+    await pg.query(
+      `insert into public.levantamiento_paso
+         (id, tenant_id, levantamiento_id, paso, completado_at)
+       values ($1, $2, $3, 'quiebres', now())`,
+      [T.moduloCompanero, tenant, T.levantamiento],
+    );
+    await pg.query(
+      `insert into public.levantamiento_paso
+         (id, tenant_id, levantamiento_id, paso, completado_at)
+       values ($1, $2, 'a0000011-0000-0000-0000-000000000001', 'precios', now())`,
+      [T.moduloPropioDeJose, tenant],
+    );
     await pg.query(
       `insert into public.levantamiento_respuesta (id, tenant_id, levantamiento_id, campo_id, valor)
        values ($1, $2, 'a0000011-0000-0000-0000-000000000001', 'harness', '"propia"'::jsonb)`,
@@ -395,6 +419,9 @@ export async function conTrabajoDeCompanero<T>(
   } finally {
     await pg.query(`delete from public.levantamiento_respuesta where id = $1`, [
       T.respuestaPropiaDeJose,
+    ]);
+    await pg.query(`delete from public.levantamiento_paso where id = $1`, [
+      T.moduloPropioDeJose,
     ]);
     await pg.query(`delete from public.visita where id = $1`, [T.visita]);
     await pg.end();

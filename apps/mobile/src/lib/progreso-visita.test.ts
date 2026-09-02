@@ -1,5 +1,12 @@
 import type { DefinicionFormulario } from "@market-track/shared";
-import { describe, expect, it } from "@jest/globals";
+import { describe, expect, it, jest } from "@jest/globals";
+
+// `estadoDeModulos` es pura, pero vive junto a los hooks que leen la réplica y a
+// la escritura del módulo cerrado. Se moquean sus dependencias nativas para que
+// Jest pueda cargar el módulo; ninguna de ellas participa en estos tests.
+jest.mock("@powersync/react-native", () => ({ useQuery: jest.fn() }));
+jest.mock("expo-crypto", () => ({ randomUUID: jest.fn() }));
+jest.mock("./powersync/db", () => ({ db: {} }));
 
 import { construirPasos, PASOS } from "./pasos-levantamiento";
 import { estadoDeModulos } from "./progreso-visita";

@@ -129,9 +129,7 @@ export default function CheckOut() {
                 <Pressable
                   key={m.id}
                   disabled={est !== "pendiente" && est !== "en_curso"}
-                  onPress={() =>
-                    router.push(`/levantamiento/${visitaId}/${m.id}`)
-                  }
+                  onPress={() => router.push(`/levantamiento/${visitaId}`)}
                   style={e.fila}
                 >
                   <Text style={e.filaTexto} numberOfLines={1}>

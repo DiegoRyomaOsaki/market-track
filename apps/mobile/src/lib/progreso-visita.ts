@@ -1,4 +1,8 @@
+import { useQuery } from "@powersync/react-native";
+import * as Crypto from "expo-crypto";
+
 import { PASO_CONFIGURABLE, type PasoWizard } from "./pasos-levantamiento";
+import { db } from "./powersync/db";
 
 // El progreso de cada módulo dentro de una marca.
 //
@@ -93,11 +97,84 @@ export function estadoDeModulos(
 /**
  * ¿Está la marca terminada? Todos sus módulos completados u omitidos.
  *
- * Espeja `levantamientoCompleto` de `pasos-levantamiento.ts`, pero sobre el
- * mapa de estados en vez de sobre dos `Set`. Se queda aquí y aquel se retira:
- * dos formas de preguntar lo mismo divergen a la primera corrección.
+ * Único dueño de la pregunta: sustituye a `levantamientoCompleto`, que la
+ * respondía sobre dos `Set` en memoria. Dos formas de preguntar lo mismo
+ * divergen a la primera corrección.
  */
 export function marcaCompleta(estados: Map<string, ProgresoModulo>): boolean {
   if (estados.size === 0) return false;
   return [...estados.values()].every((e) => e.estado !== "pendiente");
+}
+
+/** Una fila de `levantamiento_paso` tal como baja a la réplica. */
+export type ModuloHechoDeVisita = ModuloHecho & {
+  levantamiento_id: string;
+};
+
+/**
+ * Los módulos ya cerrados de TODA la visita, en una sola consulta.
+ *
+ * Por visita y no por marca a propósito: el menú pinta los módulos de todas las
+ * marcas a la vez, y una consulta por marca sería un N+1 sobre la réplica justo
+ * en el camino de pintado.
+ */
+export function useModulosHechosDeVisita(
+  visitaId: string,
+): ModuloHechoDeVisita[] {
+  const { data } = useQuery<ModuloHechoDeVisita>(
+    `SELECT lp.levantamiento_id AS levantamiento_id, lp.paso AS paso,
+            lp.paso_config_id AS paso_config_id
+     FROM levantamiento_paso lp
+     JOIN levantamiento l ON l.id = lp.levantamiento_id
+     WHERE l.visita_id = ?`,
+    [visitaId],
+  );
+  return data ?? [];
+}
+
+/** Filtra las filas de la visita a las de UN levantamiento. */
+export function soloDe<T extends { levantamiento_id: string | null }>(
+  filas: readonly T[],
+  levantamientoId: string | null,
+): T[] {
+  if (!levantamientoId) return [];
+  return filas.filter((f) => f.levantamiento_id === levantamientoId);
+}
+
+/**
+ * El mercaderista da por terminado un módulo.
+ *
+ * Idempotente: reabrir un módulo ya cerrado y volver a pulsar "Continuar" no
+ * puede crear una segunda fila. La base lo impide con dos índices únicos
+ * parciales, pero PowerSync no replica constraints al SQLite local — la verja
+ * que cuenta en el teléfono es esta consulta.
+ */
+export async function marcarModuloHecho(d: {
+  tenant_id: string;
+  levantamiento_id: string;
+  paso: string;
+  paso_config_id: string | null;
+}): Promise<void> {
+  const yaEsta = await db.getAll<{ id: string }>(
+    `SELECT id FROM levantamiento_paso
+      WHERE levantamiento_id = ? AND paso = ?
+        AND ((paso_config_id IS NULL AND ? IS NULL) OR paso_config_id = ?)`,
+    [d.levantamiento_id, d.paso, d.paso_config_id, d.paso_config_id],
+  );
+  if (yaEsta.length > 0) return;
+
+  await db.execute(
+    `INSERT INTO levantamiento_paso
+       (id, tenant_id, levantamiento_id, paso, paso_config_id, completado_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      Crypto.randomUUID(),
+      d.tenant_id,
+      d.levantamiento_id,
+      d.paso,
+      d.paso_config_id,
+      // Hora LOCAL de cuando lo cerró: se trabaja offline y sincroniza después.
+      new Date().toISOString(),
+    ],
+  );
 }

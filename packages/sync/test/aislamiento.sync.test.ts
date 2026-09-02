@@ -46,6 +46,9 @@ const TABLAS = [
   // que una sesión sin segundo factor que la replicase se llevaría la lista de
   // hallazgos sin haberlo completado.
   "incidencia",
+  // Y los módulos cerrados: los baja un stream propio, así que una sesión sin
+  // segundo factor que los replicase se llevaría el avance de la visita.
+  "levantamiento_paso",
 ] as const;
 
 describe("aislamiento de las sync rules", () => {
@@ -252,6 +255,36 @@ describe("aislamiento de las sync rules", () => {
       expect(incidencias.map((i) => i.visita_id)).not.toContain(
         TRABAJO_COMPANERO.visita,
       );
+    });
+  }, 180000);
+
+  it("los módulos ya cerrados que bajan son solo los de SUS levantamientos", async () => {
+    // El avance del menú de visita: si esta regla se quedara en el filtro por
+    // tenant, cada teléfono sabría por qué módulo va cada compañero en cada
+    // tienda. La RLS no interviene en la bajada.
+    await conTrabajoDeCompanero(async () => {
+      const sesion = await sesionAal2(USUARIOS.joseMaracumango.email);
+      const [levs, modulos] = await Promise.all([
+        filasReplicadas<{ id: string }>(sesion, "levantamiento", "id"),
+        filasReplicadas<{ id: string; levantamiento_id: string; paso: string }>(
+          sesion,
+          "levantamiento_paso",
+          "id, levantamiento_id, paso",
+        ),
+      ]);
+
+      // Control positivo: el módulo propio SÍ baja. Sin él, "no bajó nada ajeno"
+      // sería trivialmente cierto con la regla rota.
+      expect(modulos.map((m) => m.id)).toContain(
+        TRABAJO_COMPANERO.moduloPropioDeJose,
+      );
+      expect(modulos.map((m) => m.id)).not.toContain(
+        TRABAJO_COMPANERO.moduloCompanero,
+      );
+
+      // Y todo lo que baja cuelga de un levantamiento propio.
+      const suyos = new Set(levs.map((l) => l.id));
+      expect(modulos.filter((m) => !suyos.has(m.levantamiento_id))).toEqual([]);
     });
   }, 180000);
 
