@@ -3,9 +3,9 @@ import { fireEvent, render, screen } from "@testing-library/react-native";
 
 import type { MarcaAuditable } from "@/lib/levantamiento";
 import { PASOS } from "@/lib/pasos-levantamiento";
-import type { ProgresoModulo } from "@/lib/progreso-visita";
+import type { ModuloDelMenu, ProgresoModulo } from "@/lib/progreso-visita";
 
-import { MenuVisita, type ModuloDelMenu } from "./menu-visita";
+import { MenuVisita } from "./menu-visita";
 
 // El menú es la pantalla que hace posible la navegación libre: enseña TODOS los
 // módulos y su estado por marca, y deja entrar a cualquiera. Es presentacional,

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { BackHandler, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { AyudaBoton } from "@/componentes/ayuda-boton";
-import { MenuVisita, type ModuloDelMenu } from "@/componentes/menu-visita";
+import { MenuVisita } from "@/componentes/menu-visita";
 import { ModuloActivo } from "@/componentes/modulo-activo";
 import {
   completarLevantamiento,
@@ -13,12 +13,11 @@ import {
   useMarcasDeVisita,
   useVisita,
 } from "@/lib/levantamiento";
-import { construirPasos } from "@/lib/pasos-levantamiento";
+import { mensajeDeError } from "@/lib/error";
 import {
-  estadoDeModulos,
+  armarMenuDeVisita,
   marcaCompleta,
   marcarModuloHecho,
-  soloDe,
   useModulosHechosDeVisita,
 } from "@/lib/progreso-visita";
 import { useSesion } from "@/sesion";
@@ -63,69 +62,47 @@ export default function VisitaLevantamiento() {
     if (!visita) return;
     for (const marca of marcas) {
       if (marca.levantamiento_id) continue;
-      void crearLevantamiento({
+      // El `.catch` no es decorativo: sin él un fallo aquí es una promesa no
+      // atrapada, y lo único que vería el mercaderista es una marca que se queda
+      // en "Preparando…" para siempre, sin saber por qué.
+      crearLevantamiento({
         tenant_id: visita.tenant_id,
         visita_id: visitaId,
         marca_id: marca.id,
+      }).catch((err: unknown) => {
+        console.error(
+          `[levantamiento] no se pudo abrir la marca ${marca.id}: ${mensajeDeError(err)}`,
+        );
       });
     }
   }, [visita, marcas, visitaId]);
 
-  // El estado de cada módulo en cada marca. Un solo calculador
-  // (`estadoDeModulos`) sobre dos consultas por visita: nada de N+1 por marca.
-  const porMarca = useMemo(
-    () =>
-      marcas.map((marca) => {
-        // `construirPasos` sigue siendo el único que arma la lista de módulos:
-        // los cinco fijos más los configurables de ESTA marca.
-        const modulos = construirPasos(definiciones.get(marca.id) ?? null);
-        return {
-          marca,
-          modulos,
-          estados: estadoDeModulos(
-            modulos,
-            soloDe(hechos, marca.levantamiento_id),
-            soloDe(contingencias, marca.levantamiento_id),
-          ),
-        };
-      }),
+  // El menú entero —el pivote a módulo-mayor, el estado por marca y si ya se
+  // puede ir al check-out— lo arma una función pura con su propio test. Aquí
+  // solo se memoiza.
+  const menu = useMemo(
+    () => armarMenuDeVisita(marcas, definiciones, hechos, contingencias),
     [marcas, definiciones, hechos, contingencias],
   );
-
-  // El menú se organiza por MÓDULO, con sus marcas dentro. Es el giro del
-  // acuerdo: antes la lista de primer nivel eran las marcas.
-  const modulosDelMenu: ModuloDelMenu[] = useMemo(() => {
-    const porModulo = new Map<string, ModuloDelMenu>();
-    for (const { marca, modulos, estados } of porMarca) {
-      for (const modulo of modulos) {
-        const entrada = porModulo.get(modulo.id) ?? { modulo, marcas: [] };
-        entrada.marcas.push({
-          marca,
-          progreso: estados.get(modulo.id) ?? { estado: "pendiente" },
-        });
-        porModulo.set(modulo.id, entrada);
-      }
-    }
-    return [...porModulo.values()];
-  }, [porMarca]);
-
-  const todoListo =
-    porMarca.length > 0 && porMarca.every((m) => marcaCompleta(m.estados));
 
   // Cierra el levantamiento de cada marca en cuanto todos sus módulos están
   // completados u omitidos. `completarLevantamiento` es un UPDATE por id: volver
   // a llamarlo sobre una marca ya cerrada no duplica nada.
   useEffect(() => {
-    for (const { marca, estados } of porMarca) {
+    for (const { marca, estados } of menu.porMarca) {
       const yaCerrada =
         marca.levantamiento_estado === "completado" ||
         marca.levantamiento_estado === "omitido";
       if (yaCerrada || !marca.levantamiento_id || !marcaCompleta(estados)) {
         continue;
       }
-      void completarLevantamiento(marca.levantamiento_id);
+      completarLevantamiento(marca.levantamiento_id).catch((err: unknown) => {
+        console.error(
+          `[levantamiento] no se pudo cerrar la marca ${marca.id}: ${mensajeDeError(err)}`,
+        );
+      });
     }
-  }, [porMarca]);
+  }, [menu]);
 
   const cerrarModulo = useCallback(() => setAbierto(null), []);
 
@@ -142,7 +119,7 @@ export default function VisitaLevantamiento() {
   }, [abierto, cerrarModulo]);
 
   const activo = abierto
-    ? porMarca.find((m) => m.marca.id === abierto.marcaId)
+    ? menu.porMarca.find((m) => m.marca.id === abierto.marcaId)
     : undefined;
   const moduloActivo = activo?.modulos.find((m) => m.id === abierto?.idModulo);
 
@@ -163,12 +140,16 @@ export default function VisitaLevantamiento() {
             setAbierto({ idModulo: moduloActivo.id, marcaId })
           }
           onCompletar={(levantamientoId) => {
-            void marcarModuloHecho({
+            marcarModuloHecho({
               tenant_id: visita.tenant_id,
               levantamiento_id: levantamientoId,
               paso: moduloActivo.paso,
               paso_config_id:
                 moduloActivo.tipo === "configurable" ? moduloActivo.id : null,
+            }).catch((err: unknown) => {
+              console.error(
+                `[levantamiento] no se pudo cerrar el módulo ${moduloActivo.id}: ${mensajeDeError(err)}`,
+              );
             });
             cerrarModulo();
           }}
@@ -193,9 +174,9 @@ export default function VisitaLevantamiento() {
           </Text>
 
           <MenuVisita
-            modulos={modulosDelMenu}
+            modulos={menu.modulos}
             cargando={cargando}
-            todoListo={todoListo}
+            todoListo={menu.todoListo}
             onAbrir={(idModulo, marcaId) => setAbierto({ idModulo, marcaId })}
             onCheckOut={() => router.push(`/check-out/${visitaId}`)}
           />

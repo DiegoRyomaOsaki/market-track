@@ -220,14 +220,24 @@ function PasoDeModulo({
       />
     );
   }
-  return (
-    <PasoDespues
-      {...comun}
-      usuario={usuario}
-      onCompletar={onCompletar}
-      onContingencia={onContingencia}
-    />
-  );
+  if (modulo.id === "despues") {
+    return (
+      <PasoDespues
+        {...comun}
+        usuario={usuario}
+        onCompletar={onCompletar}
+        onContingencia={onContingencia}
+      />
+    );
+  }
+  // Sin caída libre: un sexto paso fijo tiene que romper la compilación aquí, no
+  // renderizar la foto "Después" dentro de un módulo que el mercaderista cree
+  // que es otro. `modulo.id` está estrechado a `never`.
+  return sinPasoConocido(modulo.id);
+}
+
+function sinPasoConocido(id: never): never {
+  throw new Error(`paso fijo sin componente: ${String(id)}`);
 }
 
 const e = StyleSheet.create({

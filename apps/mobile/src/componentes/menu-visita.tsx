@@ -1,8 +1,6 @@
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 
-import type { MarcaAuditable } from "@/lib/levantamiento";
-import type { PasoWizard } from "@/lib/pasos-levantamiento";
-import type { EstadoModulo, ProgresoModulo } from "@/lib/progreso-visita";
+import type { EstadoModulo, ModuloDelMenu } from "@/lib/progreso-visita";
 import { colores, espacio, radio } from "@/tema";
 
 // El menú de la visita: los módulos, y dentro de cada uno el estado de cada
@@ -16,17 +14,6 @@ import { colores, espacio, radio } from "@/tema";
 // Componente presentacional a propósito: no consulta la réplica ni navega, todo
 // entra por props. Así el estado que pinta se prueba sin montar el árbol de
 // navegación ni PowerSync.
-
-export type ModuloDeMarca = {
-  marca: MarcaAuditable;
-  progreso: ProgresoModulo;
-};
-
-export type ModuloDelMenu = {
-  modulo: PasoWizard;
-  /** Una entrada por marca en la que este módulo existe. */
-  marcas: ModuloDeMarca[];
-};
 
 const ETIQUETA: Record<EstadoModulo, string> = {
   pendiente: "Pendiente",

@@ -1,7 +1,13 @@
+import type { DefinicionFormulario } from "@market-track/shared";
 import { useQuery } from "@powersync/react-native";
 import * as Crypto from "expo-crypto";
 
-import { PASO_CONFIGURABLE, type PasoWizard } from "./pasos-levantamiento";
+import type { ContingenciaResumen, MarcaAuditable } from "./levantamiento";
+import {
+  construirPasos,
+  PASO_CONFIGURABLE,
+  type PasoWizard,
+} from "./pasos-levantamiento";
 import { db } from "./powersync/db";
 
 // El progreso de cada módulo dentro de una marca.
@@ -133,7 +139,7 @@ export function useModulosHechosDeVisita(
 }
 
 /** Filtra las filas de la visita a las de UN levantamiento. */
-export function soloDe<T extends { levantamiento_id: string | null }>(
+function soloDe<T extends { levantamiento_id: string | null }>(
   filas: readonly T[],
   levantamientoId: string | null,
 ): T[] {
@@ -177,4 +183,82 @@ export async function marcarModuloHecho(d: {
       new Date().toISOString(),
     ],
   );
+}
+
+/** Un módulo del menú, con el estado que tiene en cada marca. */
+export type ModuloDeMarca = {
+  marca: MarcaAuditable;
+  progreso: ProgresoModulo;
+};
+
+export type ModuloDelMenu = {
+  modulo: PasoWizard;
+  /** Una entrada por marca en la que este módulo existe. */
+  marcas: ModuloDeMarca[];
+};
+
+/** Una marca con sus módulos y el estado de cada uno. */
+export type ProgresoDeMarca = {
+  marca: MarcaAuditable;
+  modulos: PasoWizard[];
+  estados: Map<string, ProgresoModulo>;
+};
+
+export type MenuDeVisita = {
+  porMarca: ProgresoDeMarca[];
+  /** Los módulos, con sus marcas dentro: el orden que acordó el cliente. */
+  modulos: ModuloDelMenu[];
+  /** Todas las marcas cerradas: el check-out ya se puede ofrecer. */
+  todoListo: boolean;
+};
+
+/**
+ * El pivote que da nombre al ticket: de marca-mayor a MÓDULO-mayor.
+ *
+ * "Módulo primero, marca después" — antes la lista de primer nivel eran las
+ * marcas y había que terminar una entera para pasar a la siguiente. Ahora el
+ * primer nivel son los módulos y la marca se elige dentro.
+ *
+ * Vive aquí y no en la pantalla porque es una regla de negocio, no de pintado:
+ * agrupar mal —un módulo configurable que existe en una marca y no en otra, que
+ * `useDefinicionesDeVisita` documenta como posible— daría un menú que miente
+ * sobre lo que falta, y en la pantalla eso no lo probaría nadie.
+ */
+export function armarMenuDeVisita(
+  marcas: readonly MarcaAuditable[],
+  definiciones: Map<string, DefinicionFormulario | null>,
+  hechos: readonly ModuloHechoDeVisita[],
+  omitidos: readonly ContingenciaResumen[],
+): MenuDeVisita {
+  const porMarca: ProgresoDeMarca[] = marcas.map((marca) => {
+    const modulos = construirPasos(definiciones.get(marca.id) ?? null);
+    return {
+      marca,
+      modulos,
+      estados: estadoDeModulos(
+        modulos,
+        soloDe(hechos, marca.levantamiento_id),
+        soloDe(omitidos, marca.levantamiento_id),
+      ),
+    };
+  });
+
+  const porModulo = new Map<string, ModuloDelMenu>();
+  for (const { marca, modulos, estados } of porMarca) {
+    for (const modulo of modulos) {
+      const entrada = porModulo.get(modulo.id) ?? { modulo, marcas: [] };
+      entrada.marcas.push({
+        marca,
+        progreso: estados.get(modulo.id) ?? { estado: "pendiente" },
+      });
+      porModulo.set(modulo.id, entrada);
+    }
+  }
+
+  return {
+    porMarca,
+    modulos: [...porModulo.values()],
+    todoListo:
+      porMarca.length > 0 && porMarca.every((m) => marcaCompleta(m.estados)),
+  };
 }
