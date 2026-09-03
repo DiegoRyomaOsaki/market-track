@@ -824,7 +824,7 @@ tener estado "parcialmente instalado". Aplica también a góndola y es binario.
 | **SOS agregado + detalle por SKU, con foto** | `visita.sos_*` + `levantamiento_sku.frentes_*` + `foto` tipo `sos` |
 | **2FA multicanal (correo/SMS/WhatsApp), activable** | `configuracion_plataforma.otp_canales_habilitados` |
 | **Mercaderista que no recibe su OTP** | `pase_acceso_temporal` (un solo uso, 15 min, auditado) |
-| Alertas de desviación de precio | `precio_regular`, `promocion`, `tenant.tolerancia_precio_pct`, `alerta` |
+| Alertas de desviación de precio | `precio_regular`, `promocion`, `marca.tolerancia_precio_pct`, `alerta` |
 | Promos por cluster y "comunicada" | `promocion.clusters`, `promo_comunicada` |
 | Exhibiciones negociadas y adicionales | `exhibicion_negociada`, `exhibicion` |
 | Exhibición "vive" en mercaderista y tienda | FK a ambos en `exhibicion`/`visita` (para incentivos y cambios de ruta) |
