@@ -289,20 +289,22 @@ Las dos piezas que lo sostienen:
 | 12 | **Material POP transversal** a góndola y exhibiciones, binario sí/no | ✅ nuevo al piloto | app · modelo |
 | 13 | **Subcategoría del SKU** y peso/medidas numéricos | ✅ nuevo al piloto | catálogo · importador |
 | 14 | **docs de esta revisión** | ✅ | este documento · [[03 - Modelo de Datos]] |
-| 15 | **Planograma**: entidad, imagen de referencia y unidad de medición | 🟡 | modelo · panel — decisiones abiertas |
-| 16 | **Móvil: paso de planograma** con cumplimiento medido, no binario | 🟡 | app — depende de la 15 |
-| 17 | **Planograma en Perfect Store** y en el portal, con peso por marca | 🟡 | motor · portal — depende de la 15 |
-| 18 | **Formulario predeterminado** de visita como plantilla reutilizable | 🟡 | panel |
+| 15 | **Planograma**: entidad, imagen de referencia y unidad de medición | ✅ nuevo al piloto | modelo · panel — la unidad y el alcance son **configuración**, no constantes |
+| 16 | **Móvil: paso de planograma** con cumplimiento medido, no binario | ✅ nuevo al piloto | app — depende de la 15 |
+| 17 | **Planograma en Perfect Store** y en el portal, con peso por marca | ✅ nuevo al piloto | motor · portal — depende de la 15 |
+| 18 | **Formulario predeterminado** de visita como plantilla reutilizable | ✅ nuevo al piloto | panel |
 
 > **`✅ nuevo al piloto` es alcance acordado, no código entregado.** Solo las dos
 > primeras piezas llevan **implementado**; el resto está aceptado para el piloto y
 > aún por construir. Misma convención que las tres revisiones anteriores.
 >
-> **El corte 🟡 lo decidimos nosotros, no el cliente**, y sigue un criterio: las
-> tres piezas de planograma dependen de decisiones que la reunión dejó **sin
-> cerrar** (formato, granularidad, unidad), y construirlas antes de esa
-> conversación es adivinar. La 18 es comodidad del panel, no alcance acordado.
-> Conviene confirmarlo antes del piloto.
+> **Las 18 piezas entran al piloto.** El planograma se construye **sin esperar** a
+> las decisiones abiertas de más abajo, y puede hacerlo porque lo que se entrega
+> es la **configuración flexible**, no una constante: la unidad
+> (`frentes_horizontal` | `frentes_vertical` | `centimetros`) y el alcance del
+> acuerdo (cadena o tienda × marca × categoría o SKU) son datos que carga el
+> admin. Lo que esas conversaciones definen es **qué se carga**, no qué se
+> construye — y por eso siguen listadas como abiertas.
 
 ### Decisiones cerradas en la reunión
 

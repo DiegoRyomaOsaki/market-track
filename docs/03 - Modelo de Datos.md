@@ -769,10 +769,16 @@ tampoco: "terminado" y "ni lo abrió" serían indistinguibles.
 #### No implementadas
 
 **`planograma`** (🟡) — el acuerdo de espacio en góndola, con su imagen de
-referencia y la unidad en que se mide el cumplimiento. **No se puede cerrar
-todavía**: el formato (PDF o imagen), la granularidad (categoría o SKU) y el nivel
-al que se configura la unidad son decisiones abiertas de la reunión. La medición
-es **manual** y el cumplimiento es **medido, no binario**.
+referencia y la unidad en que se mide el cumplimiento. La medición es **manual**
+—se descartó contar frentes por IA sobre la foto— y el cumplimiento es **medido,
+no binario**.
+
+Se modela **sin esperar** a las decisiones abiertas de la reunión, y puede
+hacerse porque ninguna de ellas es una constante del esquema: la unidad
+(`frentes_horizontal` | `frentes_vertical` | `centimetros`) y el alcance del
+acuerdo (cadena o tienda × marca × categoría o SKU) son **configuración** que
+carga el admin. Lo que falta acordar es **qué valores se cargan**, no qué
+columnas existen.
 
 **`competidor`** (🟡) — el catálogo de competidores que cada marca monitorea, por
 `marca × categoria`. Hoy la competencia se captura como **texto libre** dentro de
