@@ -415,6 +415,63 @@ describe("planeacion_ruteros", () => {
 // relajación que se pase de frenada no la caza probar únicamente `publicado`.
 // ---------------------------------------------------------------------------
 
+/**
+ * Monta un rutero PROPIO —con dos paradas y una visita— y devuelve su id.
+ *
+ * Existe para el test que borra el rutero entero. Hacerlo sobre el del seed
+ * tomaba bloqueos exclusivos, vía la cascada, sobre la visita y el levantamiento
+ * que ese seed comparte con las demás suites: mientras esta transacción los
+ * retenía, cualquier otra que insertara una fila hija de ese `levantamiento`
+ * —una `levantamiento_respuesta`, por ejemplo— se quedaba esperando su
+ * `FOR KEY SHARE`, y si la otra ya retenía algo de esta cadena, deadlock.
+ *
+ * `fecha` lejana a propósito: `rutero` tiene `unique (mercaderista_id, fecha)` y
+ * `conRutero` mueve la del seed entre ayer, hoy y mañana.
+ */
+async function conRuteroPropio(
+  c: Client,
+  estado: EstadoRutero,
+): Promise<string> {
+  await c.query("set local role postgres");
+  const rutero = await c.query<{ id: string }>(
+    `insert into public.rutero (tenant_id, mercaderista_id, fecha, estado)
+     values ($1, $2, app.hoy_lima() + 300, 'borrador')
+     returning id`,
+    [TENANTS.maracumango, USUARIOS.mercaderistaMaracumango],
+  );
+  const ruteroId = rutero.rows[0]!.id;
+
+  const paradas = await c.query<{ id: string }>(
+    `insert into public.rutero_parada (tenant_id, rutero_id, tienda_id, orden)
+     values ($1, $2, $3, 1), ($1, $2, $3, 2)
+     returning id`,
+    [TENANTS.maracumango, ruteroId, TIENDA_MRC],
+  );
+  // Una visita colgando, como la tiene la parada del seed: es lo que hace que el
+  // borrado del rutero tenga que quitarla primero (`visita_parada_fk` es
+  // `on delete restrict`), que es justo el camino que este test recorre.
+  await c.query(
+    `insert into public.visita
+       (tenant_id, rutero_parada_id, mercaderista_id, tienda_id, estado, check_in_at)
+     values ($1, $2, $3, $4, 'en_curso', now())`,
+    [
+      TENANTS.maracumango,
+      paradas.rows[0]!.id,
+      USUARIOS.mercaderistaMaracumango,
+      TIENDA_MRC,
+    ],
+  );
+
+  // El estado se pone al final: el trigger de replanificación no deja tocar las
+  // paradas de un rutero que ya salió del borrador.
+  await c.query(
+    `update public.rutero set estado = $1::public.estado_rutero where id = $2`,
+    [estado, ruteroId],
+  );
+  await c.query("set local role authenticated");
+  return ruteroId;
+}
+
 const ESTADOS = ["borrador", "publicado", "en_curso", "completado"] as const;
 type EstadoRutero = (typeof ESTADOS)[number];
 
@@ -554,8 +611,12 @@ describe("el trigger de planeación, en los cuatro estados", () => {
       // era una rama viva SIN cobertura: si la relajación la hubiera roto, la
       // única salida que hoy tiene el supervisor habría dejado de funcionar.
       await comoUsuario(db, USUARIOS.supervisor, async (c) => {
-        await conTresParadas(c);
-        await conRutero(c, estado);
+        // Sobre un rutero PROPIO, no el del seed: borrarlo entero toma bloqueos
+        // exclusivos por cascada sobre la visita y el levantamiento que el seed
+        // comparte con las demás suites, y eso deadlockeaba de forma
+        // intermitente contra quien insertara una fila hija de ese
+        // levantamiento.
+        const ruteroId = await conRuteroPropio(c, estado);
         await c.query("set local role postgres");
         // La visita se quita primero, y eso ES el hallazgo: `visita_parada_fk`
         // (`on delete restrict`) corta también la CASCADA del rutero entero. O
@@ -565,14 +626,14 @@ describe("el trigger de planeación, en los cuatro estados", () => {
         await c.query(
           `delete from public.visita where rutero_parada_id in
           (select id from public.rutero_parada where rutero_id = $1)`,
-          [RUTERO_MRC],
+          [ruteroId],
         );
-        await c.query(`delete from public.rutero where id = $1`, [RUTERO_MRC]);
+        await c.query(`delete from public.rutero where id = $1`, [ruteroId]);
         await c.query("set local role authenticated");
 
         const r = await c.query<{ n: string }>(
           `select count(*) as n from public.rutero_parada where rutero_id = $1`,
-          [RUTERO_MRC],
+          [ruteroId],
         );
         expect(Number(r.rows[0]!.n)).toBe(0);
       });
