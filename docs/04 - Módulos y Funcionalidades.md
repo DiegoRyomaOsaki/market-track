@@ -109,6 +109,10 @@ están en Linear y reflejadas en las tablas de abajo.
 > campos derivados (quiebre/diferencia/SOS) siguen siendo del núcleo — el
 > formulario configura presentación y campos libres, no reescribe reglas de
 > negocio.
+>
+> ⚠️ **La secuencia obligatoria dejó de aplicar en la 4ª revisión (ago 2026)**:
+> los módulos se recorren en el orden que se pueda. La contingencia y los campos
+> derivados siguen siendo del núcleo, tal como dice esta nota.
 
 ---
 
@@ -243,6 +247,128 @@ Conviene resolverlo antes de enseñarle el primer número a la marca.
 
 ---
 
+## Cuarta revisión con el cliente — agosto 2026
+
+Reunión del **25 ago 2026**. El acuerdo central es la **incidencia de visita**, y
+cambia qué se le entrega a la marca: hasta ahora el sistema registraba lo que el
+mercaderista **encontró**; a partir de aquí registra también lo que **hizo al
+respecto**. Sabino lo pidió así: *"no solo que hubo incidencia, sino que tú
+tomaste acción… ¿qué acción tomaste? Cambié el precio, hablé con el supervisor y
+lo corrigieron. Y tomas la foto final, porque hay un antes y un después. Eso es
+lo que va a valorar más el cliente."*
+
+Las dos piezas que lo sostienen:
+
+- **La incidencia no la declara nadie.** Nace del dato levantado — *"simplemente
+  levantó precios y hay una diferencia y se genera una incidencia"*— y se acumula
+  en una **lista global de la visita**, venga del módulo que venga. El motivo es
+  de memoria, no de arquitectura: *"si estabas en góndola y pasó una hora, en tu
+  cabeza no vas a decir «tenía que entrar a góndola porque ahí tenía la
+  incidencia»"*.
+- **El levantamiento deja de ser secuencial.** Se entra a los módulos en el orden
+  que se pueda y la marca se elige **dentro** del módulo. El motivo es operativo:
+  el mercaderista no puede quedarse trabado. Si el siguiente paso es la trastienda
+  y no lo dejan entrar, sigue por otro lado y vuelve después.
+
+> Esto **revierte** el "secuencial, sin saltos" que este mismo documento
+> describía para el Módulo 2 hasta esta revisión.
+
+### Las piezas de esta revisión
+
+| # | Pieza | Disposición | Dónde impacta |
+|---|---|---|---|
+| 1 | **Incidencia de visita**: modelo, motor y bajada al teléfono | ✅ **implementado** | `incidencia` · los triggers que ya calculan los derivados · `streams.yaml` |
+| 2 | **Móvil: menú de visita** y navegación libre con selector de marca | ✅ **implementado** | `levantamiento_paso` · app · retira el wizard secuencial |
+| 3 | **Móvil: lista global de incidencias** y resolución con acción y foto | ✅ nuevo al piloto | app · cola de fotos |
+| 4 | **Check-out: verja** de incidencias no atendidas | ✅ nuevo al piloto | app · check-out |
+| 5 | **Panel y portal: incidencias** con su acción tomada y evidencia | ✅ nuevo al piloto | panel · portal · URL firmada |
+| 6 | **Derivación offline** de la incidencia | ✅ nuevo al piloto | app — **bloquea la pieza 4**, ver abajo |
+| 7 | **Perfect Store condicional**: puntúa cómo quedó, no cómo se encontró | ✅ nuevo al piloto | motor de puntaje |
+| 8 | **Histórico de precios y promociones** con vigencia | ✅ nuevo al piloto | `precio_regular` · `promocion` · importador |
+| 9 | **Móvil: precio y promoción esperados** a la vista | ✅ nuevo al piloto | app · reglas de sincronización |
+| 10 | **Competidores precargados** por marca y categoría | ✅ nuevo al piloto | `competidor` · panel · importador |
+| 11 | **Móvil: competencia** acotada a los precargados | ✅ nuevo al piloto | app — se acaba el competidor de texto libre |
+| 12 | **Material POP transversal** a góndola y exhibiciones, binario sí/no | ✅ nuevo al piloto | app · modelo |
+| 13 | **Subcategoría del SKU** y peso/medidas numéricos | ✅ nuevo al piloto | catálogo · importador |
+| 14 | **docs de esta revisión** | ✅ | este documento · [[03 - Modelo de Datos]] |
+| 15 | **Planograma**: entidad, imagen de referencia y unidad de medición | 🟡 | modelo · panel — decisiones abiertas |
+| 16 | **Móvil: paso de planograma** con cumplimiento medido, no binario | 🟡 | app — depende de la 15 |
+| 17 | **Planograma en Perfect Store** y en el portal, con peso por marca | 🟡 | motor · portal — depende de la 15 |
+| 18 | **Formulario predeterminado** de visita como plantilla reutilizable | 🟡 | panel |
+
+> **El corte 🟡 lo decidimos nosotros, no el cliente**, y sigue un criterio: las
+> tres piezas de planograma dependen de decisiones que la reunión dejó **sin
+> cerrar** (formato, granularidad, unidad), y construirlas antes de esa
+> conversación es adivinar. La 18 es comodidad del panel, no alcance acordado.
+> Conviene confirmarlo antes del piloto.
+
+### Decisiones cerradas en la reunión
+
+**La incidencia se genera sola, y el mercaderista la atiende antes de salir.** No
+hay un paso "declarar incidencia": nace de la diferencia de precio, el quiebre, la
+diferencia de stock, la exhibición negociada sin instalar, la promoción no
+comunicada y el incumplimiento de planograma. Resolverla exige decir **qué se
+hizo**; no poder resolverla exige decir **por qué**, y entonces queda atendida con
+observación — no desaparece.
+
+**Módulo primero, marca después.** *"Yo dentro del módulo de exhibición de góndola
+puedo poner marca B, marca C… sigo en el módulo de exhibición, pero tengo que
+cambiar la marca."* El coste de lo contrario lo explicó Martin: *"tendría que ir a
+trastienda, góndola, exhibiciones, terminar la marca, y otra vez trastienda,
+góndola, exhibiciones"*.
+
+**El bypass de contingencia no se toca.** Sigue existiendo por paso y por marca:
+es compromiso de la propuesta aceptada. La incidencia es otra cosa —nace del dato
+levantado, no de un paso que no se pudo completar— y las dos conviven.
+
+**Editar un precio no puede borrar el anterior.** *"Si ahorita está 20 soles y el
+próximo año deciden que va a costar 25, yo entro y cambio a 25 y ya perdí
+trazabilidad de cuánto estaba antes y en qué tiempo estuvo con ese precio."* El
+porqué lo cerró Martin: *"el precio promedio de 2025 y el de 2026 — si yo lo
+modifico y después me bajo el reporte, me va a salir como si no hubiese
+variado"*.
+
+**Se acaba el competidor de texto libre.** *"No vas a poner competencia para que
+pongas todos los que existen… mi competencia es Maco y Philips, a los que quiero
+realmente monitorear."* El recorte es **por marca y categoría**: si el
+mercaderista audita Oster, solo puede elegir entre los competidores que esa marca
+monitorea en esa categoría.
+
+**El material POP es transversal y binario.** Deja de ser una fila de exhibiciones
+—aplica también a góndola— y deja de tener estado "parcialmente instalado": está
+o no está.
+
+**La medición del planograma es manual.** Se descartó de arranque contar frentes
+por IA sobre la foto: *"eso es un ideal, paso 10 — ahorita no"*.
+
+### Decisiones abiertas — no las inventamos
+
+**En qué formato llega el planograma.** PDF o imagen. Cambia qué se guarda, qué se
+le enseña al mercaderista en un teléfono de gama media y si hace falta renderizar
+algo. Sin esto, la entidad no se puede cerrar.
+
+**A qué granularidad se acuerda el planograma.** Por categoría o por SKU. Decide
+si el cumplimiento se mide contra un bloque o contra cada producto, y con ello la
+forma de la tabla y la del paso móvil.
+
+**Qué unidad de medición usa cada cadena.** Frentes (vertical u horizontal) o
+centímetros de espacio lineal. Sabino confirmó que **varía dentro de la misma
+cadena**, así que no puede ser una constante: es configuración. Falta saber a qué
+nivel se configura.
+
+**Qué competidores monitorea cada marca.** El recorte por marca y categoría está
+acordado; **la lista no**. Es un dato que tiene que dar el cliente, marca por
+marca, antes de que el módulo de competencia sirva de algo.
+
+> **Y una que abrimos nosotros:** la incidencia nace de un trigger en la base, y
+> un trigger no escribe en el teléfono de alguien que está sin señal. Un
+> mercaderista que hiciera toda la visita offline vería **cero incidencias**, sin
+> ningún error — y la verja de check-out lo dejaría salir. La pieza 6 existe por
+> eso y **tiene que resolverse antes que la 4**. El offline es el diferenciador #1
+> del producto y este es justo el caso que lo justifica.
+
+---
+
 ## App móvil (mercaderista)
 
 > Disponible en **Android e iOS** (mismo código React Native + Expo; builds vía EAS). Distribución del piloto: APK por **enlace directo desde el panel de gestión** (Android) y **TestFlight** (iOS) — la publicación en tiendas depende de sus tiempos de aprobación y no está garantizada.
@@ -256,7 +382,7 @@ Conviene resolverlo antes de enseñarle el primer número a la marca.
 | Marcación de entrada con hora de **servidor** | ✅ |
 | Reconocimiento facial / biométrico | 🔵 |
 
-### Módulo 2 — Levantamiento de información (secuencial, sin saltos)
+### Módulo 2 — Levantamiento de información (navegación libre entre módulos)
 | Paso | Función | MVP |
 |---|---|---|
 | 2.1 | Foto "Antes" de la góndola | ✅ |
@@ -267,12 +393,23 @@ Conviene resolverlo antes de enseñarle el primer número a la marca.
 | 2.3 | Digitación de precio del cliente (no competencia) | ✅ |
 | 2.3 | **Motor de alertas de precio** (regular/promo, comunicada, tolerancia) | ✅ |
 | 2.4 | Exhibiciones negociadas (instalada, unidades, foto) | ✅ |
-| 2.4 | Material POP | ✅ |
+| — | **Material POP**: transversal a góndola y exhibiciones, binario sí/no (sin estado "parcialmente instalado") | ✅ |
 | 2.4 | Exhibiciones adicionales / **conseguidas por el mercaderista** (crear, tipo, foto, vigencia) | ✅ |
 | 2.5 | Foto "Después" | ✅ |
 | — | **Mecanismo de contingencia (bypass)**: si un paso no se puede completar por causa externa (sin acceso al almacén, información no disponible), el mercaderista registra el hallazgo y continúa; se genera una **alerta en tiempo real** al supervisor en el panel | ✅ |
 
-> El levantamiento es secuencial y obligatorio, pero **no un bloqueo absoluto**: el bypass justificado + alerta es parte del alcance contractual del piloto.
+> **Los módulos se recorren en el orden que se pueda**, y la marca se elige
+> dentro de cada uno (4ª revisión, ago 2026). El avance de cada `(módulo,
+> marca)` se persiste, así que saltar no pierde lo capturado. El bypass
+> justificado + alerta sigue intacto: es alcance contractual del piloto, y
+> convive con la **incidencia de visita**, que es otra cosa — nace del dato
+> levantado, no de un paso que no se pudo completar.
+>
+> **No implementado todavía**: la lista global de incidencias en el móvil, su
+> resolución con acción y foto, la verja de check-out que las exige, y el paso de
+> planograma. El **material POP** sigue capturándose como hoy —dentro de
+> exhibiciones, con `tipo_exhibicion`—; que sea transversal y binario es alcance
+> acordado, no comportamiento actual.
 
 ### Módulo 3 — Check-out
 | Función | MVP |
