@@ -104,15 +104,13 @@ están en Linear y reflejadas en las tablas de abajo.
 > "Ciudad/Provincia" en la UI (pendiente de confirmar con el cliente si
 > prefieren un campo "ciudad" literal).
 >
-> **Editor de formulario (3):** el "constructor completo" reformula el wizard hoy
-> fijo y secuencial. La secuencia obligatoria, la contingencia (bypass) y los
-> campos derivados (quiebre/diferencia/SOS) siguen siendo del núcleo — el
-> formulario configura presentación y campos libres, no reescribe reglas de
-> negocio.
+> **Editor de formulario (3):** el "constructor completo" reformula el wizard. La
+> contingencia (bypass) y los campos derivados (quiebre/diferencia/SOS) son del
+> núcleo — el formulario configura presentación y campos libres, no reescribe
+> reglas de negocio.
 >
-> ⚠️ **La secuencia obligatoria dejó de aplicar en la 4ª revisión (ago 2026)**:
-> los módulos se recorren en el orden que se pueda. La contingencia y los campos
-> derivados siguen siendo del núcleo, tal como dice esta nota.
+> *(Esta nota decía además que la secuencia obligatoria era del núcleo. Lo era
+> cuando se escribió; la 4ª revisión —ago 2026— la retiró.)*
 
 ---
 
@@ -296,6 +294,10 @@ Las dos piezas que lo sostienen:
 | 17 | **Planograma en Perfect Store** y en el portal, con peso por marca | 🟡 | motor · portal — depende de la 15 |
 | 18 | **Formulario predeterminado** de visita como plantilla reutilizable | 🟡 | panel |
 
+> **`✅ nuevo al piloto` es alcance acordado, no código entregado.** Solo las dos
+> primeras piezas llevan **implementado**; el resto está aceptado para el piloto y
+> aún por construir. Misma convención que las tres revisiones anteriores.
+>
 > **El corte 🟡 lo decidimos nosotros, no el cliente**, y sigue un criterio: las
 > tres piezas de planograma dependen de decisiones que la reunión dejó **sin
 > cerrar** (formato, granularidad, unidad), y construirlas antes de esa
