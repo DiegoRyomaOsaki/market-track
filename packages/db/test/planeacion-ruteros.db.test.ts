@@ -868,13 +868,25 @@ describe("planeacion_ruteros.tiene_visita", () => {
 
   it("un día con rutero y CERO paradas no inventa un `tiene_visita` verdadero", async () => {
     await comoUsuario(db, USUARIOS.supervisor, async (c) => {
+      // Un rutero vacío PROPIO, en vez de vaciar el del seed.
+      //
+      // Antes esto hacía `delete from public.visita where rutero_parada_id is
+      // not null` —toda la tabla, de cualquier tenant y cualquier rutero— y
+      // luego borraba las paradas del seed. Además de ser el mismo patrón
+      // destructivo sobre filas compartidas que deadlockeaba con `rls`, el
+      // borrado no tenía ni un filtro de alcance: era más ancho que el que
+      // causó el bug.
+      //
+      // Crear el caso en vez de fabricarlo destruyendo es más barato y no toca
+      // nada que otra suite esté leyendo. La fecha va lejana por el
+      // `unique (mercaderista_id, fecha)`, y distinta de la de
+      // `conRuteroPropio` para que las dos puedan convivir.
       await c.query("set local role postgres");
       await c.query(
-        `delete from public.visita where rutero_parada_id is not null`,
+        `insert into public.rutero (tenant_id, mercaderista_id, fecha, estado)
+         values ($1, $2, app.hoy_lima() + 301, 'borrador')`,
+        [TENANTS.maracumango, USUARIOS.mercaderistaMaracumango],
       );
-      await c.query(`delete from public.rutero_parada where rutero_id = $1`, [
-        RUTERO_MRC,
-      ]);
       await c.query("set local role authenticated");
 
       const r = await c.query<{
