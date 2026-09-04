@@ -4,7 +4,9 @@ import { BackHandler, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { AyudaBoton } from "@/componentes/ayuda-boton";
 import { MenuVisita } from "@/componentes/menu-visita";
+import { ListaIncidencias } from "@/componentes/lista-incidencias";
 import { ModuloActivo } from "@/componentes/modulo-activo";
+import { ResolverIncidencia } from "@/componentes/resolver-incidencia";
 import {
   completarLevantamiento,
   crearLevantamiento,
@@ -14,14 +16,16 @@ import {
   useVisita,
 } from "@/lib/levantamiento";
 import { mensajeDeError } from "@/lib/error";
+import { type IncidenciaLocal, useResumenIncidencias } from "@/lib/incidencias";
 import {
   armarMenuDeVisita,
   marcaCompleta,
   marcarModuloHecho,
   useModulosHechosDeVisita,
 } from "@/lib/progreso-visita";
+import { useEstadoSync } from "@/lib/powersync/estado";
 import { useSesion } from "@/sesion";
-import { colores, espacio } from "@/tema";
+import { colores, espacio, radio } from "@/tema";
 
 // El menú de la visita y la navegación libre entre módulos.
 //
@@ -54,6 +58,17 @@ export default function VisitaLevantamiento() {
     idModulo: string;
     marcaId: string;
   } | null>(null);
+  // La pestaña de incidencias es un tercer estado de ESTA pantalla, no una ruta:
+  // así se puede abrir con un módulo abierto y volver a él, en vez de al menú.
+  const [verIncidencias, setVerIncidencias] = useState(false);
+  const [atendiendo, setAtendiendo] = useState<IncidenciaLocal | null>(null);
+  const {
+    incidencias,
+    pendientes,
+    cargando: cargandoInc,
+    error: errorInc,
+  } = useResumenIncidencias(visitaId);
+  const { conectado } = useEstadoSync();
 
   // Cada marca necesita su levantamiento para que sus módulos configurables se
   // resuelvan (cuelgan de la versión de formulario anclada). `crearLevantamiento`
@@ -110,13 +125,16 @@ export default function VisitaLevantamiento() {
   // la visita. Sin esto, el mercaderista sale de la pantalla creyendo que
   // retrocede un paso.
   useEffect(() => {
-    if (!abierto) return;
+    if (!abierto && !verIncidencias) return;
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      cerrarModulo();
+      // Prioridad: incidencias → módulo → salir. La pestaña se abre ENCIMA de un
+      // módulo, así que cerrarla tiene que devolver al módulo, no al menú.
+      if (verIncidencias) setVerIncidencias(false);
+      else cerrarModulo();
       return true;
     });
     return () => sub.remove();
-  }, [abierto, cerrarModulo]);
+  }, [abierto, verIncidencias, cerrarModulo]);
 
   const activo = abierto
     ? menu.porMarca.find((m) => m.marca.id === abierto.marcaId)
@@ -125,7 +143,51 @@ export default function VisitaLevantamiento() {
 
   return (
     <View style={e.pantalla}>
-      {moduloActivo && activo && visita ? (
+      {/* Fuera del ternario a propósito: el contador tiene que verse también con
+          un módulo abierto. "Independientemente del módulo donde surja la
+          incidencia, esta debe acumularse en una lista global." */}
+      {!verIncidencias ? (
+        <Pressable
+          onPress={() => setVerIncidencias(true)}
+          accessibilityRole="button"
+          accessibilityLabel={
+            pendientes > 0
+              ? `Incidencias, ${pendientes} pendientes`
+              : "Incidencias"
+          }
+          style={e.barraIncidencias}
+        >
+          <Text style={e.barraTexto}>Incidencias</Text>
+          {pendientes > 0 ? (
+            <View style={e.contador}>
+              <Text style={e.contadorTexto}>{pendientes} pendientes</Text>
+            </View>
+          ) : null}
+        </Pressable>
+      ) : null}
+
+      {verIncidencias ? (
+        <>
+          <ListaIncidencias
+            incidencias={incidencias}
+            cargando={cargandoInc}
+            error={errorInc}
+            conectado={conectado}
+            onResolver={setAtendiendo}
+            onVolver={() => setVerIncidencias(false)}
+          />
+          {atendiendo && visita ? (
+            <ResolverIncidencia
+              incidencia={atendiendo}
+              visible={true}
+              tenantId={visita.tenant_id}
+              usuario={sesion?.user.email ?? "Mercaderista"}
+              onAtendida={() => setAtendiendo(null)}
+              onCancelar={() => setAtendiendo(null)}
+            />
+          ) : null}
+        </>
+      ) : moduloActivo && activo && visita ? (
         <ModuloActivo
           modulo={moduloActivo}
           marcas={marcas}
@@ -197,5 +259,27 @@ const e = StyleSheet.create({
     marginTop: espacio.s,
   },
   titulo: { color: colores.texto, fontSize: 24, fontWeight: "800" },
+  barraIncidencias: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    minHeight: 44,
+    paddingHorizontal: espacio.m,
+    borderRadius: radio.m,
+    borderWidth: 1,
+    borderColor: colores.borde,
+    backgroundColor: colores.superficie,
+    marginBottom: espacio.s,
+  },
+  barraTexto: { color: colores.texto, fontSize: 15, fontWeight: "700" },
+  contador: {
+    borderRadius: radio.m,
+    backgroundColor: colores.alerta,
+    paddingHorizontal: espacio.s,
+    paddingVertical: 2,
+  },
+  // El número va como TEXTO dentro de la pastilla: el color solo no le dice
+  // nada a quien no lo distingue (WCAG 1.4.1).
+  contadorTexto: { color: colores.marcaTexto, fontSize: 12, fontWeight: "700" },
   subtitulo: { color: colores.textoSuave, fontSize: 14, marginTop: 2 },
 });

@@ -30,6 +30,9 @@ export const ETIQUETA_FOTO: Record<TipoFoto, string> = {
   contingencia: "Contingencia",
   campo_extra: "Campo del formulario",
   orden: "Orden y limpieza",
+  // La foto del "después" de un hallazgo resuelto. Es la evidencia que el
+  // cliente-marca más valora: no solo que hubo incidencia, sino qué se hizo.
+  resolucion_incidencia: "Resolución de incidencia",
 };
 
 const PROPORCION = {
