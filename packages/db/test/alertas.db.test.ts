@@ -191,6 +191,198 @@ describe("motor de alertas — árbol de precios (regular 6.90, tolerancia 5%)",
   });
 });
 
+describe("el precio de ayer no lo cambia el precio de hoy", () => {
+  // La regresión que el cliente describió con nombre y apellido: "el precio
+  // promedio de 2025 y el de 2026 — si yo lo modifico y después me bajo el
+  // reporte, me va a salir como si no hubiese variado".
+  //
+  // Se prueba sobre `app.evaluar_precio_sku` y no sobre una visita entera porque
+  // es ahí donde vive la resolución por fecha: el reporte reevalúa con la fecha
+  // de la visita, meses después.
+
+  const CADENA = "a0000001-0000-0000-0000-000000000001";
+
+  async function evaluar(c: Client, fecha: string) {
+    const r = await c.query<{ veredicto: string; precio_regular: string | null }>(
+      `select veredicto, precio_regular::text
+         from app.evaluar_precio_sku($1, $2, $3, $4, 7.20, false, false, $5::date)`,
+      [TENANTS.maracumango, SKU, MARCA, CADENA, fecha],
+    );
+    return r.rows[0];
+  }
+
+  it("abrir un periodo nuevo NO altera la evaluación de una visita anterior", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const antes = await evaluar(c, "2026-06-15");
+      expect(Number(antes?.precio_regular)).toBe(6.9);
+
+      await c.query(
+        `select public.abrir_periodo_precio($1, $2, null, 9.90, '2026-08-01')`,
+        [SKU, CADENA],
+      );
+
+      // Hoy rige el nuevo.
+      const hoy = await evaluar(c, "2026-08-15");
+      expect(Number(hoy?.precio_regular)).toBe(9.9);
+
+      // Y junio sigue diciendo exactamente lo mismo que decía.
+      const despues = await evaluar(c, "2026-06-15");
+      expect(Number(despues?.precio_regular)).toBe(6.9);
+      expect(despues?.veredicto).toBe(antes?.veredicto);
+    });
+  });
+
+  it("un periodo CERRADO deja de resolver para una fecha posterior a su fin", async () => {
+    // Sin que el resolvedor mire `vigente_hasta`, el periodo cerrado seguiría
+    // ganando y las alertas se dispararían contra un precio derogado.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await c.query(
+        `update public.precio_regular set vigente_hasta = '2026-06-30'
+          where tenant_id = $1 and sku_id = $2 and cadena_id = $3`,
+        [TENANTS.maracumango, SKU, CADENA],
+      );
+
+      expect(Number((await evaluar(c, "2026-06-15"))?.precio_regular)).toBe(6.9);
+      const fuera = await evaluar(c, "2026-07-15");
+      expect(fuera?.precio_regular).toBeNull();
+      expect(fuera?.veredicto).toBe("sin_precio_vigente");
+    });
+  });
+
+  it("abrir un periodo deja DOS filas: la anterior cerrada y ninguna retirada", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await c.query(
+        `select public.abrir_periodo_precio($1, $2, null, 9.90, '2026-08-01')`,
+        [SKU, CADENA],
+      );
+
+      const r = await c.query<{
+        precio: string;
+        vigente_desde: string;
+        vigente_hasta: string | null;
+      }>(
+        `select precio::text, vigente_desde::text, vigente_hasta::text
+           from public.precio_regular
+          where tenant_id = $1 and sku_id = $2 and cadena_id = $3
+          order by vigente_desde`,
+        [TENANTS.maracumango, SKU, CADENA],
+      );
+
+      expect(r.rows).toHaveLength(2);
+      expect(r.rows[0]?.vigente_hasta).toBe("2026-07-31");
+      expect(Number(r.rows[0]?.precio)).toBe(6.9);
+      expect(r.rows[1]?.vigente_hasta).toBeNull();
+    });
+  });
+
+  it("abrir un periodo que empieza ANTES del vigente se rechaza con un mensaje propio", async () => {
+    // Sin la guarda, el operador vería el 23514 crudo del check de coherencia y
+    // no sabría qué hizo mal.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await expect(
+        c.query(
+          `select public.abrir_periodo_precio($1, $2, null, 9.90, '2025-12-01')`,
+          [SKU, CADENA],
+        ),
+      ).rejects.toThrow(/tiene que empezar después/);
+    });
+  });
+
+  it("el precio de un periodo que ya empezó no se puede reescribir", async () => {
+    // La verja vive en la BASE y no solo en la Server Action: `authenticated`
+    // tiene UPDATE sobre la tabla y un PATCH directo a PostgREST se saltaría
+    // cualquier comprobación que viviera solo en el panel.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await expect(
+        c.query(
+          `update public.precio_regular set precio = 99
+            where tenant_id = $1 and sku_id = $2 and cadena_id = $3`,
+          [TENANTS.maracumango, SKU, CADENA],
+        ),
+      ).rejects.toThrow(/no se puede reescribir/);
+    });
+  });
+
+  it("cerrar ese mismo periodo SÍ se puede: es la operación legítima", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await c.query(
+        `update public.precio_regular set vigente_hasta = '2026-12-31'
+          where tenant_id = $1 and sku_id = $2 and cadena_id = $3`,
+        [TENANTS.maracumango, SKU, CADENA],
+      );
+      const r = await c.query<{ vigente_hasta: string }>(
+        `select vigente_hasta::text from public.precio_regular
+          where tenant_id = $1 and sku_id = $2 and cadena_id = $3`,
+        [TENANTS.maracumango, SKU, CADENA],
+      );
+      expect(r.rows[0]?.vigente_hasta).toBe("2026-12-31");
+    });
+  });
+
+  it("un periodo que aún NO ha empezado sí se corrige en sitio", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await c.query(
+        `select public.abrir_periodo_precio($1, $2, null, 9.90, '2027-01-01')`,
+        [SKU, CADENA],
+      );
+      await c.query(
+        `update public.precio_regular set precio = 10.5
+          where tenant_id = $1 and sku_id = $2 and vigente_desde = '2027-01-01'`,
+        [TENANTS.maracumango, SKU],
+      );
+      const r = await c.query<{ precio: string }>(
+        `select precio::text from public.precio_regular
+          where tenant_id = $1 and sku_id = $2 and vigente_desde = '2027-01-01'`,
+        [TENANTS.maracumango, SKU],
+      );
+      expect(Number(r.rows[0]?.precio)).toBe(10.5);
+    });
+  });
+
+  it("ningún rol puede BORRAR un precio: no hay GRANT de delete", async () => {
+    // El histórico no se protege solo con la política: `precio_admin_escribe` es
+    // `for all`, y lo que impide el borrado es que el GRANT solo da
+    // `insert, update`. Nada lo vigilaba hasta ahora.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await expect(
+        c.query(
+          `delete from public.precio_regular
+            where tenant_id = $1 and sku_id = $2`,
+          [TENANTS.maracumango, SKU],
+        ),
+      ).rejects.toThrow(/permission denied/);
+    });
+  });
+});
+
+describe("la promoción que ya arrancó tampoco se reescribe", () => {
+  // El bug gemelo, en otra tabla: cambiar `comunicada` de una promo de julio en
+  // septiembre cambia el veredicto de una visita de julio.
+  it("cambiar `comunicada` de una promo que ya arrancó se rechaza", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await expect(
+        c.query(
+          `update public.promocion set comunicada = true
+            where tenant_id = $1 and sku_id = $2`,
+          [TENANTS.maracumango, SKU],
+        ),
+      ).rejects.toThrow(/ya arrancó/);
+    });
+  });
+
+  it("cortarla desde hoy sí se puede; acortarla al pasado no", async () => {
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await expect(
+        c.query(
+          `update public.promocion set fecha_fin = '2026-01-05'
+            where tenant_id = $1 and sku_id = $2`,
+          [TENANTS.maracumango, SKU],
+        ),
+      ).rejects.toThrow(/no en el pasado/);
+    });
+  });
+});
+
 describe("motor de alertas — un hallazgo, una alerta", () => {
   it("el camino real del wizard levanta la alerta que antes no salía", async () => {
     // El bug entero, en un test: con el trigger atado solo al INSERT, el motor

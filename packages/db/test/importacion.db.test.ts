@@ -209,15 +209,31 @@ describe("aplicar_importacion — reimportar no duplica", () => {
     });
   });
 
-  it("un precio con `tipo_tienda` NULO actualiza el existente, no crea otro", async () => {
-    // La clave lleva `nulls not distinct`: sin eso, dos nulos serían distintos y
-    // cada import añadiría una fila de precio nueva para el mismo SKU.
+  it("reimportar la MISMA fecha con otro precio aborta el lote y conserva el valor", async () => {
+    // Invierte a propósito lo que este test afirmaba antes («el precio se
+    // actualiza»). Esa era justo la puerta por la que se perdía la trazabilidad
+    // que pidió el cliente: reimportar la misma `vigente_desde` machacaba el
+    // valor que rigió ese periodo sin dejar rastro, y el importador corre en
+    // lote. Cambiar un precio se hace poniendo una fecha nueva.
     await comoUsuario(db, USUARIOS.admin, async (c) => {
       await aplicar(c, await nuevaImportacion(c), LOTE_COMPLETO);
-      await aplicar(c, await nuevaImportacion(c), {
-        ...LOTE_COMPLETO,
-        precio_regular: [{ ...LOTE_COMPLETO.precio_regular[0], precio: 11.5 }],
-      });
+
+      const id = await nuevaImportacion(c);
+      await expect(
+        aplicar(c, id, {
+          ...LOTE_COMPLETO,
+          precio_regular: [{ ...LOTE_COMPLETO.precio_regular[0], precio: 11.5 }],
+        }),
+      ).rejects.toThrow(/ya rigió con otro valor/);
+    });
+  });
+
+  it("reimportar la misma fecha con el MISMO precio sigue siendo idempotente", async () => {
+    // La otra cara: el contador del importador exige que cada fila del lote se
+    // escriba. Un `do nothing` no la contaría y un reimport limpio abortaría.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      await aplicar(c, await nuevaImportacion(c), LOTE_COMPLETO);
+      await aplicar(c, await nuevaImportacion(c), LOTE_COMPLETO);
 
       const r = await c.query<{ n: string; precio: string }>(
         `select count(*)::text as n, max(precio)::text as precio
@@ -226,7 +242,76 @@ describe("aplicar_importacion — reimportar no duplica", () => {
          where s.codigo_externo = 'IMP-SKU'`,
       );
       expect(Number(r.rows[0]?.n)).toBe(1);
-      expect(Number(r.rows[0]?.precio)).toBe(11.5);
+      expect(Number(r.rows[0]?.precio)).toBe(
+        LOTE_COMPLETO.precio_regular[0]?.precio,
+      );
+    });
+  });
+
+  it("importar una fecha POSTERIOR cierra el periodo anterior y abre el nuevo", async () => {
+    // El camino que YA funcionaba y que la restricción de solapamiento podría
+    // haber roto: sin el cierre previo, este import empezaría a fallar con un
+    // 23P01 el día del despliegue. Ninguna fila se retira.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const primero = LOTE_COMPLETO.precio_regular[0];
+      await aplicar(c, await nuevaImportacion(c), LOTE_COMPLETO);
+      await aplicar(c, await nuevaImportacion(c), {
+        ...LOTE_COMPLETO,
+        precio_regular: [
+          { ...primero, precio: 11.5, vigente_desde: "2026-10-01" },
+        ],
+      });
+
+      const r = await c.query<{
+        precio: string;
+        vigente_desde: string;
+        vigente_hasta: string | null;
+      }>(
+        `select pr.precio::text, pr.vigente_desde::text, pr.vigente_hasta::text
+         from public.precio_regular pr
+         join public.sku s on s.id = pr.sku_id
+         where s.codigo_externo = 'IMP-SKU'
+         order by pr.vigente_desde`,
+      );
+
+      expect(r.rows).toHaveLength(2);
+      expect(r.rows[0]?.vigente_hasta).toBe("2026-09-30");
+      expect(r.rows[1]?.vigente_hasta).toBeNull();
+      expect(Number(r.rows[1]?.precio)).toBe(11.5);
+    });
+  });
+
+  it("tres fechas del mismo SKU en UN lote quedan encadenadas sin solaparse", async () => {
+    // El caso que rompe la implementación ingenua: las tres nacen abiertas y se
+    // pisan entre sí mientras se insertan. Por eso la exclusión se difiere al
+    // commit y la cadena se cierra al final.
+    await comoUsuario(db, USUARIOS.admin, async (c) => {
+      const primero = LOTE_COMPLETO.precio_regular[0];
+      await aplicar(c, await nuevaImportacion(c), {
+        ...LOTE_COMPLETO,
+        precio_regular: [
+          { ...primero, precio: 10, vigente_desde: "2026-10-01" },
+          { ...primero, precio: 11, vigente_desde: "2026-11-01" },
+          { ...primero, precio: 12, vigente_desde: "2026-12-01" },
+        ],
+      });
+
+      const r = await c.query<{
+        vigente_desde: string;
+        vigente_hasta: string | null;
+      }>(
+        `select pr.vigente_desde::text, pr.vigente_hasta::text
+         from public.precio_regular pr
+         join public.sku s on s.id = pr.sku_id
+         where s.codigo_externo = 'IMP-SKU'
+         order by pr.vigente_desde`,
+      );
+
+      expect(r.rows.map((f) => f.vigente_hasta)).toEqual([
+        "2026-10-31",
+        "2026-11-30",
+        null,
+      ]);
     });
   });
 

@@ -24,6 +24,12 @@ const IDS = {
 /** El código de Postgres para «viola una restricción unique». */
 const DUPLICADO = "23505";
 
+/** «Viola una restricción de exclusión» — dos periodos de precio que se pisan. */
+const SOLAPE = "23P01";
+
+/** «Viola un CHECK» — lo levantan los triggers que protegen el histórico. */
+const REGLA = "23514";
+
 let client: Client;
 
 beforeAll(async () => {
@@ -33,6 +39,22 @@ beforeAll(async () => {
 afterAll(async () => {
   await client.end();
 });
+
+/**
+ * Cierra el periodo que el seed deja abierto para el SKU y la cadena de prueba.
+ *
+ * Sin esto, cualquier periodo nuevo del mismo bucket lo pisa y la restricción de
+ * solapamiento lo rechaza — que es el comportamiento correcto. Cerrar un periodo
+ * que ya empezó SÍ está permitido: lo prohibido es cambiarle el precio.
+ */
+async function cerrarElDelSeed(c: Client, hasta: string): Promise<void> {
+  await c.query(
+    `update public.precio_regular set vigente_hasta = $1
+      where tenant_id = $2 and sku_id = $3 and cadena_id = $4
+        and tipo_tienda is null`,
+    [hasta, TENANTS.maracumango, IDS.skuMrc, IDS.cadenaMrc],
+  );
+}
 
 /** Corre la consulta y devuelve el código de error de Postgres, o null si pasó. */
 async function codigoDeError(
@@ -145,10 +167,15 @@ describe("clave natural de precio_regular", () => {
   `;
 
   it("dos precios SIN tipo de tienda colisionan: el NULL no escapa", async () => {
-    // `nulls not distinct`. En SQL dos NULL son distintos por defecto, así que
-    // sin esa cláusula cada alta crearía una fila nueva y el precio "vigente"
-    // pasaría a ser ambiguo.
+    // `nulls not distinct` en la clave natural, Y una restricción de exclusión
+    // PARCIAL para el bucket de tipo nulo. Hacen falta las dos: una exclusión
+    // con `tipo_tienda with =` NO atrapa el solapamiento cuando el tipo es nulo
+    // —medido— y es justo el bucket que llena el importador.
+    //
+    // Con la clave IDÉNTICA quien rechaza es el unique, que se comprueba antes
+    // que la exclusión; el bucket nulo lo cubren los dos.
     await comoUsuario(client, USUARIOS.admin, async (c) => {
+      await cerrarElDelSeed(c, "2026-08-31");
       const valores = [
         TENANTS.maracumango,
         IDS.skuMrc,
@@ -162,7 +189,12 @@ describe("clave natural de precio_regular", () => {
     });
   });
 
-  it("el mismo precio con otra fecha de vigencia SÍ entra", async () => {
+  it("un periodo con OTRA fecha ya no entra por un INSERT pelado: pisaría al abierto", async () => {
+    // Cambio de contrato deliberado. Antes esto entraba y dejaba dos periodos
+    // abiertos a la vez, y el resolvedor desempataba por `vigente_desde desc`.
+    // Ahora el periodo anterior sigue vigente hasta que alguien lo cierre, así
+    // que el nuevo lo pisa: abrir un periodo es cerrar el anterior Y abrir el
+    // nuevo, y eso tiene un solo dueño (`abrir_periodo_precio`).
     await comoUsuario(client, USUARIOS.admin, async (c) => {
       const septiembre = [
         TENANTS.maracumango,
@@ -174,8 +206,50 @@ describe("clave natural de precio_regular", () => {
       ];
       const octubre = [...septiembre.slice(0, 5), "2026-10-01"];
 
+      await cerrarElDelSeed(c, "2026-08-31");
       expect(await codigoDeError(c, INSERTAR, septiembre)).toBeNull();
-      expect(await codigoDeError(c, INSERTAR, octubre)).toBeNull();
+      expect(await codigoDeError(c, INSERTAR, octubre)).toBe(SOLAPE);
+    });
+  });
+
+  it("un precio de un tipo de tienda CONVIVE con el general de la cadena", async () => {
+    // El control positivo de la restricción: estos dos se solapan A PROPÓSITO
+    // —el resolvedor desempata entre ellos— y prohibirlo rompería el modelo.
+    await comoUsuario(client, USUARIOS.admin, async (c) => {
+      const general = [
+        TENANTS.maracumango,
+        IDS.skuMrc,
+        IDS.cadenaMrc,
+        null,
+        7.5,
+        "2026-09-01",
+      ];
+      const hiper = [...general.slice(0, 3), "hiper", 8.5, "2026-09-01"];
+
+      await cerrarElDelSeed(c, "2026-08-31");
+      expect(await codigoDeError(c, INSERTAR, general)).toBeNull();
+      expect(await codigoDeError(c, INSERTAR, hiper)).toBeNull();
+    });
+  });
+
+  it("un cierre anterior al propio inicio se rechaza", async () => {
+    await comoUsuario(client, USUARIOS.admin, async (c) => {
+      const codigo = await codigoDeError(
+        c,
+        `insert into public.precio_regular
+           (tenant_id, sku_id, cadena_id, tipo_tienda, precio, vigente_desde,
+            vigente_hasta)
+         values ($1, $2, $3, null, $4, $5, $6)`,
+        [
+          TENANTS.maracumango,
+          IDS.skuMrc,
+          IDS.cadenaMrc,
+          7.5,
+          "2026-09-01",
+          "2026-08-31",
+        ],
+      );
+      expect(codigo).toBe(REGLA);
     });
   });
 });
