@@ -1,0 +1,21 @@
+-- La foto que prueba que la incidencia se resolvió: su tipo, y la verja que la
+-- ata a la visita correcta.
+--
+-- El acuerdo de la 4ª revisión es que la incidencia no se cierra diciendo "ya
+-- está": se cierra con la acción tomada y una foto. Sabino: "y tomas la foto
+-- final, porque hay un antes y un después. Eso es lo que va a valorar más el
+-- cliente".
+
+-- ---------------------------------------------------------------------------
+-- 1. El tipo de foto
+-- ---------------------------------------------------------------------------
+--
+-- Ninguno de los que hay encaja. `despues` está tomado por la foto de la góndola
+-- ya trabajada, y `public.foto_del_levantamiento` empareja el antes/después con
+-- él: reusarlo llenaría la galería del portal de pares falsos. `contingencia` es
+-- el bypass de un paso que no se pudo completar, que es otro hecho.
+--
+-- Va en su propia migración lógica y no se USA más abajo: Postgres prohíbe
+-- emplear un valor de enum en la misma transacción que lo añade. Aquí solo se
+-- declara; quien lo escribe es el móvil.
+alter type public.tipo_foto add value 'resolucion_incidencia';

@@ -45,3 +45,48 @@ export const resolucionIncidenciaSchema = z.discriminatedUnion("estado", [
 ]);
 
 export type ResolucionIncidencia = z.infer<typeof resolucionIncidenciaSchema>;
+
+/**
+ * Las acciones que el mercaderista suele tomar, para no teclearlas de cero.
+ *
+ * Son FRASES, no códigos. Al elegir una, el texto entra editable en el campo y
+ * puede afinarla o borrarla — que es el "texto libre cuando se sale de las
+ * opciones" del acuerdo. Guardar un código aparte obligaría a una segunda
+ * columna para el texto libre, o a un centinela que el panel tendría que
+ * interpretar; y un valor tipificado que crezca dejaría a las filas viejas
+ * cayendo en un `default` que traga la deriva.
+ *
+ * Lo que se pierde: agregar "cuántas se resolvieron cambiando el precio". Ningún
+ * criterio lo pide hoy, y retrofitear códigos sobre texto libre ya escrito sería
+ * una migración de datos.
+ */
+export const ACCIONES_TOMADAS = [
+  "Cambié el precio en góndola",
+  "Hablé con el encargado y lo corrigió",
+  "Repuse el producto desde trastienda",
+  "Instalé el material y quedó completo",
+] as const;
+
+/**
+ * Los números del hallazgo que el motor guardó en `incidencia.detalle`.
+ *
+ * LAXO a propósito: todo opcional y `.catch({})` al final. El motor puede añadir
+ * una clave —ya lo hizo con `delta`— y una unión estricta por origen convertiría
+ * eso en un teléfono con una versión vieja de la app que revienta al pintar la
+ * lista. Se pinta lo que haya; no se recalcula nada (para eso está el motor).
+ */
+export const detalleIncidenciaSchema = z
+  .object({
+    stock_sistema: z.number().nullish(),
+    stock_piso: z.number().nullish(),
+    delta: z.number().nullish(),
+    precio_registrado: z.number().nullish(),
+    precio_regular: z.number().nullish(),
+    motivo: z.string().nullish(),
+    exhibicion_id: z.string().nullish(),
+    unidades: z.number().nullish(),
+  })
+  .loose()
+  .catch({});
+
+export type DetalleIncidencia = z.infer<typeof detalleIncidenciaSchema>;
