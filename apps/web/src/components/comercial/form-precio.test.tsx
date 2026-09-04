@@ -3,13 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FormPrecio } from "./form-precio";
 
-// Lo que se fija aquí es de quién es la fila que se escribe: el `tenant_id`
-// sale del SKU ELEGIDO, no de la cookie del header ni de un selector aparte.
-// La FK compuesta lo impediría igual en la base, pero este es el contrato que
-// hace que el error nunca llegue a producirse.
+// Lo que se fija aquí es de quién es la fila que se escribe. El formulario ya no
+// manda `tenant_id` EN ABSOLUTO: lo deriva la base de la fila del SKU, dentro de
+// la RPC que cierra el periodo anterior y abre el nuevo. Es una garantía más
+// fuerte que mandarlo bien — un cuerpo manipulado tampoco puede elegir cliente.
 
-const { crear, buscarSkusFalso } = vi.hoisted(() => ({
-  crear: vi.fn(),
+const { abrir, buscarSkusFalso } = vi.hoisted(() => ({
+  abrir: vi.fn(),
   buscarSkusFalso: vi.fn(),
 }));
 
@@ -17,7 +17,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }));
 vi.mock("@/lib/comercial/acciones", () => ({
-  crearPrecio: crear,
+  abrirPeriodoPrecio: abrir,
   editarPrecio: vi.fn(),
 }));
 vi.mock("@/lib/comercial/buscar-opciones", () => ({
@@ -49,27 +49,25 @@ function rellenarYEnviar() {
 }
 
 beforeEach(() => {
-  crear.mockReset();
-  crear.mockResolvedValue({ ok: true });
+  abrir.mockReset();
+  abrir.mockResolvedValue({ ok: true });
   buscarSkusFalso.mockReset();
   buscarSkusFalso.mockResolvedValue({ ok: true, opciones: [SKU] });
 });
 
 describe("FormPrecio", () => {
-  it("manda el tenant del SKU elegido, no uno elegido aparte", async () => {
+  it("NO manda `tenant_id`: el cliente lo deriva la base del SKU", async () => {
     render(
       <FormPrecio tenantId={MARACUMANGO} skuInicial={SKU} cadenas={CADENAS} />,
     );
     rellenarYEnviar();
 
-    await waitFor(() => expect(crear).toHaveBeenCalled());
-    expect(crear.mock.calls[0]?.[0]).toMatchObject({
-      tenant_id: MARACUMANGO,
-      sku_id: "s-mrc",
-    });
+    await waitFor(() => expect(abrir).toHaveBeenCalled());
+    expect(abrir.mock.calls[0]?.[0]).toMatchObject({ sku_id: "s-mrc" });
+    expect(abrir.mock.calls[0]?.[0]).not.toHaveProperty("tenant_id");
   });
 
-  it("buscar y elegir un SKU pone su id Y su tenant en el envío", async () => {
+  it("buscar y elegir un SKU pone su id en el envío", async () => {
     render(<FormPrecio tenantId={MARACUMANGO} cadenas={CADENAS} />);
     fireEvent.change(screen.getByRole("combobox", { name: "SKU" }), {
       target: { value: "néctar" },
@@ -79,23 +77,17 @@ describe("FormPrecio", () => {
     );
     rellenarYEnviar();
 
-    await waitFor(() => expect(crear).toHaveBeenCalled());
-    expect(crear.mock.calls[0]?.[0]).toMatchObject({
-      tenant_id: MARACUMANGO,
-      sku_id: "s-mrc",
-    });
+    await waitFor(() => expect(abrir).toHaveBeenCalled());
+    expect(abrir.mock.calls[0]?.[0]).toMatchObject({ sku_id: "s-mrc" });
   });
 
-  it("sin SKU elegido el envío va sin tenant: lo rechaza el servidor, no viaja el de la cookie", async () => {
-    crear.mockResolvedValue({ ok: false, error: "Revisa el SKU" });
+  it("sin SKU elegido el envío va vacío y lo rechaza el servidor", async () => {
+    abrir.mockResolvedValue({ ok: false, error: "Revisa el SKU" });
     render(<FormPrecio tenantId={MARACUMANGO} cadenas={CADENAS} />);
     rellenarYEnviar();
 
-    await waitFor(() => expect(crear).toHaveBeenCalled());
-    expect(crear.mock.calls[0]?.[0]).toMatchObject({
-      tenant_id: "",
-      sku_id: "",
-    });
+    await waitFor(() => expect(abrir).toHaveBeenCalled());
+    expect(abrir.mock.calls[0]?.[0]).toMatchObject({ sku_id: "" });
     expect(await screen.findByText("Revisa el SKU")).toBeInTheDocument();
   });
 

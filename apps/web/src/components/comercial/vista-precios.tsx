@@ -3,6 +3,8 @@ import Link from "next/link";
 import { botonPrimario, enlaceTabla } from "@/components/panel/estilos";
 import { Paginacion } from "@/components/panel/paginacion";
 import { Aviso, Tarjeta, TD, TH } from "@/components/panel/tabla";
+import { etiquetaVigencia } from "@/lib/comercial/vigencia";
+import { diaEnLima } from "@/lib/fecha-lima";
 import { paginar, rangoDe } from "@/lib/panel/listado";
 import { tenantActivo } from "@/lib/panel/tenant-activo";
 import { soles } from "@/lib/formato";
@@ -20,8 +22,16 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 const RUTA = "/admin/precios";
 
-export async function VistaPrecios({ pagina }: { pagina: number }) {
+export async function VistaPrecios({
+  pagina,
+  sku,
+}: {
+  pagina: number;
+  /** Acota la lista a un SKU: es la línea de tiempo de sus periodos. */
+  sku?: string;
+}) {
   const tenant = await tenantActivo();
+  const hoy = diaEnLima(new Date());
 
   const barra = (
     <div className="flex flex-wrap items-center gap-3">
@@ -43,10 +53,13 @@ export async function VistaPrecios({ pagina }: { pagina: number }) {
 
   const supabase = await createServerSupabaseClient();
   const [desde, hasta] = rangoDe(pagina);
-  const { data, error } = await supabase
+  // Acotar por SKU es lo que hace de esta lista la LÍNEA DE TIEMPO de ese SKU:
+  // sus periodos, del más reciente al más viejo. No hace falta otra pantalla, y
+  // el filtro además mejora el plan en vez de empeorarlo.
+  const consulta = supabase
     .from("precio_regular")
     .select(
-      "id, precio, tipo_tienda, vigente_desde, sku:precio_sku_fk(codigo, nombre), cadena:precio_cadena_fk(nombre)",
+      "id, precio, tipo_tienda, vigente_desde, vigente_hasta, sku_id, sku:precio_sku_fk(codigo, nombre), cadena:precio_cadena_fk(nombre)",
     )
     .eq("tenant_id", tenant.id)
     .order("vigente_desde", { ascending: false })
@@ -54,6 +67,8 @@ export async function VistaPrecios({ pagina }: { pagina: number }) {
     // la misma fecha y sin él una fila puede repetirse o saltarse un corte.
     .order("id")
     .range(desde, hasta);
+
+  const { data, error } = await (sku ? consulta.eq("sku_id", sku) : consulta);
 
   const { filas, hayAnterior, haySiguiente, vaciaFueraDeRango } = paginar(
     data ?? [],
@@ -100,6 +115,9 @@ export async function VistaPrecios({ pagina }: { pagina: number }) {
                   VIGENTE DESDE
                 </th>
                 <th scope="col" className={TH}>
+                  VIGENTE HASTA
+                </th>
+                <th scope="col" className={TH}>
                   <span className="sr-only">Acciones</span>
                 </th>
               </tr>
@@ -127,7 +145,25 @@ export async function VistaPrecios({ pagina }: { pagina: number }) {
                   <td className={`${TD} tabular-nums text-muted-foreground`}>
                     {p.vigente_desde}
                   </td>
+                  <td className={`${TD} tabular-nums text-muted-foreground`}>
+                    {/* El estado va como TEXTO y no como color: un punto verde
+                        no se lo dice a nadie que no lo distinga (WCAG 1.4.1). */}
+                    <span className="mr-2 rounded-full border border-border px-2 py-0.5 text-[11px] font-semibold uppercase">
+                      {etiquetaVigencia(p.vigente_desde, p.vigente_hasta, hoy)}
+                    </span>
+                    {p.vigente_hasta ?? "—"}
+                  </td>
                   <td className={`${TD} text-right`}>
+                    <Link
+                      href={`${RUTA}?sku=${p.sku_id}`}
+                      className={`${enlaceTabla} mr-4`}
+                    >
+                      Histórico
+                      <span className="sr-only">
+                        {" "}
+                        de precios de {p.sku?.nombre ?? "este SKU"}
+                      </span>
+                    </Link>
                     <Link href={`${RUTA}/${p.id}`} className={enlaceTabla}>
                       Editar
                       <span className="sr-only">
@@ -144,7 +180,7 @@ export async function VistaPrecios({ pagina }: { pagina: number }) {
             pagina={pagina}
             hayAnterior={hayAnterior}
             haySiguiente={haySiguiente}
-            href={(p) => `${RUTA}?p=${p}`}
+            href={(p) => (sku ? `${RUTA}?sku=${sku}&p=${p}` : `${RUTA}?p=${p}`)}
           />
         </>
       )}

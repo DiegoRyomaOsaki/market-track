@@ -2526,7 +2526,7 @@ export type Database = {
           p_cadena: string
           p_precio: number
           p_sku: string
-          p_tipo_tienda: Database["public"]["Enums"]["tipo_tienda"]
+          p_tipo_tienda?: Database["public"]["Enums"]["tipo_tienda"]
           p_vigente_desde: string
         }
         Returns: string

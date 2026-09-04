@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { supabaseFalso } from "@/lib/panel/supabase-falso";
 
 import {
+  abrirPeriodoPrecio,
   crearExhibicion,
-  crearPrecio,
   crearPromocion,
   editarExhibicion,
   editarPrecio,
@@ -70,6 +70,24 @@ function conRespuesta(
   return falso;
 }
 
+/** Monta el doble para una acción que entra por RPC en vez de por la tabla. */
+function conRpc(rpc: {
+  data?: unknown;
+  error: { message: string; code?: string } | null;
+}) {
+  const falso = supabaseFalso({ rpc });
+  cliente.actual = falso.cliente;
+  return falso;
+}
+
+/** Lo que el formulario manda para abrir un periodo: sin `tenant_id`. */
+const APERTURA = {
+  sku_id: SKU,
+  cadena_id: CADENA,
+  precio: 7.9,
+  vigente_desde: "2026-10-01",
+};
+
 const OK = { data: [{ id: "nuevo" }], error: null };
 
 beforeEach(() => {
@@ -77,18 +95,94 @@ beforeEach(() => {
   conRespuesta(OK);
 });
 
-describe("crearPrecio", () => {
-  it("manda a `precio_regular` exactamente los campos validados", () => {
-    const falso = conRespuesta(OK);
-    return crearPrecio(PRECIO).then((r) => {
-      expect(r.ok).toBe(true);
-      expect(falso.tablasPedidas).toContain("precio_regular");
-      // `tipo_tienda` viaja como null explícito: es lo que hace colisionar la
-      // clave `nulls not distinct` en vez de crear una fila nueva cada vez.
-      expect(falso.filasEscritas[0]).toEqual({ ...PRECIO, tipo_tienda: null });
+describe("abrirPeriodoPrecio", () => {
+  it("entra por la RPC y no por un insert: cerrar y abrir es UNA operación", async () => {
+    // Dos escrituras sueltas dejarían al SKU sin ningún precio vigente si la
+    // segunda falla — y eso no da error en ninguna pantalla, sale del
+    // denominador de Perfect Store en silencio.
+    const falso = conRpc({ error: null });
+
+    const r = await abrirPeriodoPrecio(APERTURA);
+
+    expect(r.ok).toBe(true);
+    expect(falso.rpcsPedidas[0]?.nombre).toBe("abrir_periodo_precio");
+    expect(falso.tablasPedidas).not.toContain("precio_regular");
+  });
+
+  it("omite `p_tipo_tienda` cuando el precio es de toda la cadena", async () => {
+    // El default de la función ya es null; mandarlo explícito solo obligaría al
+    // tipo generado a admitir un null que no admite.
+    const falso = conRpc({ error: null });
+
+    await abrirPeriodoPrecio(APERTURA);
+
+    expect(falso.rpcsPedidas[0]?.argumentos).toEqual({
+      p_sku: SKU,
+      p_cadena: CADENA,
+      p_precio: 7.9,
+      p_vigente_desde: "2026-10-01",
     });
   });
 
+  it("lo manda cuando el precio es de un tipo de tienda", async () => {
+    const falso = conRpc({ error: null });
+
+    await abrirPeriodoPrecio({ ...APERTURA, tipo_tienda: "hiper" });
+
+    expect(falso.rpcsPedidas[0]?.argumentos).toMatchObject({
+      p_tipo_tienda: "hiper",
+    });
+  });
+
+  it("no llega a la red si el cuerpo no valida", async () => {
+    const falso = conRpc({ error: null });
+
+    const r = await abrirPeriodoPrecio({ ...APERTURA, sku_id: "no-es-un-id" });
+
+    expect(r.ok).toBe(false);
+    expect(falso.rpcsPedidas).toHaveLength(0);
+  });
+
+  it("una fecha que no es posterior a la vigente se explica con el texto de la base", async () => {
+    // La RPC ya redacta ese caso mejor que un mensaje genérico: dice DESDE
+    // cuándo hay precio.
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    conRpc({
+      error: {
+        message:
+          "ya hay un precio para ese SKU y esa cadena desde el 2026-01-01 o posterior: el periodo nuevo tiene que empezar después",
+        code: "23514",
+      },
+    });
+
+    const r = await abrirPeriodoPrecio(APERTURA);
+
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/empezar después/);
+  });
+
+  it("un solapamiento se explica en términos del formulario", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    conRpc({
+      error: {
+        message:
+          'conflicting key value violates exclusion constraint "precio_regular_sin_solape_general"',
+        code: "23P01",
+      },
+    });
+
+    const r = await abrirPeriodoPrecio(APERTURA);
+
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/se solapa/i);
+    // El mensaje del motor habla de restricciones: al operador no se le enseña.
+    expect(r.error).not.toMatch(/exclusion constraint/i);
+  });
+});
+
+describe("editarPrecio", () => {
   it("un duplicado se explica en términos del formulario", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     conRespuesta({
@@ -99,13 +193,51 @@ describe("crearPrecio", () => {
       },
     });
 
-    const r = await crearPrecio(PRECIO);
+    const r = await editarPrecio(PRECIO_ID, PRECIO);
 
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.error).toMatch(/fecha de vigencia/i);
     // El mensaje del motor habla de índices: al operador no se le enseña crudo.
     expect(r.error).not.toMatch(/duplicate key/i);
+  });
+
+  it("reescribir un precio que ya rigió se explica, no se traga", async () => {
+    // La verja vive en la base: aquí solo se comprueba que el 23514 del trigger
+    // llega al operador diciéndole qué hacer en vez de "error del sistema".
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    conRespuesta({
+      data: null,
+      error: {
+        message:
+          "ese precio ya rigió desde el 2026-01-01 y no se puede reescribir",
+        code: "23514",
+      },
+    });
+
+    const r = await editarPrecio(PRECIO_ID, PRECIO);
+
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/periodo nuevo/i);
+  });
+
+  it("reescribir una promoción que ya arrancó también", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    conRespuesta({
+      data: null,
+      error: {
+        message:
+          "esa promoción ya arrancó el 2026-07-01 y no se puede reescribir",
+        code: "23514",
+      },
+    });
+
+    const r = await editarPromocion(PRECIO_ID, PROMO);
+
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/crea una nueva/i);
   });
 
   it("una referencia de otro cliente se dice tal cual", async () => {
@@ -115,7 +247,7 @@ describe("crearPrecio", () => {
       error: { message: "violates foreign key constraint", code: "23503" },
     });
 
-    const r = await crearPrecio(PRECIO);
+    const r = await editarPrecio(PRECIO_ID, PRECIO);
 
     expect(r.ok).toBe(false);
     if (r.ok) return;
@@ -127,7 +259,7 @@ describe("crearPrecio", () => {
     // esta comprobación la pantalla diría "guardado" y no habría guardado nada.
     conRespuesta({ data: [], error: null });
 
-    const r = await crearPrecio(PRECIO);
+    const r = await editarPrecio(PRECIO_ID, PRECIO);
 
     expect(r.ok).toBe(false);
     if (r.ok) return;
@@ -137,14 +269,12 @@ describe("crearPrecio", () => {
   it("con datos inválidos no llega a tocar la base", async () => {
     const falso = conRespuesta(OK);
 
-    const r = await crearPrecio({ ...PRECIO, precio: -1 });
+    const r = await editarPrecio(PRECIO_ID, { ...PRECIO, precio: -1 });
 
     expect(r.ok).toBe(false);
     expect(falso.tablasPedidas).toEqual([]);
   });
-});
 
-describe("editarPrecio", () => {
   it("apunta a la fila que se está editando", async () => {
     // Un `.eq('id', …)` que se olvide reescribe TODAS las filas que la RLS deje.
     const falso = conRespuesta(OK);

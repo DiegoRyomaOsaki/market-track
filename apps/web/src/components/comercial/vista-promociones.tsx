@@ -17,7 +17,14 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 const RUTA = "/admin/precios?vista=promociones";
 
-export async function VistaPromociones({ pagina }: { pagina: number }) {
+export async function VistaPromociones({
+  pagina,
+  sku,
+}: {
+  pagina: number;
+  /** Acota la lista a un SKU: la línea de tiempo de sus promociones. */
+  sku?: string;
+}) {
   const tenant = await tenantActivo();
 
   const barra = (
@@ -40,15 +47,17 @@ export async function VistaPromociones({ pagina }: { pagina: number }) {
 
   const supabase = await createServerSupabaseClient();
   const [desde, hasta] = rangoDe(pagina);
-  const { data, error } = await supabase
+  const consulta = supabase
     .from("promocion")
     .select(
-      "id, precio_promo, fecha_inicio, fecha_fin, clusters, comunicada, sku:promocion_sku_fk(codigo, nombre)",
+      "id, precio_promo, fecha_inicio, fecha_fin, clusters, comunicada, sku_id, sku:promocion_sku_fk(codigo, nombre)",
     )
     .eq("tenant_id", tenant.id)
     .order("fecha_inicio", { ascending: false })
     .order("id")
     .range(desde, hasta);
+
+  const { data, error } = await (sku ? consulta.eq("sku_id", sku) : consulta);
 
   const { filas, hayAnterior, haySiguiente, vaciaFueraDeRango } = paginar(
     data ?? [],
@@ -153,7 +162,7 @@ export async function VistaPromociones({ pagina }: { pagina: number }) {
             pagina={pagina}
             hayAnterior={hayAnterior}
             haySiguiente={haySiguiente}
-            href={(p) => `${RUTA}&p=${p}`}
+            href={(p) => (sku ? `${RUTA}&sku=${sku}&p=${p}` : `${RUTA}&p=${p}`)}
           />
         </>
       )}

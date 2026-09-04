@@ -684,12 +684,15 @@ create trigger promocion_iniciada_no_se_pisa
 -- El tenant sale de la fila del SKU, nunca de un parámetro: un formulario no
 -- elige en qué cliente escribe.
 
+-- `p_tipo_tienda` va al final y con default: vacío significa "toda la cadena",
+-- que es el caso mayoritario, y así el argumento sale OPCIONAL en los tipos
+-- generados en vez de exigir un null explícito que el tipo no admite.
 create function public.abrir_periodo_precio(
   p_sku           uuid,
   p_cadena        uuid,
-  p_tipo_tienda   public.tipo_tienda,
   p_precio        numeric,
-  p_vigente_desde date
+  p_vigente_desde date,
+  p_tipo_tienda   public.tipo_tienda default null
 )
 returns uuid
 language plpgsql
@@ -748,11 +751,11 @@ end;
 $$;
 
 revoke execute on function public.abrir_periodo_precio(
-  uuid, uuid, public.tipo_tienda, numeric, date) from public, anon;
+  uuid, uuid, numeric, date, public.tipo_tienda) from public, anon;
 grant execute on function public.abrir_periodo_precio(
-  uuid, uuid, public.tipo_tienda, numeric, date) to authenticated, service_role;
+  uuid, uuid, numeric, date, public.tipo_tienda) to authenticated, service_role;
 
-comment on function public.abrir_periodo_precio(uuid, uuid, public.tipo_tienda, numeric, date) is
+comment on function public.abrir_periodo_precio(uuid, uuid, numeric, date, public.tipo_tienda) is
   'Cierra el periodo de precio vigente y abre uno nuevo, en una sola transacción. Nunca pisa el anterior: el histórico es lo que da la trazabilidad que pidió el cliente.';
 
 -- ---------------------------------------------------------------------------

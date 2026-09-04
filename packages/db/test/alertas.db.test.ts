@@ -203,7 +203,10 @@ describe("el precio de ayer no lo cambia el precio de hoy", () => {
   const CADENA = "a0000001-0000-0000-0000-000000000001";
 
   async function evaluar(c: Client, fecha: string) {
-    const r = await c.query<{ veredicto: string; precio_regular: string | null }>(
+    const r = await c.query<{
+      veredicto: string;
+      precio_regular: string | null;
+    }>(
       `select veredicto, precio_regular::text
          from app.evaluar_precio_sku($1, $2, $3, $4, 7.20, false, false, $5::date)`,
       [TENANTS.maracumango, SKU, MARCA, CADENA, fecha],
@@ -217,7 +220,8 @@ describe("el precio de ayer no lo cambia el precio de hoy", () => {
       expect(Number(antes?.precio_regular)).toBe(6.9);
 
       await c.query(
-        `select public.abrir_periodo_precio($1, $2, null, 9.90, '2026-08-01')`,
+        `select public.abrir_periodo_precio(p_sku := $1, p_cadena := $2,
+                 p_precio := 9.90, p_vigente_desde := '2026-08-01')`,
         [SKU, CADENA],
       );
 
@@ -242,7 +246,9 @@ describe("el precio de ayer no lo cambia el precio de hoy", () => {
         [TENANTS.maracumango, SKU, CADENA],
       );
 
-      expect(Number((await evaluar(c, "2026-06-15"))?.precio_regular)).toBe(6.9);
+      expect(Number((await evaluar(c, "2026-06-15"))?.precio_regular)).toBe(
+        6.9,
+      );
       const fuera = await evaluar(c, "2026-07-15");
       expect(fuera?.precio_regular).toBeNull();
       expect(fuera?.veredicto).toBe("sin_precio_vigente");
@@ -252,7 +258,8 @@ describe("el precio de ayer no lo cambia el precio de hoy", () => {
   it("abrir un periodo deja DOS filas: la anterior cerrada y ninguna retirada", async () => {
     await comoUsuario(db, USUARIOS.admin, async (c) => {
       await c.query(
-        `select public.abrir_periodo_precio($1, $2, null, 9.90, '2026-08-01')`,
+        `select public.abrir_periodo_precio(p_sku := $1, p_cadena := $2,
+                 p_precio := 9.90, p_vigente_desde := '2026-08-01')`,
         [SKU, CADENA],
       );
 
@@ -281,7 +288,8 @@ describe("el precio de ayer no lo cambia el precio de hoy", () => {
     await comoUsuario(db, USUARIOS.admin, async (c) => {
       await expect(
         c.query(
-          `select public.abrir_periodo_precio($1, $2, null, 9.90, '2025-12-01')`,
+          `select public.abrir_periodo_precio(p_sku := $1, p_cadena := $2,
+                 p_precio := 9.90, p_vigente_desde := '2025-12-01')`,
           [SKU, CADENA],
         ),
       ).rejects.toThrow(/tiene que empezar después/);
@@ -322,7 +330,8 @@ describe("el precio de ayer no lo cambia el precio de hoy", () => {
   it("un periodo que aún NO ha empezado sí se corrige en sitio", async () => {
     await comoUsuario(db, USUARIOS.admin, async (c) => {
       await c.query(
-        `select public.abrir_periodo_precio($1, $2, null, 9.90, '2027-01-01')`,
+        `select public.abrir_periodo_precio(p_sku := $1, p_cadena := $2,
+                 p_precio := 9.90, p_vigente_desde := '2027-01-01')`,
         [SKU, CADENA],
       );
       await c.query(

@@ -18,7 +18,7 @@ export default async function EditarPrecioPage({
   const { data: precio } = await supabase
     .from("precio_regular")
     .select(
-      "id, sku_id, cadena_id, tipo_tienda, precio, vigente_desde, tenant_id, sku:precio_sku_fk(codigo, nombre, activo)",
+      "id, sku_id, cadena_id, tipo_tienda, precio, vigente_desde, vigente_hasta, tenant_id, sku:precio_sku_fk(codigo, nombre, activo)",
     )
     // Sin el filtro por id, la política que deja al staff leer la tabla entera
     // devolvería todas las filas y `maybeSingle()` fallaría por multiplicidad.

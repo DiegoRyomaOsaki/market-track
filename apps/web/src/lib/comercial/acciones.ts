@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 import {
+  abrirPeriodoPrecioSchema,
   altaExhibicionSchema,
   altaPrecioRegularSchema,
   altaPromocionSchema,
@@ -42,6 +43,21 @@ const DUPLICADO = {
 
 type Tabla = keyof typeof DUPLICADO;
 
+/**
+ * Lo que ve el operador cuando intenta reescribir algo que ya rigió.
+ *
+ * La verja vive en la base —un trigger—, no aquí: `authenticated` tiene UPDATE
+ * sobre estas tablas y un PATCH directo se saltaría cualquier comprobación que
+ * viviera solo en el panel. Esto solo traduce.
+ */
+const HISTORICO: Record<Tabla, string> = {
+  precio_regular:
+    "Ese precio ya rigió y no se puede reescribir: abre un periodo nuevo con otra fecha de vigencia.",
+  promocion:
+    "Esa promoción ya arrancó y no se puede reescribir: crea una nueva. Sí puedes cortarla desde hoy.",
+  exhibicion_negociada: "No se pudo guardar la exhibición",
+};
+
 const ENTIDAD: Record<Tabla, string> = {
   precio_regular: "el precio",
   promocion: "la promoción",
@@ -58,6 +74,15 @@ function mensajeDe(codigo: string | undefined, tabla: Tabla): string {
   if (codigo === "23505") return DUPLICADO[tabla];
   if (codigo === "23503")
     return "Ese SKU, tienda o marca no es de este cliente";
+  // Dos periodos que se pisan. Solo puede pasar en `precio_regular`: es la única
+  // tabla con restricción de exclusión.
+  if (codigo === "23P01")
+    return "Ese tramo de fechas se solapa con otro periodo del mismo SKU y cadena";
+  // Lo levantan los triggers que protegen el histórico. El único CHECK que un
+  // formulario puede tocar —que la vigencia no acabe antes de empezar— ya lo
+  // rechaza Zod antes de salir del navegador, así que un 23514 que llega hasta
+  // aquí es la regla temporal.
+  if (codigo === "23514") return HISTORICO[tabla];
   return `No se pudo guardar ${ENTIDAD[tabla]}`;
 }
 
@@ -137,17 +162,47 @@ function invalidos(issues: unknown): ResultadoAccion {
   return { ok: false, error: DATOS_INVALIDOS, detalles: issues };
 }
 
-export async function crearPrecio(datos: unknown): Promise<ResultadoAccion> {
-  const parsed = altaPrecioRegularSchema.safeParse(datos);
+/**
+ * Abre un periodo de precio: cierra el vigente y arranca el nuevo.
+ *
+ * Va por RPC y no por un `insert` porque son DOS escrituras que solo tienen
+ * sentido juntas, y PostgREST no da transacción multi-sentencia: un fallo entre
+ * el cierre y la apertura dejaría al SKU sin ningún precio vigente — y eso no da
+ * error en ninguna pantalla, da `sin_precio_vigente`, o sea que el SKU sale del
+ * denominador de Perfect Store en silencio.
+ */
+export async function abrirPeriodoPrecio(
+  datos: unknown,
+): Promise<ResultadoAccion> {
+  const parsed = abrirPeriodoPrecioSchema.safeParse(datos);
   if (!parsed.success) return invalidos(parsed.error.issues);
 
   const supabase = await createServerSupabaseClient();
-  return resultado(
-    "precio_regular",
-    PRECIOS,
-    "alta",
-    await supabase.from("precio_regular").insert(parsed.data).select("id"),
-  );
+  const { tipo_tienda } = parsed.data;
+  const { error } = await supabase.rpc("abrir_periodo_precio", {
+    p_sku: parsed.data.sku_id,
+    p_cadena: parsed.data.cadena_id,
+    p_precio: parsed.data.precio,
+    p_vigente_desde: parsed.data.vigente_desde,
+    // Se OMITE cuando es nulo en vez de mandarlo: el default de la función ya
+    // es null, y "toda la cadena" es el caso mayoritario.
+    ...(tipo_tienda ? { p_tipo_tienda: tipo_tienda } : {}),
+  });
+
+  if (error) {
+    console.error(
+      "[comercial] apertura de periodo de precio",
+      error.message.slice(0, 200),
+    );
+    // La RPC levanta su propia excepción con mensaje para el operador cuando la
+    // fecha no es posterior a la vigente; ese texto es mejor que el genérico.
+    if (error.code === "23514" && error.message.includes("empezar después"))
+      return { ok: false, error: error.message.slice(0, 200) };
+    return { ok: false, error: mensajeDe(error.code, "precio_regular") };
+  }
+
+  revalidatePath(PRECIOS);
+  return { ok: true };
 }
 
 export async function editarPrecio(

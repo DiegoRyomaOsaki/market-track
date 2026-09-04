@@ -29,6 +29,10 @@ const fecha = z.iso.date("Escribe una fecha");
  * `nulls not distinct`: dos precios sin tipo de tienda colisionan en vez de
  * duplicarse. `vigente_desde` forma parte de la clave, así que cambiar el precio
  * a partir de una fecha nueva es un alta, no una edición.
+ *
+ * Esto valida la CORRECCIÓN de un periodo que aún no ha empezado. Abrir uno
+ * nuevo va por `abrirPeriodoPrecioSchema`: cerrar el anterior y abrir el nuevo
+ * es una sola operación y la resuelve la base.
  */
 export const altaPrecioRegularSchema = z.object({
   tenant_id: z.guid("Elige un cliente"),
@@ -44,6 +48,26 @@ export const altaPrecioRegularSchema = z.object({
 });
 
 export type AltaPrecioRegular = z.infer<typeof altaPrecioRegularSchema>;
+
+/**
+ * Abrir un periodo de precio: cierra el vigente y arranca el nuevo.
+ *
+ * No lleva `tenant_id`: lo deriva la base de la fila del SKU. Un formulario no
+ * elige en qué cliente escribe — es la misma guarda que ya tiene el importador.
+ */
+export const abrirPeriodoPrecioSchema = z.object({
+  sku_id: z.guid("Elige un SKU"),
+  cadena_id: z.guid("Elige una cadena"),
+  tipo_tienda: z
+    .enum(Constants.public.Enums.tipo_tienda)
+    .nullable()
+    .optional()
+    .transform((v) => v ?? null),
+  precio: importe("Escribe el precio"),
+  vigente_desde: fecha,
+});
+
+export type AbrirPeriodoPrecio = z.infer<typeof abrirPeriodoPrecioSchema>;
 
 /**
  * Promoción con vigencia.

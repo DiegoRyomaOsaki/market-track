@@ -222,7 +222,9 @@ describe("aplicar_importacion — reimportar no duplica", () => {
       await expect(
         aplicar(c, id, {
           ...LOTE_COMPLETO,
-          precio_regular: [{ ...LOTE_COMPLETO.precio_regular[0], precio: 11.5 }],
+          precio_regular: [
+            { ...LOTE_COMPLETO.precio_regular[0], precio: 11.5 },
+          ],
         }),
       ).rejects.toThrow(/ya rigió con otro valor/);
     });
