@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 
 import { Client } from "pg";
 
-import { PG, POWERSYNC_URL } from "./ayudas";
+import { PG, POWERSYNC_URL, SUPABASE_URL } from "./ayudas";
 
 // Los prerrequisitos del harness, comprobados ANTES de que los tests mientan.
 //
@@ -246,6 +246,53 @@ async function asegurarReplicacion(): Promise<void> {
 }
 
 /**
+ * ¿El hook que entrega el OTP arranca?
+ *
+ * Todos los tests de aislamiento entran con una sesión aal2, y esa sesión no
+ * existe sin este hook. Cuando no arranca, GoTrue devuelve un 500 sin cuerpo, el
+ * cliente de Supabase lo traduce a un error vacío y el harness reporta diecisiete
+ * fallos de aislamiento que no lo son. Medido: eso fue exactamente lo que pasó
+ * durante un mes.
+ *
+ * La sonda es una petición SIN firmar, y lo que se espera es que la RECHACE:
+ *
+ * - **401** — la función arrancó y verifica firmas. Es el verde.
+ * - **500** — no llegó a arrancar. Es configuración, no un fallo de las reglas.
+ *
+ * No se manda ninguna firma válida a propósito: comprobar que la puerta está
+ * cerrada no puede exigir la llave.
+ */
+async function comprobarHookOtp(): Promise<void> {
+  const url = `${SUPABASE_URL}/functions/v1/enviar-otp`;
+  let respuesta: Response;
+  try {
+    respuesta = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (error) {
+    throw new Error(
+      `la API de Supabase no contesta en ${SUPABASE_URL}: falta \`supabase start\`, o alguno de sus contenedores murió y \`supabase start\` no lo relevanta (compruébalo con \`docker ps -a --filter name=supabase_\`; se arregla con \`supabase stop\` y otro \`start\`).`,
+      { cause: error },
+    );
+  }
+
+  if (respuesta.status === 401) return;
+
+  if (respuesta.status === 500) {
+    throw new Error(
+      "el hook del OTP (`enviar-otp`) no arranca, así que ninguna sesión de segundo factor es posible y los tests de aislamiento NO están probando nada. Casi siempre es `SEND_SMS_HOOK_SECRET`: tiene formato `v1,whsec_<base64>` y el MISMO valor tiene que estar en `.env` (lo lee GoTrue) y en `supabase/functions/.env` (lo lee la función). Ver SETUP.md. El motivo exacto está en `docker logs supabase_edge_runtime_market-track`.",
+    );
+  }
+
+  throw new Error(
+    `el hook del OTP respondió ${respuesta.status} a una petición sin firmar, y se esperaba 401. Mira \`docker logs supabase_edge_runtime_market-track\`.`,
+  );
+}
+
+/**
  * Deja el entorno listo y comprueba que lo está. Se llama desde el `beforeAll`
  * del harness: un prerrequisito que falta tiene que decirlo él, no aparecer
  * disfrazado de fallo de aislamiento veinticinco segundos después.
@@ -258,6 +305,9 @@ export async function prepararHarness(): Promise<void> {
   }
   await prepararPostgres();
   await comprobarRol();
+  // Antes que PowerSync: sin sesión aal2 no hay nada que replicar, y esperar 90 s
+  // a un slot para luego morir en el login es hacer perder el tiempo dos veces.
+  await comprobarHookOtp();
   await comprobarServicio();
   await asegurarReplicacion();
 }

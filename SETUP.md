@@ -156,11 +156,10 @@ secretos-funciones.mjs`) y se pone rojo nombrando el que falte. `RESEND_API_KEY`
 y `RESEND_FROM` no entran en esa lista: sin ellas el envío degrada a *dry-run*,
 no revienta.
 
-> `SEND_SMS_HOOK_SECRET` tiene dos trampas. **El formato lo valida el CLI**
-> (`v1,whsec_<base64>`), no solo la función: uno mal formado hace que `supabase
-> start` muera al leer `config.toml`, en local y en CI. Y su valor tiene que ser
-> **el mismo** que el proyecto tenga en Authentication → Hooks; cargarlo sin
-> activar el hook allí deja el 2FA igual de roto.
+> `SEND_SMS_HOOK_SECRET` tiene dos trampas. Su valor tiene que ser **el mismo**
+> que el proyecto tenga en Authentication → Hooks; cargarlo sin activar el hook
+> allí deja el 2FA igual de roto. Y **en local vive en dos ficheros** — ver
+> [El secreto del OTP vive en dos ficheros](#el-secreto-del-otp-vive-en-dos-ficheros).
 
 > `SUPABASE_SERVICE_ROLE_KEY` **no se carga a mano**: Supabase ya lo inyecta en
 > las Edge Functions. Ponerlo otra vez sería una copia más que mantener.
@@ -327,6 +326,64 @@ revertiría. Antes de desatascar un despliegue así, comparar qué toca cada una
 > sobre disciplina, no sobre el servidor.
 
 ---
+
+## Correr el arnés de sincronización en local
+
+`test:sync` (`packages/sync/test/`) es la **segunda superficie de seguridad** del
+móvil: PowerSync replica con un rol `BYPASSRLS`, así que lo que baja al teléfono
+no lo deciden las políticas de Postgres sino las reglas de sincronización. Un
+cambio en `streams.yaml` que solo pase los tests de RLS da un **verde falso**.
+
+```bash
+supabase start                                   # la pila entera, no solo la base
+pnpm --filter @market-track/sync sync:up         # el servicio de PowerSync
+ANON_KEY=$(supabase status -o env | grep ^ANON_KEY | cut -d= -f2- | tr -d '"') \
+  pnpm turbo run test:sync
+```
+
+El preflight comprueba los prerrequisitos antes de dejar que los tests mientan:
+rol de replicación, publicación, servicio vivo, slot de replicación, reglas
+recargadas y el hook del OTP. Cada uno dice qué hacer si falta.
+
+### El secreto del OTP vive en dos ficheros
+
+`SEND_SMS_HOOK_SECRET` (formato `v1,whsec_<base64>`) lo leen **dos componentes
+distintos, de dos ficheros distintos**:
+
+| Quién | De dónde | Para qué |
+|---|---|---|
+| **GoTrue** (el servidor de Auth) | `.env` de la raíz, sustituido en `config.toml` | firmar la llamada al hook |
+| **La Edge Function `enviar-otp`** | `supabase/functions/.env` | verificar esa firma |
+
+**Tienen que ser el mismo valor.** Si difieren, la firma no cuadra y ningún
+usuario completa el segundo factor. Ninguno de los dos ficheros se versiona, así
+que el `bootstrap` no puede rellenarlos por ti.
+
+Para generarlo:
+
+```bash
+python -c "import os,base64;print('v1,whsec_'+base64.b64encode(os.urandom(24)).decode())"
+```
+
+y pegar **el mismo resultado** en las dos.
+
+> El CLI valida el formato del que lee del `.env` de la raíz, pero **no mira
+> `supabase/functions/.env`**. Un valor malformado ahí no impide que `supabase
+> start` salga con éxito: la función revienta al cargar el módulo, GoTrue recibe
+> un 500 sin cuerpo y lo que se ve es que **todos** los tests de aislamiento
+> fallan a la vez. El preflight del arnés ahora lo detecta y lo dice; la nota
+> queda por si alguien se lo encuentra por otro camino.
+
+### Si `supabase start` sale con éxito pero nada responde
+
+`supabase start` puede salir con código 0 dejando contenedores en `Exited` — por
+ejemplo si el demonio de Docker los mató por memoria y no los relevanta. El
+síntoma es `ECONNREFUSED 127.0.0.1:54321` con la base funcionando.
+
+```bash
+docker ps -a --filter name=supabase_   # los que estén Exited son el problema
+supabase stop && supabase start        # los relevanta de verdad
+```
 
 ## Comprobar que todo quedó bien
 

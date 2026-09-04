@@ -22,21 +22,56 @@ import { clienteServicio, json } from "../_shared/supabase.ts";
 
 const RESEND_TIMEOUT_MS = 10_000;
 
-// Fail-closed: sin el secreto del hook no se puede verificar quién llama.
-const HOOK_SECRET = Deno.env.get("SEND_SMS_HOOK_SECRET");
-if (!HOOK_SECRET) {
-  throw new Error(
-    "SEND_SMS_HOOK_SECRET no configurado: la función no arranca (fail-closed)",
-  );
-}
-
 // La librería espera el secreto en base64, sin el prefijo que usa Supabase.
 const PREFIJO = "v1,whsec_";
-const webhook = new Webhook(
-  HOOK_SECRET.startsWith(PREFIJO)
-    ? HOOK_SECRET.slice(PREFIJO.length)
-    : HOOK_SECRET,
-);
+
+/**
+ * El secreto del hook, comprobado ANTES de construir el verificador.
+ *
+ * Fail-closed sigue igual: sin secreto la función no arranca. Lo que se añade es
+ * comprobar la FORMA, no solo la presencia. Un valor malformado —no ausente— se
+ * le pasaba tal cual a la librería y reventaba dentro de su decodificador base64
+ * al cargar el módulo: el worker muere, GoTrue recibe un 500 sin cuerpo, y quien
+ * lo depura ve caerse todo lo que dependa del 2FA sin una sola pista de que el
+ * problema es una variable de entorno.
+ *
+ * Medido: dejó `test:sync` inservible en local durante un mes, con forma de
+ * diecisiete tests de aislamiento rotos.
+ *
+ * El mensaje no incluye el valor —es un secreto— pero sí dónde mirar, porque el
+ * mismo secreto vive en DOS ficheros y esa es la trampa que lo rompió.
+ */
+function secretoDelHook(): string {
+  const bruto = Deno.env.get("SEND_SMS_HOOK_SECRET");
+  if (!bruto) {
+    throw new Error(
+      "SEND_SMS_HOOK_SECRET no configurado: la función no arranca (fail-closed)",
+    );
+  }
+
+  const base64 = bruto.startsWith(PREFIJO)
+    ? bruto.slice(PREFIJO.length)
+    : bruto;
+
+  // `atob` NO sirve de árbitro aquí: sigue la especificación web y DESCARTA los
+  // espacios en blanco antes de decodificar, así que da por bueno lo que el
+  // decodificador de la librería —más estricto— rechaza. Medido con el secreto
+  // que provocó este bug: llevaba un espacio en medio, `atob` lo decodificaba
+  // sin quejarse y `new Webhook()` moría igual. Se comprueba el alfabeto.
+  const invalido =
+    base64.length === 0 ||
+    base64.length % 4 !== 0 ||
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(base64);
+
+  if (invalido) {
+    throw new Error(
+      "SEND_SMS_HOOK_SECRET no es base64 válido. El formato es `v1,whsec_<base64>` y el MISMO valor tiene que estar en `.env` (lo lee GoTrue) y en `supabase/functions/.env` (lo lee esta función). Ver SETUP.md.",
+    );
+  }
+  return base64;
+}
+
+const webhook = new Webhook(secretoDelHook());
 
 // El modo sin envío real es una decisión EXPLÍCITA de desarrollo, no "no encontré
 // la API key": esa es justo la condición de una producción mal aprovisionada, y
