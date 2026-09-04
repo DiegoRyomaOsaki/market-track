@@ -68,6 +68,20 @@ jest.mock("./powersync/db", () => ({
       mockEstado.sql.push({ sql: s, args });
       return Promise.resolve();
     },
+    // El doble refleja lo que importa de una transacción: lo que corre dentro
+    // queda agrupado. `tx.execute` empuja al MISMO registro que `db.execute`,
+    // así que el orden de las sentencias se puede afirmar.
+    writeTransaction: (
+      fn: (tx: {
+        execute: (s: string, args: unknown[]) => Promise<void>;
+      }) => Promise<void>,
+    ) =>
+      fn({
+        execute: (s: string, args: unknown[]) => {
+          mockEstado.sql.push({ sql: s, args });
+          return Promise.resolve();
+        },
+      }),
     getOptional: (s: string, args: unknown[]) => {
       if (!s.includes("FROM visita")) return Promise.resolve(null);
       const id = mockEstado.visitas[String(args[0])];
@@ -289,5 +303,56 @@ describe("reconciliarFotos", () => {
 
     expect(await reconciliarFotos(YO)).toBe(0);
     expect(await colaFotos.contarPendientes()).toBe(0);
+  });
+});
+
+describe("encolarFoto — el enlace viaja con la foto", () => {
+  // Sin esto, el PATCH que referencia la foto puede subir ANTES que el PUT de la
+  // foto. El servidor devuelve 23503, el conector lo clasifica como permanente y
+  // DESCARTA la operación: la resolución pierde su evidencia en silencio.
+  it("el enlace se escribe en la misma transacción que la fila `foto`", async () => {
+    mockEstado.visitas[VISITA] = YO;
+    const enlaces: string[] = [];
+
+    await encolarFoto(
+      {
+        foto: camara,
+        tenantId: TENANT,
+        visitaId: VISITA,
+        levantamientoId: null,
+        tipo: "resolucion_incidencia",
+      },
+      async (tx, fotoId) => {
+        enlaces.push(fotoId);
+        await tx.execute(`UPDATE incidencia SET foto_resolucion_id = ?`, [
+          fotoId,
+        ]);
+      },
+    );
+
+    const sentencias = mockEstado.sql.map((x) => x.sql);
+    const iFoto = sentencias.findIndex((s) => s.includes("INSERT INTO foto"));
+    const iEnlace = sentencias.findIndex((s) =>
+      s.includes("UPDATE incidencia"),
+    );
+    expect(iFoto).toBeGreaterThanOrEqual(0);
+    // El enlace va DESPUÉS del insert y dentro de la misma transacción: ese
+    // orden es el que el conector reproduce al subir.
+    expect(iEnlace).toBe(iFoto + 1);
+    expect(enlaces).toHaveLength(1);
+  });
+
+  it("sin callback, encolar sigue funcionando igual que antes", async () => {
+    mockEstado.visitas[VISITA] = YO;
+    await encolarFoto({
+      foto: camara,
+      tenantId: TENANT,
+      visitaId: VISITA,
+      levantamientoId: null,
+      tipo: "resolucion_incidencia",
+    });
+    expect(mockEstado.sql.some((x) => x.sql.includes("INSERT INTO foto"))).toBe(
+      true,
+    );
   });
 });

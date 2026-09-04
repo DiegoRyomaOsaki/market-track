@@ -1,4 +1,5 @@
 import type { TipoFoto } from "@market-track/shared";
+import type { Transaction } from "@powersync/react-native";
 import * as Crypto from "expo-crypto";
 import * as FileSystem from "expo-file-system/legacy";
 
@@ -148,8 +149,19 @@ export type DatosFoto = {
  *
  * El orden importa: si el proceso muere entre el 1 y el 3, `reconciliarFotos`
  * reencuentra el archivo porque su ruta se deduce del id de la fila.
+ *
+ * `enlazar` escribe, EN LA MISMA TRANSACCIÓN que la fila `foto`, lo que la
+ * referencia. No es una comodidad: PowerSync agrupa las operaciones por
+ * transacción de SQLite y el conector las sube en ese orden, así que el PUT de
+ * la foto llega al servidor antes que el PATCH que la enlaza. Con dos
+ * transacciones separadas el orden no está garantizado, y un enlace que llegue
+ * primero muere con un `23503` — que el conector clasifica como permanente y
+ * DESCARTA, perdiendo el trabajo del mercaderista en silencio.
  */
-export async function encolarFoto(d: DatosFoto): Promise<string> {
+export async function encolarFoto(
+  d: DatosFoto,
+  enlazar?: (tx: Transaction, fotoId: string) => Promise<void>,
+): Promise<string> {
   // El dueño sale de la VISITA, no de un parámetro ni del usuario cacheado: es el
   // mismo criterio que usa la política de INSERT de `foto` y el firmado de la
   // Edge Function, así que no puede desviarse de ellos.
@@ -170,21 +182,26 @@ export async function encolarFoto(d: DatosFoto): Promise<string> {
     await FileSystem.moveAsync({ from: d.foto.ruta, to: destino });
   }
 
-  await db.execute(
-    `INSERT INTO foto
-       (id, tenant_id, visita_id, levantamiento_id, tipo, hash, capturada_at, geo, subida_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
-    [
-      id,
-      d.tenantId,
-      d.visitaId,
-      d.levantamientoId,
-      d.tipo,
-      d.foto.hash,
-      d.foto.capturada_at,
-      d.foto.geo ? puntoAEwkt(d.foto.geo) : null,
-    ],
-  );
+  // El I/O de disco queda FUERA: meterlo dentro retendría el lock de escritura
+  // de SQLite durante toda la operación de archivo.
+  await db.writeTransaction(async (tx) => {
+    await tx.execute(
+      `INSERT INTO foto
+         (id, tenant_id, visita_id, levantamiento_id, tipo, hash, capturada_at, geo, subida_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+      [
+        id,
+        d.tenantId,
+        d.visitaId,
+        d.levantamientoId,
+        d.tipo,
+        d.foto.hash,
+        d.foto.capturada_at,
+        d.foto.geo ? puntoAEwkt(d.foto.geo) : null,
+      ],
+    );
+    if (enlazar) await enlazar(tx, id);
+  });
 
   await colaFotos.encolar({
     id,

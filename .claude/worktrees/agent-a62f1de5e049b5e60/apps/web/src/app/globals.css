@@ -1,0 +1,141 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Sistema de diseño del panel (2ª iteración). Paleta zinc + acento indigo, con los
+   tokens SEMÁNTICOS del dominio y sus fondos suaves. Valores del mockup de diseño. */
+:root {
+  /* Los controles NATIVOS del navegador (el reloj de `input[type=time]`, el
+     desplegable de un `select`, la barra de scroll) no leen nuestros tokens: los
+     pinta el propio navegador según esto. Sin declararlo, en modo oscuro salen
+     con su cromo claro sobre la página oscura. */
+  color-scheme: light;
+
+  --radius: 0.55rem;
+
+  --background: #ffffff;
+  --foreground: #18181b;
+  --card: #ffffff;
+  --card-foreground: #18181b;
+  --popover: #18181b; /* tooltips oscuros del diseño (ayuda contextual) */
+  --popover-foreground: #ffffff;
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #18181b;
+  --muted: #f4f4f5;
+  --muted-foreground: #71717a;
+  --accent: #eef2ff;
+  --accent-foreground: #4338ca;
+  --destructive: #dc2626;
+  --border: #e4e4e7;
+  --input: #e4e4e7;
+  --ring: #4f46e5;
+
+  /* Lienzo de la app (fondo tras las superficies blancas). */
+  --canvas: #f4f4f5;
+
+  /* Dominio: completado (verde) · en-curso (ámbar) · alerta (rojo), con su fondo suave. */
+  --completado: #16a34a;
+  --completado-foreground: #ffffff;
+  --completado-suave: #dcfce7;
+  --completado-texto: #15803d;
+  --en-curso: #d97706;
+  --en-curso-foreground: #ffffff;
+  --en-curso-suave: #fef3c7;
+  --en-curso-texto: #b45309;
+  --alerta: #dc2626;
+  --alerta-foreground: #ffffff;
+  --alerta-suave: #fee2e2;
+  --alerta-texto: #b91c1c;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --background: #18181b;
+  --foreground: #fafafa;
+  --card: #1f1f23;
+  --card-foreground: #fafafa;
+  --popover: #09090b;
+  --popover-foreground: #fafafa;
+  --primary: #818cf8;
+  --primary-foreground: #18181b;
+  --secondary: #27272a;
+  --secondary-foreground: #fafafa;
+  --muted: #27272a;
+  --muted-foreground: #a1a1aa;
+  --accent: #312e81;
+  --accent-foreground: #e0e7ff;
+  --destructive: #f87171;
+  --border: #27272a;
+  --input: #3f3f46;
+  --ring: #818cf8;
+  --canvas: #09090b;
+
+  --completado: #22c55e;
+  --completado-foreground: #052e16;
+  --completado-suave: #14311f;
+  --completado-texto: #4ade80;
+  --en-curso: #f59e0b;
+  --en-curso-foreground: #431407;
+  --en-curso-suave: #3a2606;
+  --en-curso-texto: #fbbf24;
+  --alerta: #ef4444;
+  --alerta-foreground: #450a0a;
+  --alerta-suave: #3a1212;
+  --alerta-texto: #fca5a5;
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+
+  --font-sans: var(--font-public-sans), system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), "IBM Plex Mono", monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-canvas: var(--canvas);
+
+  --color-completado: var(--completado);
+  --color-completado-foreground: var(--completado-foreground);
+  --color-completado-suave: var(--completado-suave);
+  --color-completado-texto: var(--completado-texto);
+  --color-en-curso: var(--en-curso);
+  --color-en-curso-foreground: var(--en-curso-foreground);
+  --color-en-curso-suave: var(--en-curso-suave);
+  --color-en-curso-texto: var(--en-curso-texto);
+  --color-alerta: var(--alerta);
+  --color-alerta-foreground: var(--alerta-foreground);
+  --color-alerta-suave: var(--alerta-suave);
+  --color-alerta-texto: var(--alerta-texto);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+  }
+}

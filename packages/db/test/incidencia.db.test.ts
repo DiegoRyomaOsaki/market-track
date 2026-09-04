@@ -545,6 +545,108 @@ describe("motor de incidencias — el hallazgo que deja de existir", () => {
   });
 });
 
+describe("la foto de resolución es de SU visita", () => {
+  // La FK de `foto_resolucion_id` solo valida `(id, tenant_id)`, y la política
+  // comprueba que el mercaderista es dueño de la VISITA de la incidencia — pero
+  // nadie comprobaba que la foto fuese de esa visita. Con un PATCH a PostgREST
+  // se podía enlazar como prueba de la resolución cualquier foto del cliente.
+
+  /** Una foto de una visita concreta, escrita como la escribe el móvil. */
+  async function fotoDe(
+    c: Client,
+    visita: string,
+    sufijo: string,
+  ): Promise<string> {
+    const id = `e0000030-0000-0000-0000-0000000000${sufijo}`;
+    await c.query(
+      `insert into public.foto (id, visita_id, tipo, capturada_at)
+       values ($1,$2,'resolucion_incidencia', now())`,
+      [id, visita],
+    );
+    return id;
+  }
+
+  async function resolverCon(c: Client, visita: string, foto: string) {
+    return c.query(
+      `update public.incidencia
+          set estado = 'resuelta', accion_tomada = 'Repuse el producto',
+              foto_resolucion_id = $2, atendida_at = now()
+        where visita_id = $1`,
+      [visita, foto],
+    );
+  }
+
+  it("la foto de SU visita se enlaza", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await levantarEnPasos(c, "e1", {
+        stock_sistema: 10,
+        stock_piso: 0,
+      });
+      const foto = await fotoDe(c, cadena.visita, "e1");
+
+      const r = await resolverCon(c, cadena.visita, foto);
+      expect(r.rowCount).toBe(1);
+    });
+  });
+
+  it("la foto de OTRA visita del mismo cliente NO se enlaza", async () => {
+    // La amenaza concreta: mismo tenant, así que la FK la deja pasar.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await levantarEnPasos(c, "e2", {
+        stock_sistema: 10,
+        stock_piso: 0,
+      });
+      const otra = await abrirVisita(c, "e3");
+      const fotoAjena = await fotoDe(c, otra.visita, "e3");
+
+      await expect(
+        resolverCon(c, cadena.visita, fotoAjena),
+      ).rejects.toMatchObject({ code: "23514" });
+    });
+  });
+
+  it("dejar la foto en null no revalida nada", async () => {
+    // Atender sin foto sigue siendo posible: la obligatoriedad es de la UI, no
+    // de la base — un CHECK aquí haría que cualquier PATCH parcial muriese con
+    // 23514, y el conector descarta ese error en silencio.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await levantarEnPasos(c, "e4", {
+        stock_sistema: 10,
+        stock_piso: 0,
+      });
+      const r = await c.query(
+        `update public.incidencia
+            set estado = 'no_resuelta', motivo = 'El encargado no autorizó',
+                atendida_at = now()
+          where visita_id = $1`,
+        [cadena.visita],
+      );
+      expect(r.rowCount).toBe(1);
+    });
+  });
+
+  it("reenviar el mismo enlace sin cambiarlo no vuelve a validar", async () => {
+    // La guarda de `tg_op`: el conector reenvía la operación completa al
+    // reintentar, y sin ella cada PATCH releería `foto` sin motivo.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await levantarEnPasos(c, "e5", {
+        stock_sistema: 10,
+        stock_piso: 0,
+      });
+      const foto = await fotoDe(c, cadena.visita, "e5");
+      await resolverCon(c, cadena.visita, foto);
+
+      const r = await c.query(
+        `update public.incidencia
+            set foto_resolucion_id = $2, accion_tomada = 'Repuse el producto (2)'
+          where visita_id = $1`,
+        [cadena.visita, foto],
+      );
+      expect(r.rowCount).toBe(1);
+    });
+  });
+});
+
 describe("incidencia — quién la lee", () => {
   it("el mercaderista lee las de SUS visitas", async () => {
     await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {

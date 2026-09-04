@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { resolucionIncidenciaSchema } from "./incidencia";
+import {
+  ACCIONES_TOMADAS,
+  detalleIncidenciaSchema,
+  resolucionIncidenciaSchema,
+} from "./incidencia";
 
 const ATENDIDA_AT = "2026-09-02T14:30:00-05:00";
 
@@ -104,5 +108,58 @@ describe("resolucionIncidenciaSchema", () => {
         atendida_at: ATENDIDA_AT,
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("detalleIncidenciaSchema", () => {
+  it("lee los números de un quiebre", () => {
+    const d = detalleIncidenciaSchema.parse({
+      stock_sistema: 10,
+      stock_piso: 0,
+    });
+    expect(d.stock_sistema).toBe(10);
+  });
+
+  // El motor puede añadir una clave —ya lo hizo con `delta`— y un teléfono con
+  // una versión vieja de la app tiene que seguir pintando la lista.
+  it("tolera una clave que esta versión de la app no conoce", () => {
+    const d = detalleIncidenciaSchema.parse({
+      stock_piso: 0,
+      severidad_futura: "critica",
+    });
+    expect(d.stock_piso).toBe(0);
+  });
+
+  it("tolera que falten todas: un detalle vacío es válido", () => {
+    expect(detalleIncidenciaSchema.parse({})).toEqual({});
+  });
+
+  // `.catch({})` es la diferencia entre una lista que se pinta sin ese dato y
+  // una pantalla en blanco.
+  it("un detalle malformado cae a vacío en vez de romper la pantalla", () => {
+    expect(detalleIncidenciaSchema.parse("no soy un objeto")).toEqual({});
+    expect(detalleIncidenciaSchema.parse(null)).toEqual({});
+  });
+});
+
+describe("ACCIONES_TOMADAS", () => {
+  it("todas caben en lo que la base acepta", () => {
+    // El CHECK de la columna corta en 500. Una frase enlatada que no quepa
+    // volvería como 23514, y el conector descarta ese error en silencio.
+    for (const accion of ACCIONES_TOMADAS) {
+      expect(accion.length).toBeLessThanOrEqual(500);
+      expect(accion.trim()).not.toBe("");
+    }
+  });
+
+  it("cada una vale como acción de una resolución", () => {
+    for (const accion of ACCIONES_TOMADAS) {
+      const r = resolucionIncidenciaSchema.safeParse({
+        estado: "resuelta",
+        accion_tomada: accion,
+        atendida_at: "2026-09-04T14:30:00-05:00",
+      });
+      expect(r.success).toBe(true);
+    }
   });
 });

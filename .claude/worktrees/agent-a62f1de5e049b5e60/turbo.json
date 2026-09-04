@@ -1,0 +1,76 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "globalDependencies": ["tsconfig.base.json", "eslint.config.mjs"],
+  "globalEnv": ["NODE_ENV"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"],
+      // Toda variable que el build incrusta va aquí: es lo que invalida la caché
+      // cuando cambia. Una que falte deja que turbo sirva un bundle construido
+      // con el valor viejo.
+      "env": [
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_TILES_URL",
+        "EXPO_PUBLIC_SUPABASE_URL",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY",
+        "SENTRY_DSN"
+      ]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {},
+    "typecheck": {
+      "dependsOn": ["^build"]
+    },
+    "test": {
+      "dependsOn": ["^build"]
+    },
+    "test:db": {
+      "dependsOn": ["^build"],
+      // Habla con el Postgres local: no se cachea, porque el resultado depende de
+      // un estado que turbo no ve (el esquema y el seed de la base).
+      "cache": false
+    },
+    "test:sync": {
+      "dependsOn": ["^build"],
+      // El harness de aislamiento del móvil: habla con el servicio PowerSync
+      // autohospedado y con Supabase. No se cachea (mismo motivo que test:db) y
+      // exige `sync:up` + `supabase start` + `functions serve`.
+      "cache": false
+    },
+    "//#lint": {
+      "inputs": [
+        "eslint.config.mjs",
+        "tsconfig.json",
+        "tsconfig.base.json",
+        "package.json",
+        "scripts/**",
+        "*.ts",
+        "*.mts",
+        "*.cts",
+        "*.js",
+        "*.mjs",
+        "*.cjs"
+      ]
+    },
+    "//#typecheck": {
+      "inputs": [
+        "eslint.config.mjs",
+        "tsconfig.json",
+        "tsconfig.base.json",
+        "package.json",
+        "scripts/**",
+        "*.ts",
+        "*.mts",
+        "*.cts",
+        "*.js",
+        "*.mjs",
+        "*.cjs"
+      ]
+    }
+  }
+}
