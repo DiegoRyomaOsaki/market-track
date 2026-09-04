@@ -150,8 +150,11 @@ function fecha(iso: string): string {
  * una contradicción. La ventana viene resuelta a la fecha de la VISITA, no a la
  * de hoy: es la que el motor usó para decidir.
  *
- * Devuelve null cuando la alerta no es de precio o no había precio vigente ese
- * día — no se inventa una ventana que no existió.
+ * Devuelve null cuando no hay ventana que enseñar. Quien decide que una alerta
+ * no habla de precio es `detalle_alerta`, que solo resuelve la ventana para los
+ * tipos de precio: el payload de un quiebre también trae `sku_id`, y sin ese
+ * filtro esto pintaría "ese precio regía desde…" en una pantalla sin ningún
+ * precio.
  */
 export function filaDeVigencia(
   desde: string | null,

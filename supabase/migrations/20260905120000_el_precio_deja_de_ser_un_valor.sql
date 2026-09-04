@@ -139,9 +139,28 @@ alter table public.precio_regular
 -- ---------------------------------------------------------------------------
 -- 5. El resolvedor único
 --
--- `language sql` + `stable` a propósito: así Postgres lo INLINEA en los
--- `cross join lateral` del motor de puntaje. Con `plpgsql` no se inlinea y cada
--- fila de `levantamiento_sku` pagaría una llamada.
+-- ESTA FUNCIÓN NO SE INLINEA, y el coste es deliberado.
+--
+-- Medido con EXPLAIN: el planificador la deja como `Function Scan` opaco, así
+-- que el motor de puntaje paga una llamada por fila de `levantamiento_sku`.
+-- Sobre 100.000 filas de precio y 20.000 de levantamiento son ~196 ms frente a
+-- los ~117 ms que costaba la subconsulta suelta que vivía dentro de
+-- `evaluar_precio_sku`.
+--
+-- La causa NO es el tipo de retorno ni la forma de la llamada: es
+-- `set search_path = ''`. Comprobado quitándoselo a una copia — sin él la misma
+-- función se inlinea (`Limit → Sort → Index Scan` en vez de `Function Scan`);
+-- con él, nunca. Postgres no puede inlinear un cuerpo que exige aplicar una
+-- configuración durante su ejecución.
+--
+-- Y el `search_path` vacío no se negocia: es la verja contra el secuestro de
+-- resolución de nombres, y la lleva cada función del proyecto. Se paga la
+-- llamada por fila a cambio de que la regla de "qué precio regía" tenga UN dueño,
+-- que es justamente lo que pide el ticket.
+--
+-- `returns setof` se conserva porque es la forma honesta: sin filas devuelve
+-- cero filas, no una fila de nulos, y eso hace que el `left join lateral` de
+-- `detalle_alerta` signifique lo que aparenta.
 --
 -- Devuelve la fila entera y no el precio: el portal necesita también las fechas
 -- de vigencia, y dos funciones para eso serían dos dueños de la misma regla.
@@ -157,7 +176,7 @@ create function app.precio_regular_vigente(
   p_cadena uuid,
   p_fecha  date default app.hoy_lima()
 )
-returns public.precio_regular
+returns setof public.precio_regular
 language sql
 stable
 security invoker
@@ -220,8 +239,12 @@ begin
 
   -- El desempate y la ventana de vigencia viven en el resolvedor, no aquí: es el
   -- único dueño de "qué precio regía en la fecha X".
-  select (app.precio_regular_vigente(p_tenant, p_sku, p_cadena, p_fecha)).precio
-    into precio_regular;
+  --
+  -- Se llama desde el `FROM` y no como `(f(...)).precio`: es la forma que el
+  -- inliner mira. Sin filas, el `into` deja `precio_regular` en null y el
+  -- veredicto sigue siendo `sin_precio_vigente`.
+  select pr.precio into precio_regular
+  from app.precio_regular_vigente(p_tenant, p_sku, p_cadena, p_fecha) pr;
 
   if precio_regular is null then return; end if;
 
@@ -616,6 +639,38 @@ begin
       old.vigente_desde using errcode = 'check_violation';
   end if;
 
+  -- `vigente_hasta` queda fuera de la tupla de arriba porque CERRAR es la
+  -- operación legítima. Pero fuera de la tupla no puede significar sin cota: son
+  -- las dos formas que quedaban de reescribir el pasado por un PATCH directo.
+
+  -- Un periodo ya cerrado cuyo fin pasó está congelado. Reabrirlo —poner
+  -- `vigente_hasta` a null— o moverlo cambiaría lo que ese tramo dice hoy, y el
+  -- portal recalcula la ventana de una alerta vieja cada vez que se abre.
+  if old.vigente_hasta is not null
+     and old.vigente_hasta <= app.hoy_lima()
+     and new.vigente_hasta is distinct from old.vigente_hasta then
+    raise exception 'ese periodo se cerró el % y ya no se reabre ni se mueve: abre uno nuevo',
+      old.vigente_hasta using errcode = 'check_violation';
+  end if;
+
+  -- Y uno abierto no se corta hacia atrás dejando un hueco: ese tramo se
+  -- quedaría SIN precio vigente, y eso no da error en ninguna pantalla — saca al
+  -- SKU del denominador de Perfect Store en silencio, con forma de dato que
+  -- falta. Se admite cortar de hoy en adelante, o justo antes de que arranque el
+  -- periodo siguiente, que es lo que hace `cerrar_periodos_precio` al encadenar.
+  if new.vigente_hasta is not null
+     and new.vigente_hasta < app.hoy_lima()
+     and not exists (
+       select 1 from public.precio_regular pr
+       where pr.tenant_id = new.tenant_id and pr.sku_id = new.sku_id
+         and pr.cadena_id = new.cadena_id
+         and pr.tipo_tienda is not distinct from new.tipo_tienda
+         and pr.vigente_desde = new.vigente_hasta + 1
+     ) then
+    raise exception 'cerrar ese precio el % dejaría ese tramo sin precio vigente: ciérralo de hoy en adelante, o justo antes de que arranque el siguiente',
+      new.vigente_hasta using errcode = 'check_violation';
+  end if;
+
   return new;
 end;
 $$;
@@ -655,7 +710,14 @@ begin
       old.fecha_inicio using errcode = 'check_violation';
   end if;
 
-  if new.fecha_fin < app.hoy_lima() then
+  if old.fecha_fin < app.hoy_lima() then
+    -- Ya terminó. Estirar su fin cubriría con la promo días que ya pasaron y que
+    -- se evaluaron sin ella: el mismo veredicto reescrito por otra puerta.
+    if new.fecha_fin is distinct from old.fecha_fin then
+      raise exception 'esa promoción terminó el % y su vigencia ya no se mueve: crea una nueva',
+        old.fecha_fin using errcode = 'check_violation';
+    end if;
+  elsif new.fecha_fin < app.hoy_lima() then
     raise exception 'una promoción que ya arrancó se puede cortar desde hoy, no en el pasado'
       using errcode = 'check_violation';
   end if;
@@ -720,6 +782,15 @@ begin
     and pr.cadena_id = p_cadena
     and pr.tipo_tienda is not distinct from p_tipo_tienda;
 
+  -- Un periodo que arranca en el pasado CIERRA al anterior antes de esa fecha, y
+  -- con eso reescribe el veredicto de todas las visitas del tramo. Es la misma
+  -- pérdida de trazabilidad que esta migración existe para impedir, entrando por
+  -- la puerta de al lado.
+  if p_vigente_desde <= app.hoy_lima() then
+    raise exception 'un precio nuevo entra en vigor a partir de mañana: cambiarlo desde hoy o antes reescribiría lo que ya se evaluó'
+      using errcode = 'check_violation';
+  end if;
+
   -- Sin esta guarda el operador recibiría el 23514 crudo del check de coherencia
   -- y no sabría qué hizo mal.
   if v_vigente is not null and p_vigente_desde <= v_vigente then
@@ -743,8 +814,8 @@ begin
 
   -- Es una mutación de un hecho que se paga y se puntúa: sin log no hay forma de
   -- reconstruir quién movió qué.
-  raise log 'periodo de precio abierto: sku % cadena % desde % precio %',
-    p_sku, p_cadena, p_vigente_desde, p_precio;
+  raise log 'periodo de precio abierto por %: sku % cadena % desde % precio %',
+    (select auth.uid()), p_sku, p_cadena, p_vigente_desde, p_precio;
 
   return v_id;
 end;
@@ -757,35 +828,3 @@ grant execute on function public.abrir_periodo_precio(
 
 comment on function public.abrir_periodo_precio(uuid, uuid, numeric, date, public.tipo_tienda) is
   'Cierra el periodo de precio vigente y abre uno nuevo, en una sola transacción. Nunca pisa el anterior: el histórico es lo que da la trazabilidad que pidió el cliente.';
-
--- ---------------------------------------------------------------------------
--- 9. La envoltura para el portal
---
--- El esquema `app` no está expuesto por PostgREST, así que `supabase.rpc(...)`
--- no alcanza al resolvedor. Esta es la puerta delgada, y no reimplementa nada.
-
-create function public.precio_vigente_sku(
-  p_sku    uuid,
-  p_cadena uuid,
-  p_fecha  date default app.hoy_lima()
-)
-returns table (precio numeric, vigente_desde date, vigente_hasta date)
-language sql
-stable
-security invoker
-set search_path = ''
-as $$
-  select p.precio, p.vigente_desde, p.vigente_hasta
-  from public.sku s
-  cross join lateral app.precio_regular_vigente(
-    s.tenant_id, s.id, p_cadena, p_fecha) p
-  where s.id = p_sku and p.precio is not null;
-$$;
-
-revoke execute on function public.precio_vigente_sku(uuid, uuid, date)
-  from public, anon;
-grant execute on function public.precio_vigente_sku(uuid, uuid, date)
-  to authenticated, service_role;
-
-comment on function public.precio_vigente_sku(uuid, uuid, date) is
-  'El precio regular vigente de un SKU en una cadena, con su ventana. Envoltura de `app.precio_regular_vigente` para el portal: `app` no lo publica PostgREST. La RLS de `sku` y `precio_regular` sigue siendo el portero.';

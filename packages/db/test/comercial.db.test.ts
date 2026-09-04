@@ -44,8 +44,12 @@ afterAll(async () => {
  * Cierra el periodo que el seed deja abierto para el SKU y la cadena de prueba.
  *
  * Sin esto, cualquier periodo nuevo del mismo bucket lo pisa y la restricción de
- * solapamiento lo rechaza — que es el comportamiento correcto. Cerrar un periodo
- * que ya empezó SÍ está permitido: lo prohibido es cambiarle el precio.
+ * solapamiento lo rechaza — que es el comportamiento correcto.
+ *
+ * Se cierra SIEMPRE en una fecha futura, y los periodos de prueba arrancan
+ * después: cortar un periodo abierto hacia el pasado deja ese tramo sin precio
+ * vigente y el trigger lo rechaza, con razón. Por eso estos casos viven en 2027
+ * y no en el mes que viene.
  */
 async function cerrarElDelSeed(c: Client, hasta: string): Promise<void> {
   await c.query(
@@ -175,14 +179,14 @@ describe("clave natural de precio_regular", () => {
     // Con la clave IDÉNTICA quien rechaza es el unique, que se comprueba antes
     // que la exclusión; el bucket nulo lo cubren los dos.
     await comoUsuario(client, USUARIOS.admin, async (c) => {
-      await cerrarElDelSeed(c, "2026-08-31");
+      await cerrarElDelSeed(c, "2027-06-30");
       const valores = [
         TENANTS.maracumango,
         IDS.skuMrc,
         IDS.cadenaMrc,
         null,
         7.5,
-        "2026-09-01",
+        "2027-07-01",
       ];
       expect(await codigoDeError(c, INSERTAR, valores)).toBeNull();
       expect(await codigoDeError(c, INSERTAR, valores)).toBe(DUPLICADO);
@@ -202,11 +206,11 @@ describe("clave natural de precio_regular", () => {
         IDS.cadenaMrc,
         null,
         7.5,
-        "2026-09-01",
+        "2027-07-01",
       ];
-      const octubre = [...septiembre.slice(0, 5), "2026-10-01"];
+      const octubre = [...septiembre.slice(0, 5), "2027-08-01"];
 
-      await cerrarElDelSeed(c, "2026-08-31");
+      await cerrarElDelSeed(c, "2027-06-30");
       expect(await codigoDeError(c, INSERTAR, septiembre)).toBeNull();
       expect(await codigoDeError(c, INSERTAR, octubre)).toBe(SOLAPE);
     });
@@ -222,11 +226,11 @@ describe("clave natural de precio_regular", () => {
         IDS.cadenaMrc,
         null,
         7.5,
-        "2026-09-01",
+        "2027-07-01",
       ];
-      const hiper = [...general.slice(0, 3), "hiper", 8.5, "2026-09-01"];
+      const hiper = [...general.slice(0, 3), "hiper", 8.5, "2027-07-01"];
 
-      await cerrarElDelSeed(c, "2026-08-31");
+      await cerrarElDelSeed(c, "2027-06-30");
       expect(await codigoDeError(c, INSERTAR, general)).toBeNull();
       expect(await codigoDeError(c, INSERTAR, hiper)).toBeNull();
     });
@@ -245,8 +249,8 @@ describe("clave natural de precio_regular", () => {
           IDS.skuMrc,
           IDS.cadenaMrc,
           7.5,
-          "2026-09-01",
-          "2026-08-31",
+          "2027-07-01",
+          "2027-06-30",
         ],
       );
       expect(codigo).toBe(REGLA);

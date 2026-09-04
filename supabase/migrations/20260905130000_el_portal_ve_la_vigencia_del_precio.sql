@@ -32,8 +32,15 @@ as $$
     'sku_nombre', sk.nombre,
     'visita_id', a.visita_id,
     'visita_check_in_at', v.check_in_at,
-    'precio_vigente_desde', pr.vigente_desde,
-    'precio_vigente_hasta', pr.vigente_hasta,
+    -- Solo en las alertas que hablan de precio. El payload de un quiebre también
+    -- trae `sku_id`, así que sin este filtro el portal pintaría "ese precio
+    -- regía desde…" en una pantalla donde no hay ningún precio.
+    'precio_vigente_desde',
+      case when a.tipo in ('desviacion_precio', 'promo_no_activa')
+           then pr.vigente_desde end,
+    'precio_vigente_hasta',
+      case when a.tipo in ('desviacion_precio', 'promo_no_activa')
+           then pr.vigente_hasta end,
     'foto', app.foto_de_la_alerta(a.visita_id, a.marca_id, a.tipo, a.payload)
   )
   from public.alerta a

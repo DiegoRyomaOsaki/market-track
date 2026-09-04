@@ -43,21 +43,6 @@ const DUPLICADO = {
 
 type Tabla = keyof typeof DUPLICADO;
 
-/**
- * Lo que ve el operador cuando intenta reescribir algo que ya rigió.
- *
- * La verja vive en la base —un trigger—, no aquí: `authenticated` tiene UPDATE
- * sobre estas tablas y un PATCH directo se saltaría cualquier comprobación que
- * viviera solo en el panel. Esto solo traduce.
- */
-const HISTORICO: Record<Tabla, string> = {
-  precio_regular:
-    "Ese precio ya rigió y no se puede reescribir: abre un periodo nuevo con otra fecha de vigencia.",
-  promocion:
-    "Esa promoción ya arrancó y no se puede reescribir: crea una nueva. Sí puedes cortarla desde hoy.",
-  exhibicion_negociada: "No se pudo guardar la exhibición",
-};
-
 const ENTIDAD: Record<Tabla, string> = {
   precio_regular: "el precio",
   promocion: "la promoción",
@@ -70,7 +55,28 @@ const ENTIDAD: Record<Tabla, string> = {
  * `23503` es una FK COMPUESTA `(x_id, tenant_id)`: la base impide colgar un
  * precio del SKU de otro cliente aunque la UI lo intente.
  */
-function mensajeDe(codigo: string | undefined, tabla: Tabla): string {
+/**
+ * ¿Ese 23514 lo levantó una de las verjas del histórico?
+ *
+ * Se reconoce por el texto porque las verjas comparten SQLSTATE con los CHECK de
+ * la tabla, y un errcode propio por trigger sería un catálogo nuevo que
+ * mantener en dos sitios.
+ */
+function esDelHistorico(mensaje: string | undefined): mensaje is string {
+  if (mensaje === undefined) return false;
+  return (
+    mensaje.includes("reescribir") ||
+    mensaje.includes("reabre") ||
+    mensaje.includes("se mueve") ||
+    mensaje.includes("sin precio vigente")
+  );
+}
+
+function mensajeDe(
+  codigo: string | undefined,
+  tabla: Tabla,
+  mensaje?: string,
+): string {
   if (codigo === "23505") return DUPLICADO[tabla];
   if (codigo === "23503")
     return "Ese SKU, tienda o marca no es de este cliente";
@@ -78,11 +84,14 @@ function mensajeDe(codigo: string | undefined, tabla: Tabla): string {
   // tabla con restricción de exclusión.
   if (codigo === "23P01")
     return "Ese tramo de fechas se solapa con otro periodo del mismo SKU y cadena";
-  // Lo levantan los triggers que protegen el histórico. El único CHECK que un
-  // formulario puede tocar —que la vigencia no acabe antes de empezar— ya lo
-  // rechaza Zod antes de salir del navegador, así que un 23514 que llega hasta
-  // aquí es la regla temporal.
-  if (codigo === "23514") return HISTORICO[tabla];
+  // 23514 lo levantan tanto los triggers que protegen el histórico como los
+  // CHECK de la tabla (`precio >= 0`, `vigente_hasta >= vigente_desde`). Los
+  // triggers ya redactan un mensaje pensado para el operador —dice qué pasó y
+  // qué hacer— y ese pasa tal cual; el resto cae al genérico. Dar por hecho que
+  // todo 23514 es la regla temporal mandaría a corregir la fecha a quien tenía
+  // mal el importe.
+  if (codigo === "23514" && esDelHistorico(mensaje))
+    return mensaje.slice(0, 200);
   return `No se pudo guardar ${ENTIDAD[tabla]}`;
 }
 
@@ -148,7 +157,7 @@ function resultado(
       `[comercial] ${operacion} de ${tabla}`,
       error.message.slice(0, 200),
     );
-    return { ok: false, error: mensajeDe(error.code, tabla) };
+    return { ok: false, error: mensajeDe(error.code, tabla, error.message) };
   }
   if (!data?.length) return { ok: false, error: SIN_PERMISO };
 
@@ -194,11 +203,19 @@ export async function abrirPeriodoPrecio(
       "[comercial] apertura de periodo de precio",
       error.message.slice(0, 200),
     );
-    // La RPC levanta su propia excepción con mensaje para el operador cuando la
-    // fecha no es posterior a la vigente; ese texto es mejor que el genérico.
-    if (error.code === "23514" && error.message.includes("empezar después"))
+    // La RPC redacta sus propios mensajes para el operador —de qué fecha parte el
+    // precio vigente, o por qué una fecha pasada no vale— y son mejores que
+    // cualquier texto fijo.
+    if (
+      error.code === "23514" &&
+      (error.message.includes("empezar después") ||
+        error.message.includes("reescribiría"))
+    )
       return { ok: false, error: error.message.slice(0, 200) };
-    return { ok: false, error: mensajeDe(error.code, "precio_regular") };
+    return {
+      ok: false,
+      error: mensajeDe(error.code, "precio_regular", error.message),
+    };
   }
 
   revalidatePath(PRECIOS);

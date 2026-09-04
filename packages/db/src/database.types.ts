@@ -2832,14 +2832,6 @@ export type Database = {
           modulo: Database["public"]["Enums"]["modulo_portal"]
         }[]
       }
-      precio_vigente_sku: {
-        Args: { p_cadena: string; p_fecha?: string; p_sku: string }
-        Returns: {
-          precio: number
-          vigente_desde: string
-          vigente_hasta: string
-        }[]
-      }
       previsualizar_merchandiser: {
         Args: { p_pesos: Json; p_tenant_id: string }
         Returns: {

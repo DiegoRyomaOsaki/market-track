@@ -210,7 +210,7 @@ describe("editarPrecio", () => {
       data: null,
       error: {
         message:
-          "ese precio ya rigió desde el 2026-01-01 y no se puede reescribir",
+          "ese precio ya rigió desde el 2026-01-01 y no se puede reescribir: abre un periodo nuevo",
         code: "23514",
       },
     });
@@ -222,13 +222,35 @@ describe("editarPrecio", () => {
     expect(r.error).toMatch(/periodo nuevo/i);
   });
 
+  it("un 23514 que NO es la regla temporal no manda a corregir la fecha", async () => {
+    // El `check (precio >= 0)` de la tabla también es 23514. Darlo todo por
+    // "ese precio ya rigió" mandaría al operador a cambiar la vigencia cuando
+    // el problema era el importe.
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    conRespuesta({
+      data: null,
+      error: {
+        message:
+          "new row violates check constraint precio_regular_precio_check",
+        code: "23514",
+      },
+    });
+
+    const r = await editarPrecio(PRECIO_ID, PRECIO);
+
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).not.toMatch(/ya rigió/i);
+    expect(r.error).toMatch(/no se pudo guardar/i);
+  });
+
   it("reescribir una promoción que ya arrancó también", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     conRespuesta({
       data: null,
       error: {
         message:
-          "esa promoción ya arrancó el 2026-07-01 y no se puede reescribir",
+          "esa promoción ya arrancó el 2026-07-01 y no se puede reescribir: crea una nueva",
         code: "23514",
       },
     });
