@@ -43,6 +43,7 @@ export type Database = {
           marca_id: string | null
           payload: Json
           severidad: Database["public"]["Enums"]["severidad_alerta"]
+          sku_id: string | null
           tenant_id: string
           tipo: Database["public"]["Enums"]["tipo_alerta"]
           visita_id: string | null
@@ -55,6 +56,7 @@ export type Database = {
           marca_id?: string | null
           payload?: Json
           severidad?: Database["public"]["Enums"]["severidad_alerta"]
+          sku_id?: string | null
           tenant_id: string
           tipo: Database["public"]["Enums"]["tipo_alerta"]
           visita_id?: string | null
@@ -67,6 +69,7 @@ export type Database = {
           marca_id?: string | null
           payload?: Json
           severidad?: Database["public"]["Enums"]["severidad_alerta"]
+          sku_id?: string | null
           tenant_id?: string
           tipo?: Database["public"]["Enums"]["tipo_alerta"]
           visita_id?: string | null
@@ -77,6 +80,13 @@ export type Database = {
             columns: ["marca_id", "tenant_id"]
             isOneToOne: false
             referencedRelation: "marca"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "alerta_sku_fk"
+            columns: ["sku_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "sku"
             referencedColumns: ["id", "tenant_id"]
           },
           {
@@ -2944,7 +2954,7 @@ export type Database = {
       canal_alerta: "dashboard" | "email" | "whatsapp"
       canal_otp: "correo" | "sms" | "whatsapp"
       decision_revision: "aprobada" | "rechazada"
-      estado_alerta: "nueva" | "vista" | "resuelta"
+      estado_alerta: "nueva" | "vista" | "resuelta" | "anulada"
       estado_importacion:
         | "validando"
         | "con_errores"
@@ -3161,7 +3171,7 @@ export const Constants = {
       canal_alerta: ["dashboard", "email", "whatsapp"],
       canal_otp: ["correo", "sms", "whatsapp"],
       decision_revision: ["aprobada", "rechazada"],
-      estado_alerta: ["nueva", "vista", "resuelta"],
+      estado_alerta: ["nueva", "vista", "resuelta", "anulada"],
       estado_importacion: [
         "validando",
         "con_errores",

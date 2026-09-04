@@ -39,6 +39,10 @@ export const ETIQUETA_ESTADO: Record<EstadoAlerta, string> = {
   nueva: "Nueva",
   vista: "Vista",
   resuelta: "Resuelta",
+  // La escribe el motor, no una persona: el hallazgo dejó de existir porque el
+  // mercaderista corrigió el dato en el punto de venta. No es lo mismo que
+  // "resuelta", que significa que alguien de la marca la gestionó.
+  anulada: "Corregida en tienda",
 };
 
 // Los tonos salen de los tokens del tema, nunca de un color crudo. El texto de la
@@ -54,6 +58,9 @@ export const ESTILO_ESTADO: Record<EstadoAlerta, string> = {
   nueva: "bg-alerta-suave text-alerta-texto",
   vista: "bg-en-curso-suave text-en-curso-texto",
   resuelta: "bg-completado-suave text-completado-texto",
+  // Apagada: ya no pide nada de nadie. El texto de la pastilla la distingue de
+  // "resuelta"; el color solo acompaña (WCAG 1.4.1).
+  anulada: "bg-muted text-muted-foreground",
 };
 
 /** Una línea del cuadro de evidencia: qué dato es y cuánto vale. */
@@ -154,6 +161,12 @@ export function filasDeEvidencia(
  * transición y no hay auditoría, así que un "resuelta" por error tiene que poder
  * deshacerse. Una regla monótona impuesta solo aquí sería una convención
  * disfrazada de garantía — quien llame a PostgREST directamente se la salta.
+ *
+ * `anulada` es la excepción, y no por monotonía: es el estado que escribe el
+ * MOTOR cuando el hallazgo deja de existir. Ofrecerlo como botón dejaría que una
+ * persona afirmara "esto se corrigió en tienda" sin que nadie lo haya corregido.
+ * Desde `anulada` sí se sale: si el supervisor la quiere de vuelta en su bandeja,
+ * la reabre.
  */
 export function accionesDeEstado(
   actual: EstadoAlerta,
@@ -162,11 +175,11 @@ export function accionesDeEstado(
     nueva: "Reabrir",
     vista: "Marcar vista",
     resuelta: "Marcar resuelta",
+    anulada: "Corregida en tienda",
   };
-  return ESTADOS_ALERTA.filter((e) => e !== actual).map((estado) => ({
-    estado,
-    verbo: VERBO[estado],
-  }));
+  return ESTADOS_ALERTA.filter((e) => e !== actual && e !== "anulada").map(
+    (estado) => ({ estado, verbo: VERBO[estado] }),
+  );
 }
 
 /** El rótulo de la foto: de qué es exactamente, sin insinuar de más. */

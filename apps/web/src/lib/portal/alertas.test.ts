@@ -173,8 +173,23 @@ describe("accionesDeEstado", () => {
     for (const actual of ESTADOS_ALERTA) {
       const estados = accionesDeEstado(actual).map((a) => a.estado);
       expect(estados).not.toContain(actual);
-      expect(estados).toHaveLength(ESTADOS_ALERTA.length - 1);
     }
+  });
+
+  it("nunca ofrece `anulada`: ese estado lo escribe el motor", () => {
+    // Es la marca de "el hallazgo dejó de existir porque se corrigió en tienda".
+    // Como botón, dejaría que una persona lo afirmara sin que nadie lo haya
+    // corregido — y el motor lo pondría igual cuando de verdad ocurra.
+    for (const actual of ESTADOS_ALERTA) {
+      expect(accionesDeEstado(actual).map((a) => a.estado)).not.toContain(
+        "anulada",
+      );
+    }
+  });
+
+  it("desde `anulada` se sale: el supervisor puede devolverla a su bandeja", () => {
+    const estados = accionesDeEstado("anulada").map((a) => a.estado);
+    expect(estados).toEqual(["nueva", "vista", "resuelta"]);
   });
 
   it("una resuelta se puede reabrir: sin auditoría, un clic no puede ser definitivo", () => {
