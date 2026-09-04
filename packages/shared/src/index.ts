@@ -22,6 +22,7 @@ export * from "./schemas/formulario";
 export * from "./schemas/alerta";
 export * from "./schemas/galeria";
 export * from "./schemas/importacion";
+export * from "./schemas/incidencia";
 export * from "./schemas/levantamiento";
 export * from "./schemas/perfect-merchandiser";
 export * from "./schemas/perfect-store";

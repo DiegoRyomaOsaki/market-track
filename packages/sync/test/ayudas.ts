@@ -86,6 +86,15 @@ export const AppSchema = new Schema({
     levantamiento_id: column.text,
   }),
   contingencia: new Table({ tenant_id: column.text, visita_id: column.text }),
+  // La incidencia de visita. `origen` y `estado` se declaran porque el caso a
+  // demostrar no es solo "no bajó lo ajeno": hay que poder señalar CUÁL bajó —
+  // el quiebre que el propio seed de José produce— como control positivo.
+  incidencia: new Table({
+    tenant_id: column.text,
+    visita_id: column.text,
+    origen: column.text,
+    estado: column.text,
+  }),
   // El plan de lealtad. Aquí sí hacen falta más columnas que `tenant_id`: el
   // caso a demostrar es un COMPAÑERO DEL MISMO CLIENTE, así que el tenant no
   // distingue nada y hay que mirar `mercaderista_id`. Y `periodo_inicio` porque

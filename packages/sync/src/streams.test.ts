@@ -61,10 +61,11 @@ describe("streams.yaml — contrato de seguridad", () => {
     );
   });
 
-  it("el levantamiento y la contingencia se acotan a las visitas del propio usuario", () => {
+  it("el levantamiento, la contingencia y la incidencia se acotan a las visitas del propio usuario", () => {
     // Filtrar solo por tenant hacía que cada teléfono replicara el historial de
-    // levantamientos y bypasses de TODOS sus compañeros.
-    for (const tabla of ["levantamiento", "contingencia"]) {
+    // levantamientos y bypasses de TODOS sus compañeros. La incidencia nace del
+    // mismo sitio y dice lo mismo de la tienda de al lado.
+    for (const tabla of ["levantamiento", "contingencia", "incidencia"]) {
       expect(streams).toMatch(
         new RegExp(
           String.raw`FROM ${tabla} WHERE .*visita_id IN \(SELECT id FROM visita WHERE mercaderista_id = auth\.user_id\(\)\)`,
@@ -103,6 +104,7 @@ describe("streams.yaml — contrato de seguridad", () => {
       "contingencia",
       "revision_visita",
       "solicitud_cambio_ruta",
+      "incidencia",
     ]) {
       expect(streams).not.toMatch(
         new RegExp(
