@@ -3,10 +3,17 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { comoUsuario, conectar, TENANTS, USUARIOS } from "./ayudas";
 
-// El motor de alertas: triggers que producen `alerta` al insertar los datos de
-// campo. Las alertas las escribe el SERVIDOR (SECURITY DEFINER) — authenticated
-// no tiene INSERT en `alerta`. Se prueban por el camino real: el mercaderista
-// inserta una cadena visita→levantamiento→levantamiento_sku y el trigger reacciona.
+// El motor de alertas: triggers que producen `alerta` a partir de los datos de
+// campo. Las escribe el SERVIDOR (SECURITY DEFINER) — `authenticated` no tiene
+// INSERT en `alerta`.
+//
+// Se prueban por el CAMINO REAL del móvil, y eso es lo que cambió: este fichero
+// insertaba la fila de `levantamiento_sku` entera en un solo statement, un camino
+// que la app nunca toma. El wizard la escribe en tres pasadas —"Antes + SOS" la
+// crea con solo `frentes_propios`, y el stock y el precio llegan como UPDATE—, y
+// contra un trigger `after insert` eso significaba que el motor no veía jamás el
+// dato. El test pasaba en verde probando el árbol de decisión sobre una fila que
+// la realidad nunca produce.
 //
 // Cada test monta una cadena FRESCA (ids nuevos) dentro de la transacción con
 // rollback de comoUsuario, para no chocar con las unique del seed
@@ -27,18 +34,29 @@ afterAll(async () => {
   await db.end();
 });
 
-/** Inserta una cadena fresca como el mercaderista y devuelve el id de la visita. */
+type CamposSku = {
+  stock_sistema?: number | null;
+  stock_piso?: number | null;
+  precio_registrado?: number | null;
+  hay_promo?: boolean | null;
+  promo_comunicada?: boolean | null;
+};
+
+type Cadena = { visita: string; levantamientoSku: string };
+
+/**
+ * Recorre el camino real del wizard y devuelve la cadena creada.
+ *
+ * Tres escrituras, como `upsertLevantamientoSku`: el paso "Antes + SOS" CREA la
+ * fila con solo `frentes_propios`, y el stock y el precio llegan como UPDATE. Un
+ * `insert` con todo relleno de una vez es el camino que este fichero tomaba
+ * antes, y por el que el motor parecía funcionar.
+ */
 async function levantar(
   c: Client,
   sufijo: string,
-  sku: {
-    stock_sistema?: number;
-    stock_piso?: number;
-    precio_registrado?: number;
-    hay_promo?: boolean;
-    promo_comunicada?: boolean;
-  },
-) {
+  sku: CamposSku,
+): Promise<Cadena> {
   const visita = `d0000010-0000-0000-0000-0000000000${sufijo}`;
   const lev = `d0000011-0000-0000-0000-0000000000${sufijo}`;
   const ls = `d0000012-0000-0000-0000-0000000000${sufijo}`;
@@ -51,27 +69,56 @@ async function levantar(
     `insert into public.levantamiento (id, visita_id, marca_id) values ($1,$2,$3)`,
     [lev, visita, MARCA],
   );
+  // Paso 1 — "Antes + SOS": solo los frentes.
   await c.query(
-    `insert into public.levantamiento_sku
-       (id, levantamiento_id, sku_id, stock_sistema, stock_piso, precio_registrado, hay_promo, promo_comunicada)
-     values ($1,$2,$3,$4,$5,$6,$7,$8)`,
-    [
-      ls,
-      lev,
-      SKU,
-      sku.stock_sistema ?? null,
-      sku.stock_piso ?? null,
-      sku.precio_registrado ?? null,
-      sku.hay_promo ?? null,
-      sku.promo_comunicada ?? null,
-    ],
+    `insert into public.levantamiento_sku (id, levantamiento_id, sku_id, frentes_propios)
+     values ($1,$2,$3,4)`,
+    [ls, lev, SKU],
   );
-  return visita;
+
+  const cadena = { visita, levantamientoSku: ls };
+  // Paso 2 — "Quiebres y diferencias".
+  if (sku.stock_sistema !== undefined || sku.stock_piso !== undefined) {
+    await pasoActualiza(c, cadena, {
+      stock_sistema: sku.stock_sistema,
+      stock_piso: sku.stock_piso,
+    });
+  }
+  // Paso 3 — "Precios".
+  if (sku.precio_registrado !== undefined) {
+    await pasoActualiza(c, cadena, {
+      precio_registrado: sku.precio_registrado,
+      hay_promo: sku.hay_promo ?? null,
+      promo_comunicada: sku.promo_comunicada ?? null,
+    });
+  }
+  return cadena;
+}
+
+/** Un paso posterior del wizard: UPDATE sobre la fila que creó el paso SOS. */
+async function pasoActualiza(
+  c: Client,
+  cadena: Cadena,
+  campos: CamposSku,
+): Promise<void> {
+  const cols = Object.keys(campos);
+  const vals = Object.values(campos);
+  await c.query(
+    `update public.levantamiento_sku
+        set ${cols.map((col, i) => `${col} = $${i + 2}`).join(", ")}
+      where id = $1`,
+    [cadena.levantamientoSku, ...vals],
+  );
 }
 
 async function alertasDe(c: Client, visita: string) {
-  const r = await c.query<{ tipo: string; payload: Record<string, unknown> }>(
-    "select tipo, payload from public.alerta where visita_id = $1 order by tipo",
+  const r = await c.query<{
+    tipo: string;
+    estado: string;
+    payload: Record<string, unknown>;
+  }>(
+    `select tipo, estado, payload from public.alerta
+      where visita_id = $1 order by tipo`,
     [visita],
   );
   return r.rows;
@@ -80,7 +127,7 @@ async function alertasDe(c: Client, visita: string) {
 describe("motor de alertas — stock", () => {
   it("un quiebre (piso 0, sistema > 0) genera alerta de quiebre", async () => {
     await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
-      const visita = await levantar(c, "a1", {
+      const { visita } = await levantar(c, "a1", {
         stock_sistema: 10,
         stock_piso: 0,
       });
@@ -91,7 +138,7 @@ describe("motor de alertas — stock", () => {
 
   it("una diferencia (piso > 0 y ≠ sistema) genera alerta de diferencia_stock", async () => {
     await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
-      const visita = await levantar(c, "a2", {
+      const { visita } = await levantar(c, "a2", {
         stock_sistema: 10,
         stock_piso: 7,
       });
@@ -105,7 +152,7 @@ describe("motor de alertas — stock", () => {
 describe("motor de alertas — árbol de precios (regular 6.90, tolerancia 5%)", () => {
   it("precio muy por encima del regular → desviacion_precio (sobreprecio)", async () => {
     await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
-      const visita = await levantar(c, "b1", {
+      const { visita } = await levantar(c, "b1", {
         stock_sistema: 5,
         stock_piso: 5,
         precio_registrado: 10.0,
@@ -118,7 +165,7 @@ describe("motor de alertas — árbol de precios (regular 6.90, tolerancia 5%)",
 
   it("precio por debajo del regular con promo vista pero no comunicada → promo_no_activa", async () => {
     await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
-      const visita = await levantar(c, "b2", {
+      const { visita } = await levantar(c, "b2", {
         stock_sistema: 5,
         stock_piso: 5,
         precio_registrado: 4.0,
@@ -132,7 +179,7 @@ describe("motor de alertas — árbol de precios (regular 6.90, tolerancia 5%)",
 
   it("precio dentro de la tolerancia del regular → sin alerta de precio", async () => {
     await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
-      const visita = await levantar(c, "b3", {
+      const { visita } = await levantar(c, "b3", {
         stock_sistema: 5,
         stock_piso: 5,
         precio_registrado: 6.95,
@@ -140,6 +187,263 @@ describe("motor de alertas — árbol de precios (regular 6.90, tolerancia 5%)",
       const tipos = (await alertasDe(c, visita)).map((a) => a.tipo);
       expect(tipos).not.toContain("desviacion_precio");
       expect(tipos).not.toContain("promo_no_activa");
+    });
+  });
+});
+
+describe("motor de alertas — un hallazgo, una alerta", () => {
+  it("el camino real del wizard levanta la alerta que antes no salía", async () => {
+    // El bug entero, en un test: con el trigger atado solo al INSERT, el motor
+    // veía la fila cuando `stock_piso` todavía era NULL y no producía nada.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const { visita } = await levantar(c, "c1", {
+        stock_sistema: 10,
+        stock_piso: 0,
+      });
+      const alertas = await alertasDe(c, visita);
+      expect(alertas.map((a) => a.tipo)).toEqual(["quiebre"]);
+    });
+  });
+
+  it("el paso SOS por sí solo no levanta nada: todavía no hay hallazgo", async () => {
+    // El caso negativo. Sin él, un motor que alertara de todo pasaría el de
+    // arriba sin enterarse.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const { visita } = await levantar(c, "c2", {});
+      expect(await alertasDe(c, visita)).toEqual([]);
+    });
+  });
+
+  it("reentrar al paso y volver a guardar no duplica la alerta", async () => {
+    // Sin clave natural, cada pasada del wizard dejaba una alerta más: tres
+    // `quiebre` del mismo SKU en la bandeja del supervisor.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await levantar(c, "c3", {
+        stock_sistema: 10,
+        stock_piso: 0,
+      });
+      await pasoActualiza(c, cadena, { stock_sistema: 10, stock_piso: 0 });
+      await pasoActualiza(c, cadena, { stock_sistema: 10, stock_piso: 0 });
+      expect(await alertasDe(c, cadena.visita)).toHaveLength(1);
+    });
+  });
+
+  it("el quiebre y la desviación de precio conviven: son hallazgos distintos", async () => {
+    // La clave lleva el `tipo`, así que dedupe no significa "una alerta por
+    // SKU": significa una por hallazgo.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const { visita } = await levantar(c, "c4", {
+        stock_sistema: 10,
+        stock_piso: 0,
+        precio_registrado: 10.0,
+      });
+      const tipos = (await alertasDe(c, visita)).map((a) => a.tipo).sort();
+      expect(tipos).toEqual(["desviacion_precio", "quiebre"]);
+    });
+  });
+
+  it("mientras sigue NUEVA, el payload se refresca con los números de ahora", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await levantar(c, "c5", {
+        stock_sistema: 10,
+        stock_piso: 0,
+      });
+      await pasoActualiza(c, cadena, { stock_sistema: 15, stock_piso: 0 });
+      const alertas = await alertasDe(c, cadena.visita);
+      expect(alertas).toHaveLength(1);
+      expect(alertas[0]?.payload.stock_sistema).toBe(15);
+    });
+  });
+
+  it("una alerta ya VISTA no se le cambia el payload por debajo", async () => {
+    // El supervisor la miró sobre unos números concretos. Refrescárselos le
+    // cambiaría la evidencia de una decisión que ya tomó.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await levantar(c, "c6", {
+        stock_sistema: 10,
+        stock_piso: 0,
+      });
+      await c.query("set local role postgres");
+      await c.query(
+        `update public.alerta set estado = 'vista' where visita_id = $1`,
+        [cadena.visita],
+      );
+      await c.query("set local role authenticated");
+
+      await pasoActualiza(c, cadena, { stock_sistema: 15, stock_piso: 0 });
+      const alertas = await alertasDe(c, cadena.visita);
+      expect(alertas[0]?.payload.stock_sistema).toBe(10);
+    });
+  });
+});
+
+describe("motor de alertas — el hallazgo que deja de existir", () => {
+  it("corregir el stock anula la alerta", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await levantar(c, "d1", {
+        stock_sistema: 10,
+        stock_piso: 0,
+      });
+      await pasoActualiza(c, cadena, { stock_sistema: 10, stock_piso: 10 });
+      const alertas = await alertasDe(c, cadena.visita);
+      expect(alertas.map((a) => a.estado)).toEqual(["anulada"]);
+    });
+  });
+
+  it("corregir el precio anula la alerta de precio", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await levantar(c, "d2", { precio_registrado: 10.0 });
+      await pasoActualiza(c, cadena, { precio_registrado: 6.9 });
+      const alertas = await alertasDe(c, cadena.visita);
+      expect(alertas.map((a) => a.estado)).toEqual(["anulada"]);
+    });
+  });
+
+  it("si el hallazgo vuelve, la alerta anulada se reabre como NUEVA", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await levantar(c, "d3", {
+        stock_sistema: 10,
+        stock_piso: 0,
+      });
+      await pasoActualiza(c, cadena, { stock_sistema: 10, stock_piso: 10 });
+      await pasoActualiza(c, cadena, { stock_sistema: 10, stock_piso: 0 });
+      const alertas = await alertasDe(c, cadena.visita);
+      expect(alertas).toHaveLength(1);
+      expect(alertas[0]?.estado).toBe("nueva");
+    });
+  });
+
+  it("una alerta que el supervisor ya miró NO se anula sola", async () => {
+    // `vista` significa que hay una persona con esto en su bandeja de trabajo.
+    // Quitárselo de la vista por debajo le esconde algo sobre lo que quizá ya
+    // actuó; cerrarla es decisión suya.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await levantar(c, "d4", {
+        stock_sistema: 10,
+        stock_piso: 0,
+      });
+      await c.query("set local role postgres");
+      await c.query(
+        `update public.alerta set estado = 'vista' where visita_id = $1`,
+        [cadena.visita],
+      );
+      await c.query("set local role authenticated");
+
+      await pasoActualiza(c, cadena, { stock_sistema: 10, stock_piso: 10 });
+      const alertas = await alertasDe(c, cadena.visita);
+      expect(alertas.map((a) => a.estado)).toEqual(["vista"]);
+    });
+  });
+
+  it("borrar el precio anula las dos alertas de precio", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await levantar(c, "d5", {
+        precio_registrado: 4.0,
+        hay_promo: true,
+        promo_comunicada: false,
+      });
+      expect((await alertasDe(c, cadena.visita)).map((a) => a.tipo)).toEqual([
+        "promo_no_activa",
+      ]);
+
+      await pasoActualiza(c, cadena, { precio_registrado: null });
+      const alertas = await alertasDe(c, cadena.visita);
+      expect(alertas.map((a) => a.estado)).toEqual(["anulada"]);
+    });
+  });
+});
+
+describe("motor de alertas — lo que NO se deduplica", () => {
+  it("dos contingencias de la misma visita son dos alertas", async () => {
+    // La clave es parcial (`where sku_id is not null`) justo por esto: una
+    // visita tiene legítimamente una contingencia por paso omitido, y una única
+    // sobre `(tenant, visita, tipo)` las habría colapsado en una.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await levantar(c, "e1", {});
+      for (const paso of ["precios", "exhibiciones"]) {
+        await c.query(
+          `insert into public.contingencia (tenant_id, visita_id, paso, motivo, registrada_at)
+           values ($1, $2, $3, 'harness', now())`,
+          [TENANTS.maracumango, cadena.visita, paso],
+        );
+      }
+      const tipos = (await alertasDe(c, cadena.visita)).map((a) => a.tipo);
+      expect(tipos).toEqual(["contingencia", "contingencia"]);
+    });
+  });
+});
+
+describe("`anulada` la escribe el motor, y lo dice la POLÍTICA", () => {
+  // El portal no ofrece el botón, pero eso es UX. El grant deja escribir la
+  // columna `estado`, así que sin verja en la política un cliente-marca podría
+  // marcar `anulada` por PostgREST y esconder de la bandeja un hallazgo que
+  // nadie corrigió — justo la integridad que este ticket devuelve.
+  async function conAlerta(c: Client, sufijo: string) {
+    const { visita } = await levantar(c, sufijo, {
+      stock_sistema: 10,
+      stock_piso: 0,
+    });
+    return visita;
+  }
+
+  it("el cliente-marca NO puede marcar una alerta como anulada", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const visita = await conAlerta(c, "f1");
+      await c.query("set local role postgres");
+      await c.query(
+        `set local request.jwt.claims = '${JSON.stringify({
+          sub: USUARIOS.clienteMaracumango,
+          role: "authenticated",
+          aal: "aal2",
+        })}'`,
+      );
+      await c.query("set local role authenticated");
+
+      await expect(
+        c.query(
+          `update public.alerta set estado = 'anulada' where visita_id = $1`,
+          [visita],
+        ),
+      ).rejects.toMatchObject({ code: "42501" });
+    });
+  });
+
+  it("el staff tampoco: el estado significa que el DATO dejó de existir", async () => {
+    await comoUsuario(db, USUARIOS.supervisor, async (c) => {
+      await expect(
+        c.query(`update public.alerta set estado = 'anulada' where true`),
+      ).rejects.toMatchObject({ code: "42501" });
+    });
+  });
+
+  it("el ciclo normal de triage sigue funcionando", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const visita = await conAlerta(c, "f3");
+      for (const estado of ["vista", "resuelta", "nueva"]) {
+        const r = await c.query(
+          `update public.alerta set estado = $2 where visita_id = $1`,
+          [visita, estado],
+        );
+        expect(r.rowCount).toBe(1);
+      }
+    });
+  });
+
+  it("una alerta anulada por el motor se puede REABRIR desde la app", async () => {
+    // El valor nuevo es `nueva`, no `anulada`: el `with check` no lo impide.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await levantar(c, "f4", {
+        stock_sistema: 10,
+        stock_piso: 0,
+      });
+      await pasoActualiza(c, cadena, { stock_sistema: 10, stock_piso: 10 });
+      expect((await alertasDe(c, cadena.visita))[0]?.estado).toBe("anulada");
+
+      const r = await c.query(
+        `update public.alerta set estado = 'nueva' where visita_id = $1`,
+        [cadena.visita],
+      );
+      expect(r.rowCount).toBe(1);
     });
   });
 });
