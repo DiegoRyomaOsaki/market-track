@@ -708,6 +708,114 @@ cómoda de rellenarla.
 
 ---
 
+### Entidades añadidas tras la 4ª revisión con el cliente (ago 2026)
+
+La reunión del **25 ago 2026** pidió registrar no solo lo que el mercaderista
+encuentra, sino **lo que hace al respecto**, y recorrer el levantamiento sin un
+orden impuesto. Ver [[04 - Módulos y Funcionalidades]], "Cuarta revisión con el
+cliente". Dos de estas entidades ya existen; el resto son esbozos y **se marcan
+como no implementadas**.
+
+#### Implementadas
+
+**`incidencia`** — el hallazgo que el mercaderista tiene que atender antes de
+salir de la tienda. `id, tenant_id, visita_id, levantamiento_id, marca_id,
+sku_id, exhibicion_negociada_id, origen, estado, detalle jsonb, accion_tomada,
+motivo, foto_resolucion_id, atendida_at, creado_at`.
+
+Seis orígenes: `quiebre`, `diferencia_stock`, `desviacion_precio`,
+`promo_no_comunicada`, `exhibicion_no_instalada` e `incumplimiento_planograma`
+— este último **está en el enum pero nada lo crea todavía**, porque la entidad
+`planograma` no existe (añadir un valor a un enum obliga a su propia migración,
+así que entra ahora para que su ticket añada solo la rama del motor).
+
+Tres invariantes que el modelo sostiene, y ninguna vive en el código de las apps:
+
+- **La escribe el motor, no la app.** `authenticated` no tiene `INSERT`: que las
+  apps no la fabriquen no lo impone un procedimiento, lo impone la ausencia del
+  grant. La crea el mismo dueño que ya calcula los derivados del levantamiento.
+- **Un hallazgo, una incidencia.** Clave natural `(tenant_id, visita_id,
+  levantamiento_id, sku_id, exhibicion_negociada_id, origen)` con `nulls not
+  distinct` — tres de esas columnas son nullables, y en la semántica normal un
+  NULL nunca choca consigo mismo, así que la incidencia se duplicaría en cada
+  pasada del wizard.
+- **`anulada` es del motor.** Cuando el mercaderista corrige el dato que originó
+  el hallazgo, la incidencia pendiente se anula sola; lo ya atendido **nunca** se
+  pisa. La política niega ese estado a la app: desde el teléfono sería la forma de
+  vaciar la lista sin atenderla.
+
+> El cliente-marca **no lee incidencias todavía**: la política no tiene rama para
+> su rol. Abrirla es decisión de la pantalla del portal, y se hace en la
+> **política** — esconderla en la consulta la dejaría legible por PostgREST.
+
+**`levantamiento_paso`** — el módulo que el mercaderista dio por terminado.
+`id, tenant_id, levantamiento_id, paso, paso_config_id, completado_at, creado_at`.
+
+Es la mitad que le faltaba a `contingencia`: esa registra los módulos que **no**
+se pudieron terminar, y hasta ahora el "ya está" vivía en memoria de la pantalla
+porque la secuencia era fija y no había a dónde saltar. Con navegación libre ese
+estado moría en cada salto.
+
+No es un campo derivado: *"terminé este módulo"* es una **afirmación del
+mercaderista**, simétrica a la contingencia. Derivarlo de los datos capturados no
+cierra — una exhibición con cero negociadas y cero adicionales no escribe ninguna
+fila, y un paso configurable con todos sus campos opcionales sin contestar
+tampoco: "terminado" y "ni lo abrió" serían indistinguibles.
+
+> **Dos índices únicos parciales, no un `unique` de tres columnas.**
+> `paso_config_id` es nullable, así que el unique de tres dejaría entrar dos filas
+> del mismo paso fijo — justo el duplicado que hay que impedir.
+
+#### No implementadas
+
+**`planograma`** (🟡) — el acuerdo de espacio en góndola, con su imagen de
+referencia y la unidad en que se mide el cumplimiento. La medición es **manual**
+—se descartó contar frentes por IA sobre la foto— y el cumplimiento es **medido,
+no binario**.
+
+Se modela **sin esperar** a las decisiones abiertas de la reunión, y puede
+hacerse porque ninguna de ellas es una constante del esquema: la unidad
+(`frentes_horizontal` | `frentes_vertical` | `centimetros`) y el alcance del
+acuerdo (cadena o tienda × marca × categoría o SKU) son **configuración** que
+carga el admin. Lo que falta acordar es **qué valores se cargan**, no qué
+columnas existen.
+
+**`competidor`** (🟡) — el catálogo de competidores que cada marca monitorea, por
+`marca × categoria`. Hoy la competencia se captura como **texto libre** dentro de
+`levantamiento_sku.frentes_competencia` (jsonb), lo que hace imposible agregar por
+competidor. La lista concreta la tiene que dar el cliente.
+
+**Histórico de precios y promociones** (🟡) — el modelo está **a medias, no
+ausente**, y conviene ser exacto sobre qué falta.
+
+Lo que ya funciona: `precio_regular` lleva `vigente_desde` en su clave natural,
+así que importar con una fecha nueva **sí abre un periodo nuevo** en vez de pisar
+el anterior; y `app.evaluar_precio_sku` resuelve el precio por la fecha de la
+**visita**, no por la del reloj, tomando el vigente más reciente que la preceda.
+
+Lo que falta: reimportar la **misma** `vigente_desde` con otro precio sobrescribe
+—ahí sí se pierde el dato anterior—, no hay forma de cerrar un periodo
+(`vigente_hasta`), y `promocion` no tiene el equivalente. Es lo que impide
+responder *"¿cuánto costaba en marzo?"*, que es lo que el cliente pidió:
+*"el precio promedio de 2025 y el de 2026 — si yo lo modifico y después me bajo el
+reporte, me va a salir como si no hubiese variado"*.
+
+**Campos nuevos del SKU** (🟡) — `subcategoria` (un nivel bajo `categoria`) y
+`peso` / `medidas` **numéricos**, no texto: *"esto es texto nada más, no serviría
+para jalar después esa información"*. Los piden los retailers al codificar
+(master case y unit case).
+
+**Material POP transversal** (🟡) — deja de ser una fila de exhibiciones y deja de
+tener estado "parcialmente instalado". Aplica también a góndola y es binario.
+
+> **Lo que el teléfono descarga.** `incidencia` y `levantamiento_paso` bajan
+> acotadas a las **visitas propias** del mercaderista, no al cliente entero. Eso
+> no lo resuelve la RLS: PowerSync replica con un rol `BYPASSRLS`, así que lo que
+> no se acote en las sync rules llega al teléfono de cada compañero y sobrevive al
+> robo del dispositivo.
+
+---
+
 ## Cómo el modelo soporta los flujos del documento
 
 | Requisito del documento | Tablas que lo resuelven |
@@ -722,7 +830,7 @@ cómoda de rellenarla.
 | **SOS agregado + detalle por SKU, con foto** | `visita.sos_*` + `levantamiento_sku.frentes_*` + `foto` tipo `sos` |
 | **2FA multicanal (correo/SMS/WhatsApp), activable** | `configuracion_plataforma.otp_canales_habilitados` |
 | **Mercaderista que no recibe su OTP** | `pase_acceso_temporal` (un solo uso, 15 min, auditado) |
-| Alertas de desviación de precio | `precio_regular`, `promocion`, `tenant.tolerancia_precio_pct`, `alerta` |
+| Alertas de desviación de precio | `precio_regular`, `promocion`, `marca.tolerancia_precio_pct`, `alerta` |
 | Promos por cluster y "comunicada" | `promocion.clusters`, `promo_comunicada` |
 | Exhibiciones negociadas y adicionales | `exhibicion_negociada`, `exhibicion` |
 | Exhibición "vive" en mercaderista y tienda | FK a ambos en `exhibicion`/`visita` (para incentivos y cambios de ruta) |
