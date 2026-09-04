@@ -373,6 +373,81 @@ describe("motor de alertas — lo que NO se deduplica", () => {
   });
 });
 
+describe("`anulada` la escribe el motor, y lo dice la POLÍTICA", () => {
+  // El portal no ofrece el botón, pero eso es UX. El grant deja escribir la
+  // columna `estado`, así que sin verja en la política un cliente-marca podría
+  // marcar `anulada` por PostgREST y esconder de la bandeja un hallazgo que
+  // nadie corrigió — justo la integridad que este ticket devuelve.
+  async function conAlerta(c: Client, sufijo: string) {
+    const { visita } = await levantar(c, sufijo, {
+      stock_sistema: 10,
+      stock_piso: 0,
+    });
+    return visita;
+  }
+
+  it("el cliente-marca NO puede marcar una alerta como anulada", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const visita = await conAlerta(c, "f1");
+      await c.query("set local role postgres");
+      await c.query(
+        `set local request.jwt.claims = '${JSON.stringify({
+          sub: USUARIOS.clienteMaracumango,
+          role: "authenticated",
+          aal: "aal2",
+        })}'`,
+      );
+      await c.query("set local role authenticated");
+
+      await expect(
+        c.query(
+          `update public.alerta set estado = 'anulada' where visita_id = $1`,
+          [visita],
+        ),
+      ).rejects.toMatchObject({ code: "42501" });
+    });
+  });
+
+  it("el staff tampoco: el estado significa que el DATO dejó de existir", async () => {
+    await comoUsuario(db, USUARIOS.supervisor, async (c) => {
+      await expect(
+        c.query(`update public.alerta set estado = 'anulada' where true`),
+      ).rejects.toMatchObject({ code: "42501" });
+    });
+  });
+
+  it("el ciclo normal de triage sigue funcionando", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const visita = await conAlerta(c, "f3");
+      for (const estado of ["vista", "resuelta", "nueva"]) {
+        const r = await c.query(
+          `update public.alerta set estado = $2 where visita_id = $1`,
+          [visita, estado],
+        );
+        expect(r.rowCount).toBe(1);
+      }
+    });
+  });
+
+  it("una alerta anulada por el motor se puede REABRIR desde la app", async () => {
+    // El valor nuevo es `nueva`, no `anulada`: el `with check` no lo impide.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await levantar(c, "f4", {
+        stock_sistema: 10,
+        stock_piso: 0,
+      });
+      await pasoActualiza(c, cadena, { stock_sistema: 10, stock_piso: 10 });
+      expect((await alertasDe(c, cadena.visita))[0]?.estado).toBe("anulada");
+
+      const r = await c.query(
+        `update public.alerta set estado = 'nueva' where visita_id = $1`,
+        [cadena.visita],
+      );
+      expect(r.rowCount).toBe(1);
+    });
+  });
+});
+
 describe("motor de alertas — seguridad", () => {
   it("un usuario NO puede inyectar alertas llamando a crear_alerta directamente", async () => {
     await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {

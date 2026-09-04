@@ -128,7 +128,9 @@ begin
    -- `resuelta` sobre unos números concretos; refrescarle el payload por debajo
    -- le cambiaría la evidencia de una decisión que ya tomó.
    where a.estado = 'anulada'
-      or (a.estado = 'nueva' and a.payload is distinct from excluded.payload);
+      or (a.estado = 'nueva'
+          and (a.payload is distinct from excluded.payload
+               or a.severidad is distinct from excluded.severidad));
 end;
 $$;
 
@@ -303,6 +305,39 @@ $$;
 
 revoke execute on function app.derivados_levantamiento_sku()
   from public, anon, authenticated, service_role;
+
+-- ---------------------------------------------------------------------------
+-- 4. `anulada` la escribe el MOTOR, y eso lo dice la política
+-- ---------------------------------------------------------------------------
+--
+-- El portal ya no ofrece el botón, pero eso es UX, no seguridad: el grant deja a
+-- `authenticated` escribir la columna `estado`, y la política no miraba el VALOR.
+-- Un cliente-marca podía marcar `anulada` por PostgREST y esconder de la bandeja
+-- del supervisor un hallazgo que nadie corrigió — justo la integridad que este
+-- ticket viene a devolver.
+--
+-- Se niega a todos, staff incluido: el estado significa "el dato que lo originó
+-- dejó de existir", y eso solo lo sabe el motor. Las funciones que lo escriben
+-- son SECURITY DEFINER y no pasan por RLS. Reabrir sigue funcionando: ahí el
+-- valor NUEVO es `nueva`, no `anulada`.
+--
+-- Es la misma verja que `incidencia_mercaderista_atiende` puso para el estado
+-- gemelo; faltaba su mitad aquí.
+alter policy alerta_usuario_marca_estado on public.alerta
+  using (
+    (tenant_id = (select app.tenant_actual()) and app.tipo_alerta_del_cliente(tipo))
+    or (select app.es_staff())
+  )
+  with check (
+    (
+      (tenant_id = (select app.tenant_actual()) and app.tipo_alerta_del_cliente(tipo))
+      or (select app.es_staff())
+    )
+    and estado <> 'anulada'
+  );
+
+comment on policy alerta_usuario_marca_estado on public.alerta is
+  'Quién mueve el estado de una alerta. `anulada` queda fuera para todos: la escribe el motor cuando el hallazgo deja de existir, y desde la app sería la forma de vaciar la bandeja sin que nadie corrigiera nada.';
 
 -- `derivados_exhibicion` NO se toca. Su alerta (`exhibicion_incompleta`) no está
 -- muda: la exhibición se inserta ya completa, así que el `after insert` la ve. Y
