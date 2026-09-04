@@ -384,6 +384,29 @@ describe("detalle_alerta", () => {
     });
   });
 
+  it("dice DESDE CUÁNDO regía el precio esperado, a la fecha de la visita", async () => {
+    // Sin la ventana, un precio que cambió en agosto y una alerta de julio se
+    // leen como una contradicción. Se resuelve a la fecha de la VISITA y no a
+    // la de hoy: es la que el motor usó para decidir.
+    await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {
+      await sembrarAlerta(c, {
+        id: "e0000016-0000-0000-0000-00000000a007",
+        tipo: "desviacion_precio",
+        payload: {
+          sku_id: SKU_MRC,
+          precio_registrado: 12.9,
+          precio_regular: 6.9,
+        },
+      });
+
+      const d = await detalle(c, "e0000016-0000-0000-0000-00000000a007");
+      expect(d?.precio_vigente_desde).toBe("2026-01-01");
+      // El periodo del seed sigue abierto: nulo significa "sigue vigente", no
+      // que falte el dato.
+      expect(d?.precio_vigente_hasta).toBeNull();
+    });
+  });
+
   it("una alerta del RIVAL y una inexistente devuelven lo mismo: null", async () => {
     // Indistinguibles a propósito: distinguirlas confirmaría que la ajena existe.
     await comoUsuario(db, USUARIOS.clienteMaracumango, async (c) => {

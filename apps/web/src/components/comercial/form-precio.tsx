@@ -9,8 +9,9 @@ import {
   BuscadorOpcion,
   type OpcionBusqueda,
 } from "@/components/panel/buscador-opcion";
-import { crearPrecio, editarPrecio } from "@/lib/comercial/acciones";
+import { abrirPeriodoPrecio, editarPrecio } from "@/lib/comercial/acciones";
 import { buscarSkus } from "@/lib/comercial/buscar-opciones";
+import { diaEnLima } from "@/lib/fecha-lima";
 import { leerCampo } from "@/lib/formulario";
 
 import { SIN_CATALOGO, type OpcionCadena } from "./opciones";
@@ -24,6 +25,11 @@ import { SIN_CATALOGO, type OpcionCadena } from "./opciones";
 // El cliente de la fila no se elige: lo trae el SKU elegido. La cookie del
 // header solo decide qué catálogo se ofrece; la autoridad es la FK compuesta
 // `(sku_id, tenant_id)`, que rechaza cualquier mezcla.
+//
+// Un precio que YA RIGIÓ no se edita: se supersede. El formulario ofrece una
+// cosa u otra según eso, y quien lo hace cumplir es la base —un trigger—, no
+// esta pantalla: `authenticated` tiene UPDATE sobre la tabla y un PATCH directo
+// se saltaría cualquier comprobación que viviera solo aquí.
 
 type Precio = {
   id: string;
@@ -32,6 +38,7 @@ type Precio = {
   tipo_tienda: string | null;
   precio: number;
   vigente_desde: string;
+  vigente_hasta: string | null;
 };
 
 const VOLVER = "/admin/precios";
@@ -49,6 +56,12 @@ export function FormPrecio({
   skuInicial?: OpcionBusqueda | null;
   cadenas: OpcionCadena[];
 }) {
+  // Corregir en sitio solo cuando el periodo todavía no ha empezado. El día es
+  // el de Lima: `toISOString()` da el de UTC y entre las 19:00 y medianoche ya
+  // rodó al siguiente, que aquí decidiría mal qué formulario se ofrece.
+  const corrigiendo =
+    precio !== undefined && precio.vigente_desde > diaEnLima(new Date());
+
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [skuElegido, setSkuElegido] = useState<OpcionBusqueda | null>(
@@ -63,7 +76,6 @@ export function FormPrecio({
 
     const fd = new FormData(e.currentTarget);
     const datos = {
-      tenant_id: skuElegido?.tenant_id ?? "",
       sku_id: leerCampo(fd, "sku_id"),
       cadena_id: leerCampo(fd, "cadena_id"),
       tipo_tienda: leerCampo(fd, "tipo_tienda") || null,
@@ -71,9 +83,12 @@ export function FormPrecio({
       vigente_desde: leerCampo(fd, "vigente_desde"),
     };
 
-    const r = precio
-      ? await editarPrecio(precio.id, datos)
-      : await crearPrecio(datos);
+    const r = corrigiendo
+      ? await editarPrecio(precio.id, {
+          ...datos,
+          tenant_id: skuElegido?.tenant_id ?? "",
+        })
+      : await abrirPeriodoPrecio(datos);
 
     setEnviando(false);
     if (!r.ok) {
@@ -165,16 +180,18 @@ export function FormPrecio({
         </label>
       </div>
 
-      {/* Que la fecha forme parte de la clave no es obvio: sin decirlo, quien
-          quiere subir el precio edita el de siempre y borra el histórico. */}
+      {/* La regla no es obvia y sin decirla el operador cree que perdió el
+          histórico o que la pantalla se equivocó. */}
       <p className="text-[12px] text-muted-foreground">
-        La fecha de vigencia forma parte de la identidad del precio. Para
-        cambiarlo a partir de un día, da de alta uno nuevo con esa fecha en vez
-        de editar este.
+        {corrigiendo
+          ? "Este precio todavía no ha empezado a regir, así que se corrige en sitio."
+          : precio
+            ? "Este precio ya rigió y no se reescribe. Al guardar se cierra el periodo actual y se abre uno nuevo desde la fecha que elijas: el anterior sigue en el histórico."
+            : "Al guardar se cierra el periodo vigente de ese SKU en esa cadena y se abre uno nuevo desde la fecha que elijas. Ninguno se pierde."}
       </p>
 
       <Errores error={error} />
-      <Pie enviando={enviando} editando={!!precio} volverA={VOLVER} />
+      <Pie enviando={enviando} editando={corrigiendo} volverA={VOLVER} />
     </form>
   );
 }

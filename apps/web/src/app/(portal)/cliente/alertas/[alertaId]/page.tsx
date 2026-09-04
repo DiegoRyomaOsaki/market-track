@@ -15,6 +15,7 @@ import {
   ETIQUETA_ESTADO,
   ETIQUETA_SEVERIDAD,
   ETIQUETA_TIPO_ALERTA,
+  filaDeVigencia,
   filasDeEvidencia,
   rotuloDeFoto,
 } from "@/lib/portal/alertas";
@@ -89,6 +90,17 @@ export default async function DetalleAlertaPage({
       : [];
   const { urls, degradado } = await urlsFirmadas(supabase, firmables);
 
+  // La ventana del precio se pinta como una evidencia más, al final: es parte de
+  // por qué la alerta dice lo que dice.
+  const vigencia = filaDeVigencia(
+    alerta.precio_vigente_desde,
+    alerta.precio_vigente_hasta,
+  );
+  const evidencia = [
+    ...filasDeEvidencia(alerta.tipo, alerta.payload),
+    ...(vigencia === null ? [] : [vigencia]),
+  ];
+
   return (
     <div className="flex flex-col gap-4">
       <Link
@@ -121,7 +133,7 @@ export default async function DetalleAlertaPage({
       <section className="flex flex-col gap-3 rounded-xl border border-border bg-background p-4">
         <h2 className="text-[13px] font-bold">Evidencia</h2>
         <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {filasDeEvidencia(alerta.tipo, alerta.payload).map((f) => (
+          {evidencia.map((f) => (
             <div key={f.etiqueta} className="flex flex-col">
               <dt className="text-[11.5px] text-muted-foreground">
                 {f.etiqueta}

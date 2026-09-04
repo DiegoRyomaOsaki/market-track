@@ -126,6 +126,51 @@ const EVIDENCIA: {
 };
 
 /**
+ * Una fecha simple (`YYYY-MM-DD`) tal como se escribe, sin correrla un día.
+ *
+ * En UTC a propósito: `new Date("2026-01-01")` es medianoche UTC, y formatearla
+ * en la zona de Lima —cinco horas por detrás— la enseñaría como 31 de
+ * diciembre. Es la misma trampa que ya evita el gráfico de Perfect Store.
+ */
+const FORMATO_FECHA = new Intl.DateTimeFormat("es-PE", {
+  timeZone: "UTC",
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+});
+
+function fecha(iso: string): string {
+  return FORMATO_FECHA.format(new Date(iso));
+}
+
+/**
+ * Desde cuándo rige el precio esperado, y hasta cuándo si ya se cerró.
+ *
+ * Sin esto, un precio que cambió en agosto y una alerta de julio se leen como
+ * una contradicción. La ventana viene resuelta a la fecha de la VISITA, no a la
+ * de hoy: es la que el motor usó para decidir.
+ *
+ * Devuelve null cuando no hay ventana que enseñar. Quien decide que una alerta
+ * no habla de precio es `detalle_alerta`, que solo resuelve la ventana para los
+ * tipos de precio: el payload de un quiebre también trae `sku_id`, y sin ese
+ * filtro esto pintaría "ese precio regía desde…" en una pantalla sin ningún
+ * precio.
+ */
+export function filaDeVigencia(
+  desde: string | null,
+  hasta: string | null,
+): { etiqueta: string; valor: string } | null {
+  if (desde === null) return null;
+  return {
+    etiqueta: "Ese precio regía",
+    valor:
+      hasta === null
+        ? `desde el ${fecha(desde)}`
+        : `del ${fecha(desde)} al ${fecha(hasta)}`,
+  };
+}
+
+/**
  * La evidencia de una alerta, ya legible.
  *
  * El payload se valida contra el schema de SU tipo antes de leerlo: viene de un

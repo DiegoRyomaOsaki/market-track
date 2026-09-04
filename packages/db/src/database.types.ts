@@ -1419,6 +1419,7 @@ export type Database = {
           tenant_id: string
           tipo_tienda: Database["public"]["Enums"]["tipo_tienda"] | null
           vigente_desde: string
+          vigente_hasta: string | null
         }
         Insert: {
           cadena_id: string
@@ -1429,6 +1430,7 @@ export type Database = {
           tenant_id: string
           tipo_tienda?: Database["public"]["Enums"]["tipo_tienda"] | null
           vigente_desde?: string
+          vigente_hasta?: string | null
         }
         Update: {
           cadena_id?: string
@@ -1439,6 +1441,7 @@ export type Database = {
           tenant_id?: string
           tipo_tienda?: Database["public"]["Enums"]["tipo_tienda"] | null
           vigente_desde?: string
+          vigente_hasta?: string | null
         }
         Relationships: [
           {
@@ -2518,6 +2521,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      abrir_periodo_precio: {
+        Args: {
+          p_cadena: string
+          p_precio: number
+          p_sku: string
+          p_tipo_tienda?: Database["public"]["Enums"]["tipo_tienda"]
+          p_vigente_desde: string
+        }
+        Returns: string
+      }
       agregar_parada_rutero: {
         Args: { p_fecha: string; p_mercaderista: string; p_tienda: string }
         Returns: string

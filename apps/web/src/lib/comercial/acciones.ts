@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 import {
+  abrirPeriodoPrecioSchema,
   altaExhibicionSchema,
   altaPrecioRegularSchema,
   altaPromocionSchema,
@@ -54,10 +55,43 @@ const ENTIDAD: Record<Tabla, string> = {
  * `23503` es una FK COMPUESTA `(x_id, tenant_id)`: la base impide colgar un
  * precio del SKU de otro cliente aunque la UI lo intente.
  */
-function mensajeDe(codigo: string | undefined, tabla: Tabla): string {
+/**
+ * ¿Ese 23514 lo levantó una de las verjas del histórico?
+ *
+ * Se reconoce por el texto porque las verjas comparten SQLSTATE con los CHECK de
+ * la tabla, y un errcode propio por trigger sería un catálogo nuevo que
+ * mantener en dos sitios.
+ */
+function esDelHistorico(mensaje: string | undefined): mensaje is string {
+  if (mensaje === undefined) return false;
+  return (
+    mensaje.includes("reescribir") ||
+    mensaje.includes("reabre") ||
+    mensaje.includes("se mueve") ||
+    mensaje.includes("sin precio vigente")
+  );
+}
+
+function mensajeDe(
+  codigo: string | undefined,
+  tabla: Tabla,
+  mensaje?: string,
+): string {
   if (codigo === "23505") return DUPLICADO[tabla];
   if (codigo === "23503")
     return "Ese SKU, tienda o marca no es de este cliente";
+  // Dos periodos que se pisan. Solo puede pasar en `precio_regular`: es la única
+  // tabla con restricción de exclusión.
+  if (codigo === "23P01")
+    return "Ese tramo de fechas se solapa con otro periodo del mismo SKU y cadena";
+  // 23514 lo levantan tanto los triggers que protegen el histórico como los
+  // CHECK de la tabla (`precio >= 0`, `vigente_hasta >= vigente_desde`). Los
+  // triggers ya redactan un mensaje pensado para el operador —dice qué pasó y
+  // qué hacer— y ese pasa tal cual; el resto cae al genérico. Dar por hecho que
+  // todo 23514 es la regla temporal mandaría a corregir la fecha a quien tenía
+  // mal el importe.
+  if (codigo === "23514" && esDelHistorico(mensaje))
+    return mensaje.slice(0, 200);
   return `No se pudo guardar ${ENTIDAD[tabla]}`;
 }
 
@@ -123,7 +157,7 @@ function resultado(
       `[comercial] ${operacion} de ${tabla}`,
       error.message.slice(0, 200),
     );
-    return { ok: false, error: mensajeDe(error.code, tabla) };
+    return { ok: false, error: mensajeDe(error.code, tabla, error.message) };
   }
   if (!data?.length) return { ok: false, error: SIN_PERMISO };
 
@@ -137,17 +171,55 @@ function invalidos(issues: unknown): ResultadoAccion {
   return { ok: false, error: DATOS_INVALIDOS, detalles: issues };
 }
 
-export async function crearPrecio(datos: unknown): Promise<ResultadoAccion> {
-  const parsed = altaPrecioRegularSchema.safeParse(datos);
+/**
+ * Abre un periodo de precio: cierra el vigente y arranca el nuevo.
+ *
+ * Va por RPC y no por un `insert` porque son DOS escrituras que solo tienen
+ * sentido juntas, y PostgREST no da transacción multi-sentencia: un fallo entre
+ * el cierre y la apertura dejaría al SKU sin ningún precio vigente — y eso no da
+ * error en ninguna pantalla, da `sin_precio_vigente`, o sea que el SKU sale del
+ * denominador de Perfect Store en silencio.
+ */
+export async function abrirPeriodoPrecio(
+  datos: unknown,
+): Promise<ResultadoAccion> {
+  const parsed = abrirPeriodoPrecioSchema.safeParse(datos);
   if (!parsed.success) return invalidos(parsed.error.issues);
 
   const supabase = await createServerSupabaseClient();
-  return resultado(
-    "precio_regular",
-    PRECIOS,
-    "alta",
-    await supabase.from("precio_regular").insert(parsed.data).select("id"),
-  );
+  const { tipo_tienda } = parsed.data;
+  const { error } = await supabase.rpc("abrir_periodo_precio", {
+    p_sku: parsed.data.sku_id,
+    p_cadena: parsed.data.cadena_id,
+    p_precio: parsed.data.precio,
+    p_vigente_desde: parsed.data.vigente_desde,
+    // Se OMITE cuando es nulo en vez de mandarlo: el default de la función ya
+    // es null, y "toda la cadena" es el caso mayoritario.
+    ...(tipo_tienda ? { p_tipo_tienda: tipo_tienda } : {}),
+  });
+
+  if (error) {
+    console.error(
+      "[comercial] apertura de periodo de precio",
+      error.message.slice(0, 200),
+    );
+    // La RPC redacta sus propios mensajes para el operador —de qué fecha parte el
+    // precio vigente, o por qué una fecha pasada no vale— y son mejores que
+    // cualquier texto fijo.
+    if (
+      error.code === "23514" &&
+      (error.message.includes("empezar después") ||
+        error.message.includes("reescribiría"))
+    )
+      return { ok: false, error: error.message.slice(0, 200) };
+    return {
+      ok: false,
+      error: mensajeDe(error.code, "precio_regular", error.message),
+    };
+  }
+
+  revalidatePath(PRECIOS);
+  return { ok: true };
 }
 
 export async function editarPrecio(
