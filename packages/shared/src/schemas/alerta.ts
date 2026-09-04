@@ -128,6 +128,15 @@ export const detalleAlertaSchema = z.object({
   sku_nombre: z.string().nullable(),
   visita_id: uuid.nullable(),
   visita_check_in_at: instante.nullable(),
+  /**
+   * La ventana del precio esperado, resuelta a la fecha de la VISITA.
+   *
+   * Nulas cuando la alerta no es de precio, o cuando no había precio vigente
+   * ese día. `precio_vigente_hasta` nula con `desde` presente significa que el
+   * periodo sigue abierto, no que falte el dato.
+   */
+  precio_vigente_desde: z.iso.date().nullable().default(null),
+  precio_vigente_hasta: z.iso.date().nullable().default(null),
   foto: fotoDeAlertaSchema.nullable(),
 });
 

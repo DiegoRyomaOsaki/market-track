@@ -12,6 +12,7 @@ import {
   ETIQUETA_ESTADO,
   ETIQUETA_SEVERIDAD,
   ETIQUETA_TIPO_ALERTA,
+  filaDeVigencia,
   filasDeEvidencia,
   rotuloDeFoto,
 } from "./alertas";
@@ -222,6 +223,8 @@ describe("rotuloDeFoto", () => {
     sku_nombre: null,
     visita_id: null,
     visita_check_in_at: null,
+    precio_vigente_desde: null,
+    precio_vigente_hasta: null,
   } as const;
 
   it("la foto del hallazgo se nombra tal cual", () => {
@@ -253,5 +256,33 @@ describe("rotuloDeFoto", () => {
         },
       }),
     ).toMatch(/no necesariamente/);
+  });
+});
+
+describe("filaDeVigencia", () => {
+  it("un periodo abierto dice desde cuándo, sin inventar un fin", () => {
+    expect(filaDeVigencia("2026-01-01", null)?.valor).toMatch(/^desde el /);
+  });
+
+  it("un periodo cerrado dice las dos fechas", () => {
+    const fila = filaDeVigencia("2026-01-01", "2026-07-31");
+    expect(fila?.valor).toMatch(/^del /);
+    expect(fila?.valor).toContain("al");
+  });
+
+  it("no corre la fecha un día hacia atrás", () => {
+    // `new Date("2026-01-01")` es medianoche UTC: formatearla en la zona de Lima
+    // —cinco horas por detrás— la enseñaría como 31 de diciembre. Es el error de
+    // un día que nadie ve hasta que un cliente compara con su Excel.
+    expect(filaDeVigencia("2026-01-01", null)?.valor).toContain("01");
+    expect(filaDeVigencia("2026-01-01", null)?.valor).toContain("2026");
+    expect(filaDeVigencia("2026-01-01", null)?.valor).not.toContain("2025");
+  });
+
+  it("sin precio vigente no pinta ninguna fila", () => {
+    // Una alerta que no es de precio, o un día sin precio vigente: no se
+    // inventa una ventana que no existió.
+    expect(filaDeVigencia(null, null)).toBeNull();
+    expect(filaDeVigencia(null, "2026-07-31")).toBeNull();
   });
 });
