@@ -1,3 +1,4 @@
+import { type EstadoIncidencia } from "@market-track/shared";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 
 import {
@@ -17,10 +18,15 @@ import { colores, espacio, radio } from "@/tema";
 // Componente presentacional: no consulta la réplica ni navega. Así el estado que
 // pinta —y sobre todo el vacío, que es delicado— se prueba sin PowerSync.
 
-const COLOR_ESTADO: Record<string, string> = {
+// Exhaustivo como `ETIQUETA_ESTADO`, y no un mapa laxo con color de reserva: un
+// estado nuevo tiene que romper la compilación en los dos sitios a la vez, no
+// romper en la etiqueta y colarse en gris aquí.
+const COLOR_ESTADO: Record<EstadoIncidencia, string> = {
   pendiente: colores.alerta,
   resuelta: colores.completado,
   no_resuelta: colores.textoSuave,
+  // No se pinta: `useIncidenciasDeVisita` excluye las anuladas.
+  anulada: colores.textoSuave,
 };
 
 export function ListaIncidencias({
@@ -114,9 +120,7 @@ export function ListaIncidencias({
                       style={[
                         e.estado,
                         {
-                          color:
-                            COLOR_ESTADO[incidencia.estado] ??
-                            colores.textoSuave,
+                          color: COLOR_ESTADO[incidencia.estado],
                         },
                       ]}
                     >

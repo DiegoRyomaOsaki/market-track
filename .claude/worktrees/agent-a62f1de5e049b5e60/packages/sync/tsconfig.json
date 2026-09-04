@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "allowJs": true,
+    "noEmit": true
+  },
+  // `*.mjs` cubre `eslint.config.mjs`: ESLint (project service) y tsc deben ver
+  // los MISMOS archivos, o `pnpm turbo run lint` peta con "not found by the
+  // project service" (mismo pitfall que apps/web y apps/mobile — ver CLAUDE.md).
+  "include": ["**/*.ts", "*.mjs"],
+  "exclude": ["node_modules"]
+}

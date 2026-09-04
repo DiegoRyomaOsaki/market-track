@@ -1,0 +1,44 @@
+# Servicio PowerSync para desarrollo y para el harness de aislamiento.
+# Arranca con `pnpm --filter @market-track/sync sync:up` (exige `supabase start`).
+services:
+  mongo:
+    image: mongo:7
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # El replica set es obligatorio: sin él, Mongo no da change streams y PowerSync
+  # no arranca. Un nodo basta en desarrollo.
+  mongo-init:
+    image: mongo:7
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: "no"
+    entrypoint:
+      - bash
+      - -c
+      - 'mongosh --host mongo:27017 --quiet --eval "try { rs.status() } catch (e) { rs.initiate({_id: \"rs0\", members: [{_id: 0, host: \"mongo:27017\"}]}) }"'
+
+  powersync:
+    image: journeyapps/powersync-service:1.23.3
+    command: ["start", "-r", "unified"]
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./service.yaml:/config/service.yaml
+      - ./streams.yaml:/config/streams.yaml
+    environment:
+      POWERSYNC_CONFIG_PATH: /config/service.yaml
+      # El Postgres y el JWKS del proyecto, vistos desde el contenedor.
+      PS_POSTGRES_URI: postgresql://powersync_role:powersync_local@host.docker.internal:54322/postgres
+      PS_MONGO_URI: mongodb://mongo:27017/powersync_storage
+      PS_JWKS_URI: http://host.docker.internal:54321/auth/v1/.well-known/jwks.json
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8080:8080"

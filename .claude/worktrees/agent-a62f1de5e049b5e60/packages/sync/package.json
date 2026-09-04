@@ -1,0 +1,23 @@
+{
+  "name": "@market-track/sync",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --dir src",
+    "sync:up": "docker compose -f config/docker-compose.yaml up -d",
+    "sync:down": "docker compose -f config/docker-compose.yaml down -v",
+    "test:sync": "vitest run --dir test"
+  },
+  "devDependencies": {
+    "@powersync/common": "^1.57.2",
+    "@powersync/node": "^0.19.4",
+    "@supabase/supabase-js": "^2.110.6",
+    "@types/pg": "^8.11.0",
+    "better-sqlite3": "^12.11.0",
+    "pg": "^8.13.0",
+    "vitest": "^4.1.10"
+  }
+}

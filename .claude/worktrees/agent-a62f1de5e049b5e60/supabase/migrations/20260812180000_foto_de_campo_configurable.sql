@@ -1,0 +1,19 @@
+-- MAR-90: campos de tipo foto en el formulario configurable.
+--
+-- Un solo cambio de esquema: el enum `tipo_foto` gana `campo_extra`, el tipo de
+-- las fotos capturadas por un campo `foto` del formulario configurable. La
+-- respuesta (`levantamiento_respuesta.valor`) guarda el id de la fila `foto`
+-- como cadena JSON — sin columna ni FK nueva: cualquier lectura del panel
+-- resuelve ese id contra `foto` bajo RLS, así que un id ajeno resuelve a nada.
+--
+-- ⚠️ ORDEN DE DESPLIEGUE: esta migración va ANTES que cualquier build del móvil
+-- que escriba `campo_extra`. Si un teléfono lo escribe sin que el enum exista,
+-- PostgREST responde 22P02, el conector de PowerSync lo clasifica como rechazo
+-- permanente y la fila `foto` se DESCARTA en silencio (el binario sí llega a R2,
+-- huérfano). No hay red de seguridad en código: el orden es la mitigación.
+--
+-- El valor se añade y NO se usa en esta misma migración: así no choca con la
+-- regla de "no usar un valor de enum recién creado en la misma transacción".
+-- La galería (`galeria_evidencia`) lo recoge sin cambio de SQL: su cubeta
+-- `otras` es `tipo not in ('selfie','antes','despues')`.
+alter type public.tipo_foto add value 'campo_extra';
