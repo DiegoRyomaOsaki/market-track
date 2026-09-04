@@ -1009,6 +1009,51 @@ export type Database = {
           },
         ]
       }
+      levantamiento_paso: {
+        Row: {
+          completado_at: string
+          creado_at: string
+          id: string
+          levantamiento_id: string
+          paso: Database["public"]["Enums"]["paso_levantamiento"]
+          paso_config_id: string | null
+          tenant_id: string
+        }
+        Insert: {
+          completado_at: string
+          creado_at?: string
+          id?: string
+          levantamiento_id: string
+          paso: Database["public"]["Enums"]["paso_levantamiento"]
+          paso_config_id?: string | null
+          tenant_id: string
+        }
+        Update: {
+          completado_at?: string
+          creado_at?: string
+          id?: string
+          levantamiento_id?: string
+          paso?: Database["public"]["Enums"]["paso_levantamiento"]
+          paso_config_id?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lev_paso_lev_fk"
+            columns: ["levantamiento_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "levantamiento"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "levantamiento_paso_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       levantamiento_respuesta: {
         Row: {
           campo_id: string

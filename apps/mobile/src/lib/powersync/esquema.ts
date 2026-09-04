@@ -213,6 +213,18 @@ const incidencia = new Table({
   creado_at: column.text,
 });
 
+// El módulo que el mercaderista dio por terminado. Se declara aquí porque sin la
+// tabla en el esquema local PowerSync baja las filas a `ps_untyped` y ninguna
+// consulta las encuentra: el menú pintaría todo "Pendiente" en silencio.
+const levantamiento_paso = new Table({
+  tenant_id: column.text,
+  levantamiento_id: column.text,
+  paso: column.text,
+  paso_config_id: column.text,
+  completado_at: column.text,
+  creado_at: column.text,
+});
+
 const contingencia = new Table({
   tenant_id: column.text,
   visita_id: column.text,
@@ -407,6 +419,7 @@ export const AppSchema = new Schema({
   exhibicion,
   contingencia,
   incidencia,
+  levantamiento_paso,
   solicitud_cambio_ruta,
   profile,
   formulario_levantamiento,

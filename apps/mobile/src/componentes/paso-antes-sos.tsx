@@ -47,6 +47,7 @@ type Props = {
   levantamientoId: string;
   tenantId: string;
   usuario: string;
+  onCompletar: () => void;
   onContingencia: () => void;
 };
 
@@ -56,6 +57,7 @@ export function PasoAntesSos({
   levantamientoId,
   tenantId,
   usuario,
+  onCompletar,
   onContingencia,
 }: Props) {
   const lev = useLevantamiento(levantamientoId);
@@ -150,7 +152,10 @@ export function PasoAntesSos({
           frentes_propios: frentesPorSku[s.sku_id] ?? 0,
         })),
       });
-      // El levantamiento reactivo pasa a "antes hecho" y el wizard avanza solo.
+      // Avisa como los demás módulos. Antes su avance se DERIVABA de
+      // `sos_frentes_propios`, y eso era un segundo calculador de lo mismo: el
+      // resto de los pasos lo guardaba aparte. Ahora hay un solo dueño.
+      onCompletar();
     } finally {
       setGuardando(false);
     }

@@ -1,11 +1,7 @@
 import type { DefinicionFormulario } from "@market-track/shared";
 import { describe, expect, it } from "@jest/globals";
 
-import {
-  construirPasos,
-  levantamientoCompleto,
-  PASOS,
-} from "./pasos-levantamiento";
+import { construirPasos, PASOS } from "./pasos-levantamiento";
 
 const idsFijos = PASOS.map((p) => p.id);
 
@@ -67,31 +63,5 @@ describe("construirPasos", () => {
       definicion([pasoConfig("dup", 0), pasoConfig("dup", 1)]),
     );
     expect(pasos.map((p) => p.id)).toEqual(idsFijos);
-  });
-});
-
-describe("levantamientoCompleto", () => {
-  it("no está completo sin ningún paso hecho ni omitido", () => {
-    expect(levantamientoCompleto(PASOS, new Set(), new Set())).toBe(false);
-  });
-
-  it("está completo cuando todos los pasos (fijos + configurables) están hechos", () => {
-    const pasos = construirPasos(definicion([pasoConfig("extra", 0)]));
-    const todos = new Set(pasos.map((p) => p.id));
-    expect(levantamientoCompleto(pasos, todos, new Set())).toBe(true);
-  });
-
-  it("cuenta un paso configurable omitido por contingencia como cubierto", () => {
-    const pasos = construirPasos(definicion([pasoConfig("extra", 0)]));
-    const hechos = new Set(idsFijos);
-    const omitidos = new Set(["extra"]);
-    expect(levantamientoCompleto(pasos, hechos, omitidos)).toBe(true);
-  });
-
-  it("no está completo si falta un paso configurable por hacer u omitir", () => {
-    const pasos = construirPasos(definicion([pasoConfig("extra", 0)]));
-    expect(levantamientoCompleto(pasos, new Set(idsFijos), new Set())).toBe(
-      false,
-    );
   });
 });

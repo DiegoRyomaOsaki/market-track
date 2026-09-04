@@ -64,31 +64,25 @@ export function useMarcasDeVisita(visitaId: string) {
   return { marcas: data ?? [], cargando: isLoading };
 }
 
-export type ContingenciaLocal = {
-  paso: string;
-  paso_config_id: string | null;
-  motivo: string;
-};
-
-/** Las contingencias ya registradas en un levantamiento (pasos "⚠ Omitido"). */
-export function useContingencias(levantamientoId: string | null) {
-  const { data } = useQuery<ContingenciaLocal>(
-    `SELECT paso, paso_config_id, motivo FROM contingencia WHERE levantamiento_id = ?`,
-    [levantamientoId ?? ""],
-  );
-  return data ?? [];
-}
-
 export type ContingenciaResumen = {
   paso: string;
+  /** Cuál de los pasos configurables se omitió (todos comparten `campos_extra`). */
+  paso_config_id: string | null;
   motivo: string;
   levantamiento_id: string | null;
 };
 
-/** Todas las contingencias de una visita, para el resumen del check-out. */
+/**
+ * Todas las contingencias de una visita: el resumen del check-out y los módulos
+ * "⚠ Omitido" del menú de visita.
+ *
+ * Una sola consulta por visita, no una por marca: el menú pinta los módulos de
+ * todas las marcas a la vez y una consulta por marca sería un N+1 sobre la
+ * réplica en el camino de pintado.
+ */
 export function useContingenciasDeVisita(visitaId: string) {
   const { data } = useQuery<ContingenciaResumen>(
-    `SELECT paso, motivo, levantamiento_id FROM contingencia
+    `SELECT paso, paso_config_id, motivo, levantamiento_id FROM contingencia
      WHERE visita_id = ? ORDER BY registrada_at`,
     [visitaId],
   );
@@ -96,15 +90,35 @@ export function useContingenciasDeVisita(visitaId: string) {
 }
 
 /**
- * Crea el levantamiento de una marca en una visita y devuelve su id. Lo ANCLA a
- * la versión de formulario vigente al crearse (ADR-0010): como una versión
- * publicada es inmutable, publicar un formulario nuevo no altera esta visita.
+ * Crea el levantamiento de una marca en una visita y devuelve su id, o el id del
+ * que ya existía. Lo ANCLA a la versión de formulario vigente al crearse
+ * (ADR-0010): como una versión publicada es inmutable, publicar un formulario
+ * nuevo no altera esta visita.
+ *
+ * Es IDEMPOTENTE, y tiene que serlo. Con navegación libre el mercaderista abre
+ * los módulos de una marca en el orden que quiera, así que esta función se llama
+ * más de una vez para la misma `(visita, marca)`. La base tiene
+ * `unique (visita_id, marca_id)`, pero PowerSync no replica constraints al
+ * SQLite local: dos inserts locales pasarían, la marca aparecería duplicada en
+ * la lista, y al sincronizar el servidor rechazaría uno con 23505 — un error que
+ * el conector clasifica como PERMANENTE y descarta, junto con todo lo que
+ * colgase de ese levantamiento. Pérdida silenciosa de trabajo de campo.
+ *
+ * El `WHERE NOT EXISTS` basta porque el escritor de SQLite es serie: no hay dos
+ * transacciones locales compitiendo.
  */
 export async function crearLevantamiento(d: {
   tenant_id: string;
   visita_id: string;
   marca_id: string;
 }): Promise<string> {
+  const existente = await db.getAll<{ id: string }>(
+    `SELECT id FROM levantamiento WHERE visita_id = ? AND marca_id = ?`,
+    [d.visita_id, d.marca_id],
+  );
+  const yaEstaba = existente[0]?.id;
+  if (yaEstaba) return yaEstaba;
+
   const id = Crypto.randomUUID();
   const formularioVersionId = await resolverVersionParaMarca(
     d.tenant_id,
@@ -113,10 +127,36 @@ export async function crearLevantamiento(d: {
   await db.execute(
     `INSERT INTO levantamiento
        (id, tenant_id, visita_id, marca_id, estado, formulario_version_id)
-     VALUES (?, ?, ?, ?, 'en_curso', ?)`,
-    [id, d.tenant_id, d.visita_id, d.marca_id, formularioVersionId],
+     SELECT ?, ?, ?, ?, 'en_curso', ?
+     WHERE NOT EXISTS (
+       SELECT 1 FROM levantamiento WHERE visita_id = ? AND marca_id = ?
+     )`,
+    [
+      id,
+      d.tenant_id,
+      d.visita_id,
+      d.marca_id,
+      formularioVersionId,
+      d.visita_id,
+      d.marca_id,
+    ],
   );
-  return id;
+
+  // El INSERT pudo no escribir nada si otra llamada ganó la carrera entre la
+  // lectura de arriba y aquí. Se relee en vez de devolver `id` a ciegas: un id
+  // que no existe deja al mercaderista capturando contra un levantamiento
+  // fantasma que el servidor nunca aceptará.
+  const filas = await db.getAll<{ id: string }>(
+    `SELECT id FROM levantamiento WHERE visita_id = ? AND marca_id = ?`,
+    [d.visita_id, d.marca_id],
+  );
+  const definitivo = filas[0]?.id;
+  if (!definitivo) {
+    throw new Error(
+      "no se pudo crear ni recuperar el levantamiento de esta marca",
+    );
+  }
+  return definitivo;
 }
 
 /** La versión publicada que ancla el levantamiento de una marca, o null si el
@@ -146,6 +186,39 @@ async function resolverVersionParaMarca(
     ambito: "levantamiento",
     marcaId,
   });
+}
+
+/**
+ * La definición anclada de CADA marca de la visita, llaveada por `marca_id`.
+ *
+ * Una sola consulta para todas las marcas, no una por marca: los hooks no se
+ * pueden llamar en un bucle, y aunque se pudiera, el menú de visita las pinta
+ * todas a la vez y sería un N+1 sobre la réplica en el camino de pintado.
+ *
+ * La definición puede DIFERIR entre marcas: `resolverVersionAnclada` prefiere el
+ * formulario específico de la marca sobre el de "todas las marcas", así que dos
+ * marcas de la misma visita pueden tener módulos configurables distintos.
+ */
+export function useDefinicionesDeVisita(
+  visitaId: string,
+): Map<string, DefinicionFormulario | null> {
+  const { data } = useQuery<{ marca_id: string; definicion: string | null }>(
+    `SELECT l.marca_id AS marca_id, fv.definicion AS definicion
+     FROM levantamiento l
+     LEFT JOIN formulario_version fv ON fv.id = l.formulario_version_id
+     WHERE l.visita_id = ?`,
+    [visitaId],
+  );
+  const filas = data ?? [];
+  return useMemo(() => {
+    const porMarca = new Map<string, DefinicionFormulario | null>();
+    for (const fila of filas) {
+      porMarca.set(fila.marca_id, parseDefinicionFormulario(fila.definicion));
+    }
+    return porMarca;
+    // `filas` es un array nuevo en cada render; la identidad estable es su
+    // contenido serializado, que es lo que de verdad cambia la respuesta.
+  }, [JSON.stringify(filas)]);
 }
 
 /** La definición ANCLADA al levantamiento (no la última publicada), ya validada

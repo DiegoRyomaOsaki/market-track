@@ -80,6 +80,7 @@ describe("streams.yaml — contrato de seguridad", () => {
     for (const tabla of [
       "levantamiento_sku",
       "levantamiento_respuesta",
+      "levantamiento_paso",
       "exhibicion",
     ]) {
       expect(streams).toMatch(
@@ -105,6 +106,7 @@ describe("streams.yaml — contrato de seguridad", () => {
       "revision_visita",
       "solicitud_cambio_ruta",
       "incidencia",
+      "levantamiento_paso",
     ]) {
       expect(streams).not.toMatch(
         new RegExp(

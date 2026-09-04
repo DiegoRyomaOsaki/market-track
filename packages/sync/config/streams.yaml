@@ -86,6 +86,11 @@ streams:
       - SELECT * FROM revision_visita WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND visita_id IN (SELECT id FROM visita WHERE mercaderista_id = auth.user_id())
       - SELECT * FROM levantamiento WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND visita_id IN (SELECT id FROM visita WHERE mercaderista_id = auth.user_id())
       - SELECT * FROM levantamiento_sku WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND levantamiento_id IN (SELECT id FROM levantamiento WHERE visita_id IN (SELECT id FROM visita WHERE mercaderista_id = auth.user_id()))
+      # Los módulos que el mercaderista ya dio por terminados. La app los ESCRIBE
+      # y los relee: son la mitad del avance del menú de visita —la otra es
+      # `contingencia`— y sin ellos saltar de módulo perdería el progreso.
+      # Acotados por el levantamiento de una visita propia, igual que los skus.
+      - SELECT * FROM levantamiento_paso WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND levantamiento_id IN (SELECT id FROM levantamiento WHERE visita_id IN (SELECT id FROM visita WHERE mercaderista_id = auth.user_id()))
       # Respuestas de los campos libres del formulario configurable (ADR-0010): la
       # app las ESCRIBE y las relee para hidratar los pasos configurables al
       # reanudar. Solo las de SUS levantamientos: es lo que cada compañero
