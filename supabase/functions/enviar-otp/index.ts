@@ -18,6 +18,7 @@
 import { Webhook } from "https://esm.sh/standardwebhooks@1.0.0";
 import { z } from "npm:zod@4";
 
+import { esBase64Estandar } from "../_shared/secreto.ts";
 import { clienteServicio, json } from "../_shared/supabase.ts";
 
 const RESEND_TIMEOUT_MS = 10_000;
@@ -38,8 +39,9 @@ const PREFIJO = "v1,whsec_";
  * Medido: dejó `test:sync` inservible en local durante un mes, con forma de
  * diecisiete tests de aislamiento rotos.
  *
- * El mensaje no incluye el valor —es un secreto— pero sí dónde mirar, porque el
- * mismo secreto vive en DOS ficheros y esa es la trampa que lo rompió.
+ * El mensaje no incluye el valor —es un secreto— pero sí dónde mirar: sale del
+ * `.env` de la raíz vía `config.toml`, y un `supabase/functions/.env` con esa
+ * misma clave lo SOMBREA. Esa fue la trampa que lo rompió.
  */
 function secretoDelHook(): string {
   const bruto = Deno.env.get("SEND_SMS_HOOK_SECRET");
@@ -53,19 +55,9 @@ function secretoDelHook(): string {
     ? bruto.slice(PREFIJO.length)
     : bruto;
 
-  // `atob` NO sirve de árbitro aquí: sigue la especificación web y DESCARTA los
-  // espacios en blanco antes de decodificar, así que da por bueno lo que el
-  // decodificador de la librería —más estricto— rechaza. Medido con el secreto
-  // que provocó este bug: llevaba un espacio en medio, `atob` lo decodificaba
-  // sin quejarse y `new Webhook()` moría igual. Se comprueba el alfabeto.
-  const invalido =
-    base64.length === 0 ||
-    base64.length % 4 !== 0 ||
-    !/^[A-Za-z0-9+/]+={0,2}$/.test(base64);
-
-  if (invalido) {
+  if (!esBase64Estandar(base64)) {
     throw new Error(
-      "SEND_SMS_HOOK_SECRET no es base64 válido. El formato es `v1,whsec_<base64>` y el MISMO valor tiene que estar en `.env` (lo lee GoTrue) y en `supabase/functions/.env` (lo lee esta función). Ver SETUP.md.",
+      "SEND_SMS_HOOK_SECRET no tiene forma de base64 estándar. El formato es `v1,whsec_<base64>` y sale del `.env` de la RAÍZ. Si además existe `supabase/functions/.env` con esa clave, su valor SOMBREA al de la raíz — revísalo primero. Ver SETUP.md.",
     );
   }
   return base64;

@@ -245,6 +245,57 @@ async function asegurarReplicacion(): Promise<void> {
   );
 }
 
+const RAIZ = fileURLToPath(new URL("../../../", import.meta.url));
+
+/** El valor de una clave en un fichero `.env`, o null si no está. */
+async function delEnv(ruta: string, clave: string): Promise<string | null> {
+  let texto: string;
+  try {
+    texto = await readFile(ruta, "utf8");
+  } catch {
+    return null;
+  }
+  for (const linea of texto.split(/\r?\n/)) {
+    const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)$/.exec(linea);
+    if (m?.[1] !== clave) continue;
+    const bruto = (m[2] ?? "").trim();
+    return bruto.replace(/^["']|["']$/g, "");
+  }
+  return null;
+}
+
+/**
+ * ¿Hay dos secretos del hook distintos, uno sombreando al otro?
+ *
+ * `config.toml` reparte el del `.env` de la raíz a GoTrue (que FIRMA) y al
+ * runtime de funciones (que VERIFICA). Pero si `supabase/functions/.env` define
+ * la misma clave, su valor gana en el runtime — y entonces cada lado usa un
+ * secreto distinto.
+ *
+ * Ese caso NO lo ve la sonda de más abajo: la función arranca perfectamente y
+ * rechaza una petición sin firmar con su 401 de siempre. Lo que falla es más
+ * tarde, en el challenge, y vuelve a salir como diecisiete tests de aislamiento
+ * en rojo. Se compara aquí porque el preflight corre en Node y puede leer los dos
+ * ficheros; la sonda, que va sin firma a propósito, no puede saberlo.
+ *
+ * Los valores NO se imprimen: se dice que difieren y dónde mirar.
+ */
+async function comprobarSecretoNoSombreado(): Promise<void> {
+  const CLAVE = "SEND_SMS_HOOK_SECRET";
+  const [raiz, funciones] = await Promise.all([
+    delEnv(`${RAIZ}.env`, CLAVE),
+    delEnv(`${RAIZ}supabase/functions/.env`, CLAVE),
+  ]);
+
+  // Sin el de funciones no hay sombra posible, y si falta el de la raíz lo dirá
+  // la sonda: la función no arrancará.
+  if (funciones === null || raiz === null || raiz === funciones) return;
+
+  throw new Error(
+    `\`${CLAVE}\` tiene valores DISTINTOS en \`.env\` y en \`supabase/functions/.env\`. GoTrue firma con el primero y la función verifica con el segundo, así que ninguna sesión de segundo factor se completa — y eso sale como fallos de aislamiento que no lo son. Deja el de \`supabase/functions/.env\` igual al de la raíz, o bórralo de ahí: no hace falta. Ver SETUP.md.`,
+  );
+}
+
 /**
  * ¿El hook que entrega el OTP arranca?
  *
@@ -283,7 +334,7 @@ async function comprobarHookOtp(): Promise<void> {
 
   if (respuesta.status === 500) {
     throw new Error(
-      "el hook del OTP (`enviar-otp`) no arranca, así que ninguna sesión de segundo factor es posible y los tests de aislamiento NO están probando nada. Casi siempre es `SEND_SMS_HOOK_SECRET`: tiene formato `v1,whsec_<base64>` y el MISMO valor tiene que estar en `.env` (lo lee GoTrue) y en `supabase/functions/.env` (lo lee la función). Ver SETUP.md. El motivo exacto está en `docker logs supabase_edge_runtime_market-track`.",
+      "el hook del OTP (`enviar-otp`) no arranca, así que ninguna sesión de segundo factor es posible y los tests de aislamiento NO están probando nada. Casi siempre es `SEND_SMS_HOOK_SECRET`: tiene formato `v1,whsec_<base64>` y sale del `.env` de la RAÍZ; un `supabase/functions/.env` con esa clave lo SOMBREA. Ver SETUP.md. El motivo exacto está en `docker logs supabase_edge_runtime_market-track`.",
     );
   }
 
@@ -307,6 +358,7 @@ export async function prepararHarness(): Promise<void> {
   await comprobarRol();
   // Antes que PowerSync: sin sesión aal2 no hay nada que replicar, y esperar 90 s
   // a un slot para luego morir en el login es hacer perder el tiempo dos veces.
+  await comprobarSecretoNoSombreado();
   await comprobarHookOtp();
   await comprobarServicio();
   await asegurarReplicacion();

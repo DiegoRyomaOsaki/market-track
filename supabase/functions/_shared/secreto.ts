@@ -19,3 +19,25 @@ export function igualesEnTiempoConstante(a: string, b: string): boolean {
   }
   return diferencia === 0;
 }
+
+/**
+ * ¿Tiene forma de base64 estándar? Pre-filtro, no validador canónico.
+ *
+ * Existe porque `atob` NO sirve de árbitro: sigue la especificación web y
+ * DESCARTA los espacios en blanco antes de decodificar, así que da por bueno lo
+ * que un decodificador estricto rechaza. Medido con el secreto que dejó
+ * `test:sync` inservible durante un mes: llevaba un espacio en medio, `atob` lo
+ * decodificaba sin quejarse y la librería moría igual.
+ *
+ * No pretende ser el árbitro final —acepta relleno no canónico, con bits
+ * sobrantes distintos de cero, que un decodificador maximalista rechazaría—:
+ * pretende que un valor obviamente roto muera con un mensaje que diga qué
+ * variable mirar, en vez de dentro de las tripas de una librería.
+ */
+export function esBase64Estandar(valor: string): boolean {
+  return (
+    valor.length > 0 &&
+    valor.length % 4 === 0 &&
+    /^[A-Za-z0-9+/]+={0,2}$/.test(valor)
+  );
+}
