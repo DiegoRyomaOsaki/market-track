@@ -11,7 +11,8 @@ import {
 } from "react-native";
 
 import { AyudaBoton } from "@/componentes/ayuda-boton";
-import { visitaListaParaCheckOut } from "@/lib/check-out";
+import { incidenciasQueFrenan, puedeCerrarVisita } from "@/lib/check-out";
+import { useIncidenciasDeVisita } from "@/lib/incidencias";
 import {
   useContingenciasDeVisita,
   useMarcasDeVisita,
@@ -23,10 +24,15 @@ import { type ResultadoUbicacion, ubicacionActual } from "@/lib/ubicacion";
 import { cerrarVisitaCheckOut } from "@/lib/visita";
 import { colores, espacio, radio } from "@/tema";
 
-// Check-out: resumen de la visita, bloqueo si falta auditar una marca (con salto
-// al paso faltante), bitácora opcional y salida con GPS. NO espera a que suban
-// las fotos — la cola a R2 sigue su curso. Al cerrar, arranca el cronómetro de
-// tránsito hacia la siguiente tienda.
+// Check-out: resumen de la visita, bloqueo si falta auditar una marca o queda un
+// hallazgo sin cerrar (con salto a lo que falta), bitácora opcional y salida con
+// GPS. NO espera a que suban las fotos — la cola a R2 sigue su curso. Al cerrar,
+// arranca el cronómetro de tránsito hacia la siguiente tienda.
+//
+// La verja de incidencias es la contraparte del bypass de contingencia: el
+// mercaderista nunca se frena DURANTE la visita, pero no sale sin haber cerrado
+// cada hallazgo — resuelto o justificado. La regla no vive aquí: está en
+// `lib/check-out.ts`, y esta pantalla solo la enseña.
 
 const PASO_LABEL: Record<string, string> = {
   ...Object.fromEntries(PASOS.map((p) => [p.paso, p.titulo])),
@@ -40,6 +46,8 @@ export default function CheckOut() {
   const { visita, cargando } = useVisita(visitaId);
   const { marcas } = useMarcasDeVisita(visitaId);
   const contingencias = useContingenciasDeVisita(visitaId);
+  const { incidencias, cargando: cargandoIncidencias } =
+    useIncidenciasDeVisita(visitaId);
 
   const [bitacora, setBitacora] = useState("");
   const [ubic, setUbic] = useState<ResultadoUbicacion | null>(null);
@@ -57,13 +65,19 @@ export default function CheckOut() {
     return m;
   }, [marcas]);
 
-  const lista = visitaListaParaCheckOut(
+  const sinCerrar = useMemo(
+    () => incidenciasQueFrenan(incidencias),
+    [incidencias],
+  );
+  const lista = puedeCerrarVisita(
     marcas.map((m) => m.levantamiento_estado),
+    incidencias,
   );
   const yaCerrada = visita?.estado === "completada";
 
   async function confirmar() {
-    if (!visita || !ubic?.ok || !lista || guardando) return;
+    if (!visita || !ubic?.ok || !lista || cargandoIncidencias || guardando)
+      return;
     setGuardando(true);
     try {
       const ahora = new Date().toISOString();
@@ -148,6 +162,37 @@ export default function CheckOut() {
               </Text>
             ) : null}
           </Seccion>
+
+          {sinCerrar.length > 0 ? (
+            <Seccion titulo="Incidencias por atender">
+              {sinCerrar.map((grupo) => (
+                <View key={grupo.marcaId ?? "sin-marca"}>
+                  <Text style={e.grupoMarca}>{grupo.marcaNombre}</Text>
+                  {grupo.incidencias.map((i) => (
+                    <Pressable
+                      key={i.id}
+                      onPress={() =>
+                        router.push(`/levantamiento/${visitaId}?incidencias=1`)
+                      }
+                      accessibilityRole="button"
+                      style={e.fila}
+                    >
+                      <Text style={e.filaTexto} numberOfLines={1}>
+                        {i.sku_nombre ?? "Sin producto"}
+                      </Text>
+                      <Text style={[e.chip, { color: colores.alerta }]}>
+                        Pendiente
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ))}
+              <Text style={e.avisoAlerta}>
+                No puedes cerrar la visita con hallazgos sin atender. Toca uno
+                para resolverlo, o di por qué no pudiste.
+              </Text>
+            </Seccion>
+          ) : null}
 
           {contingencias.length > 0 ? (
             <Seccion titulo="Pasos omitidos (contingencia)">
@@ -310,6 +355,13 @@ const e = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     marginTop: espacio.xs,
+  },
+  grupoMarca: {
+    color: colores.textoSuave,
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    marginTop: espacio.s,
   },
   contingencia: {
     borderTopWidth: 1,

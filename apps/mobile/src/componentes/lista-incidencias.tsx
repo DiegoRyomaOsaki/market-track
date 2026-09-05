@@ -105,7 +105,10 @@ export function ListaIncidencias({
                 <Pressable
                   key={incidencia.id}
                   onPress={() => onResolver(incidencia)}
-                  disabled={incidencia.estado !== "pendiente"}
+                  disabled={
+                    incidencia.estado !== "pendiente" ||
+                    incidencia.atendidaSinSincronizar
+                  }
                   accessibilityRole="button"
                   accessibilityLabel={`${incidencia.sku_nombre ?? item.marcaNombre}, ${ETIQUETA_ESTADO[incidencia.estado]}`}
                   style={({ pressed }) => [e.card, pressed && { opacity: 0.7 }]}
@@ -120,11 +123,19 @@ export function ListaIncidencias({
                       style={[
                         e.estado,
                         {
-                          color: COLOR_ESTADO[incidencia.estado],
+                          color: incidencia.atendidaSinSincronizar
+                            ? colores.completado
+                            : COLOR_ESTADO[incidencia.estado],
                         },
                       ]}
                     >
-                      {ETIQUETA_ESTADO[incidencia.estado]}
+                      {/* No se finge que ya está cerrada: la declaración está
+                          escrita y aún no ha subido, y decirlo es lo honesto
+                          (ADR-0012). Mientras tanto la tarjeta se apaga, o una
+                          segunda pulsación crearía otra declaración. */}
+                      {incidencia.atendidaSinSincronizar
+                        ? "Atendida — pendiente de sincronizar"
+                        : ETIQUETA_ESTADO[incidencia.estado]}
                     </Text>
                   </View>
                   <Text style={e.descripcion}>

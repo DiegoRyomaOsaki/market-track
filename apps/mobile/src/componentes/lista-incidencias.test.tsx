@@ -150,4 +150,24 @@ describe("ListaIncidencias", () => {
       screen.getByText("un texto que la lista nunca pinta"),
     ).toThrow();
   });
+
+  it("una atendida sin sincronizar lo DICE, en vez de fingir que ya está cerrada", async () => {
+    // La declaración está escrita y aún no ha subido. Decir "Pendiente" haría
+    // que el mercaderista la atendiera otra vez, y esa segunda declaración
+    // chocaría en el servidor.
+    await pintar({
+      incidencias: [incidencia({ atendidaSinSincronizar: true })],
+    });
+    expect(screen.getByText(/pendiente de sincronizar/i)).toBeTruthy();
+  });
+
+  it("y su tarjeta se apaga: una segunda pulsación crearía otra declaración", async () => {
+    const onResolver = jest.fn();
+    await pintar({
+      incidencias: [incidencia({ atendidaSinSincronizar: true })],
+      onResolver,
+    });
+    await fireEvent.press(screen.getByText("Licuadora X"));
+    expect(onResolver).not.toHaveBeenCalled();
+  });
 });

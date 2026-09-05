@@ -46,7 +46,10 @@ import { colores, espacio, radio } from "@/tema";
 export default function VisitaLevantamiento() {
   const router = useRouter();
   const sesion = useSesion();
-  const { visitaId } = useLocalSearchParams<{ visitaId: string }>();
+  const { visitaId, incidencias: abrirIncidencias } = useLocalSearchParams<{
+    visitaId: string;
+    incidencias?: string;
+  }>();
 
   const { visita } = useVisita(visitaId);
   const { marcas, cargando } = useMarcasDeVisita(visitaId);
@@ -60,7 +63,11 @@ export default function VisitaLevantamiento() {
   } | null>(null);
   // La pestaña de incidencias es un tercer estado de ESTA pantalla, no una ruta:
   // así se puede abrir con un módulo abierto y volver a él, en vez de al menú.
-  const [verIncidencias, setVerIncidencias] = useState(false);
+  // El check-out enlaza aquí con `?incidencias=1` para llevar al mercaderista
+  // directo a lo que le falta cerrar, de un toque.
+  const [verIncidencias, setVerIncidencias] = useState(
+    abrirIncidencias === "1",
+  );
   const [atendiendo, setAtendiendo] = useState<IncidenciaLocal | null>(null);
   const {
     incidencias,

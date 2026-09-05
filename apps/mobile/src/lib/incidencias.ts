@@ -396,16 +396,30 @@ export function unirHallazgos(
   return unidos;
 }
 
-/** Cuántas quedan por atender. `no_resuelta` ya fue atendida: no cuenta. */
+/**
+ * ¿Esta incidencia sigue sin atender?
+ *
+ * Único dueño de esa pregunta: lo consultan el contador de la cabecera y la
+ * verja de check-out. Dos copias del predicado se separarían en cuanto una de
+ * las dos aprendiera un caso nuevo, y entonces la lista diría una cosa y el
+ * botón de salir otra.
+ *
+ * `no_resuelta` ya fue atendida —el mercaderista la miró y dijo por qué no
+ * pudo— así que no cuenta. Y una atendida sin sincronizar tampoco: ya hizo su
+ * parte, y seguir contándola dejaría la verja impasable hasta que hubiera
+ * señal, que es la trampa que ADR-0012 existe para no construir.
+ */
+export function sigueSinAtender(incidencia: IncidenciaLocal): boolean {
+  return (
+    incidencia.estado === "pendiente" && !incidencia.atendidaSinSincronizar
+  );
+}
+
+/** Cuántas quedan por atender. */
 export function contarPendientes(
   incidencias: readonly IncidenciaLocal[],
 ): number {
-  // Una atendida sin sincronizar NO cuenta: el mercaderista ya hizo su parte, y
-  // seguir contándola dejaría la verja impasable hasta que hubiera señal — que
-  // es exactamente la trampa que ADR-0012 existe para no construir.
-  return incidencias.filter(
-    (i) => i.estado === "pendiente" && !i.atendidaSinSincronizar,
-  ).length;
+  return incidencias.filter(sigueSinAtender).length;
 }
 
 export type GrupoDeMarca = {
