@@ -545,6 +545,200 @@ describe("motor de incidencias — el hallazgo que deja de existir", () => {
   });
 });
 
+describe("la atención declarada sin señal encuentra su incidencia", () => {
+  // El caso que ADR-0012 existe para cubrir: la visita se hizo entera sin señal,
+  // así que el mercaderista atendió un hallazgo que en su réplica solo existía
+  // derivado. La declaración sube por su propia tabla y tiene que volcarse sobre
+  // la incidencia que el motor produce al llegar la fila del levantamiento.
+
+  /** Declara una atención con la clave natural del hallazgo, como hace el móvil. */
+  async function declarar(
+    c: Client,
+    cadena: Cadena,
+    campos: {
+      origen?: string;
+      estado?: string;
+      accion?: string | null;
+      motivo?: string | null;
+      levantamiento?: string | null;
+      sku?: string | null;
+    } = {},
+  ): Promise<void> {
+    await c.query(
+      `insert into public.atencion_hallazgo
+         (tenant_id, visita_id, levantamiento_id, sku_id, origen, estado,
+          accion_tomada, motivo)
+       values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [
+        TENANTS.maracumango,
+        cadena.visita,
+        campos.levantamiento === undefined
+          ? cadena.levantamiento
+          : campos.levantamiento,
+        campos.sku === undefined ? SKU : campos.sku,
+        campos.origen ?? "quiebre",
+        campos.estado ?? "resuelta",
+        campos.accion ?? "Repuse desde bodega",
+        campos.motivo ?? null,
+      ],
+    );
+  }
+
+  async function atencionesDe(
+    c: Client,
+    visita: string,
+  ): Promise<{ aplicada: boolean; estado: string }[]> {
+    const r = await c.query<{ aplicada_at: string | null; estado: string }>(
+      `select aplicada_at, estado from public.atencion_hallazgo
+        where visita_id = $1 order by creado_at`,
+      [visita],
+    );
+    return r.rows.map((f) => ({
+      aplicada: f.aplicada_at !== null,
+      estado: f.estado,
+    }));
+  }
+
+  it("la atención llega ANTES que la incidencia y se aplica al nacer", async () => {
+    // El orden real de una visita offline: la declaración y la fila del
+    // levantamiento suben en la misma tanda, y nada garantiza cuál va primero.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await abrirVisita(c, "f1");
+      await pasoSos(c, cadena);
+      await declarar(c, cadena);
+
+      // Todavía no hay hallazgo: la declaración espera.
+      expect(await atencionesDe(c, cadena.visita)).toEqual([
+        { aplicada: false, estado: "resuelta" },
+      ]);
+
+      // Ahora llega el stock y el motor produce el quiebre.
+      await pasoActualiza(c, cadena, { stock_sistema: 10, stock_piso: 0 });
+
+      const incidencias = await incidenciasDe(c, cadena.visita);
+      expect(incidencias).toHaveLength(1);
+      expect(incidencias[0]?.estado).toBe("resuelta");
+      expect(incidencias[0]?.accion_tomada).toBe("Repuse desde bodega");
+      expect(await atencionesDe(c, cadena.visita)).toEqual([
+        { aplicada: true, estado: "resuelta" },
+      ]);
+    });
+  });
+
+  it("la atención llega DESPUÉS y se aplica en el acto", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await levantarEnPasos(c, "f2", {
+        stock_sistema: 10,
+        stock_piso: 0,
+      });
+      expect((await incidenciasDe(c, cadena.visita))[0]?.estado).toBe(
+        "pendiente",
+      );
+
+      await declarar(c, cadena, {
+        estado: "no_resuelta",
+        accion: null,
+        motivo: "El encargado no autorizó tocar la góndola",
+      });
+
+      const incidencias = await incidenciasDe(c, cadena.visita);
+      expect(incidencias[0]?.estado).toBe("no_resuelta");
+      expect(await atencionesDe(c, cadena.visita)).toEqual([
+        { aplicada: true, estado: "no_resuelta" },
+      ]);
+    });
+  });
+
+  it("una atención que el motor nunca confirma queda VISIBLE y sin aplicar", async () => {
+    // El espejo del móvil vio un hallazgo que el motor no produce. Descartarla
+    // en silencio borraría la única señal de que las dos reglas divergieron.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await levantarEnPasos(c, "f3", {
+        stock_sistema: 5,
+        stock_piso: 5,
+      });
+      await declarar(c, cadena);
+
+      expect(await incidenciasDe(c, cadena.visita)).toHaveLength(0);
+      expect(await atencionesDe(c, cadena.visita)).toEqual([
+        { aplicada: false, estado: "resuelta" },
+      ]);
+    });
+  });
+
+  it("no vuelca sobre una incidencia que el motor ya ANULÓ", async () => {
+    // El hallazgo dejó de existir —el mercaderista repuso y volvió a contar—,
+    // así que volcar encima resucitaría algo que no está.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await levantarEnPasos(c, "f4", {
+        stock_sistema: 10,
+        stock_piso: 0,
+      });
+      await pasoActualiza(c, cadena, { stock_piso: 10 });
+
+      const anulada = await incidenciasDe(c, cadena.visita);
+      expect(anulada[0]?.estado).toBe("anulada");
+
+      await declarar(c, cadena);
+
+      expect((await incidenciasDe(c, cadena.visita))[0]?.estado).toBe(
+        "anulada",
+      );
+      expect(await atencionesDe(c, cadena.visita)).toEqual([
+        { aplicada: false, estado: "resuelta" },
+      ]);
+    });
+  });
+
+  it("corregir la declaración antes de sincronizar vuelve a volcarla", async () => {
+    // Sin UPDATE, ese cambio de opinión moriría con un 42501 que el conector
+    // clasifica como permanente y descarta en silencio.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await levantarEnPasos(c, "f5", {
+        stock_sistema: 10,
+        stock_piso: 0,
+      });
+      await declarar(c, cadena, {
+        estado: "no_resuelta",
+        accion: null,
+        motivo: "No pude",
+      });
+      expect((await incidenciasDe(c, cadena.visita))[0]?.estado).toBe(
+        "no_resuelta",
+      );
+    });
+  });
+
+  it("el mercaderista NO puede declarar sobre la visita de un compañero", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      await expect(
+        c.query(
+          `insert into public.atencion_hallazgo
+             (tenant_id, visita_id, origen, estado)
+           values ($1,$2,'quiebre','resuelta')`,
+          [TENANTS.maracumango, VISITA_RIVAL],
+        ),
+      ).rejects.toThrow();
+    });
+  });
+
+  it("`aplicada_at` no la puede escribir el cliente: es la señal de divergencia", async () => {
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await abrirVisita(c, "f6");
+      await pasoSos(c, cadena);
+      await expect(
+        c.query(
+          `insert into public.atencion_hallazgo
+             (tenant_id, visita_id, levantamiento_id, sku_id, origen, estado,
+              aplicada_at)
+           values ($1,$2,$3,$4,'quiebre','resuelta', now())`,
+          [TENANTS.maracumango, cadena.visita, cadena.levantamiento, SKU],
+        ),
+      ).rejects.toThrow(/permission denied/);
+    });
+  });
+});
+
 describe("la foto de resolución es de SU visita", () => {
   // La FK de `foto_resolucion_id` solo valida `(id, tenant_id)`, y la política
   // comprueba que el mercaderista es dueño de la VISITA de la incidencia — pero

@@ -105,6 +105,97 @@ export type Database = {
           },
         ]
       }
+      atencion_hallazgo: {
+        Row: {
+          accion_tomada: string | null
+          aplicada_at: string | null
+          creado_at: string
+          estado: Database["public"]["Enums"]["estado_incidencia"]
+          exhibicion_negociada_id: string | null
+          foto_resolucion_id: string | null
+          id: string
+          levantamiento_id: string | null
+          motivo: string | null
+          origen: Database["public"]["Enums"]["origen_incidencia"]
+          sku_id: string | null
+          tenant_id: string
+          visita_id: string
+        }
+        Insert: {
+          accion_tomada?: string | null
+          aplicada_at?: string | null
+          creado_at?: string
+          estado: Database["public"]["Enums"]["estado_incidencia"]
+          exhibicion_negociada_id?: string | null
+          foto_resolucion_id?: string | null
+          id?: string
+          levantamiento_id?: string | null
+          motivo?: string | null
+          origen: Database["public"]["Enums"]["origen_incidencia"]
+          sku_id?: string | null
+          tenant_id: string
+          visita_id: string
+        }
+        Update: {
+          accion_tomada?: string | null
+          aplicada_at?: string | null
+          creado_at?: string
+          estado?: Database["public"]["Enums"]["estado_incidencia"]
+          exhibicion_negociada_id?: string | null
+          foto_resolucion_id?: string | null
+          id?: string
+          levantamiento_id?: string | null
+          motivo?: string | null
+          origen?: Database["public"]["Enums"]["origen_incidencia"]
+          sku_id?: string | null
+          tenant_id?: string
+          visita_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "atencion_exh_neg_fk"
+            columns: ["exhibicion_negociada_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "exhibicion_negociada"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "atencion_foto_fk"
+            columns: ["foto_resolucion_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "foto"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "atencion_hallazgo_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "atencion_lev_fk"
+            columns: ["levantamiento_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "levantamiento"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "atencion_sku_fk"
+            columns: ["sku_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "sku"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "atencion_visita_fk"
+            columns: ["visita_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "visita"
+            referencedColumns: ["id", "tenant_id"]
+          },
+        ]
+      }
       cadena: {
         Row: {
           activo: boolean
