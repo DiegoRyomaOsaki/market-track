@@ -9,6 +9,7 @@ import * as Crypto from "expo-crypto";
 import { useMemo } from "react";
 
 import { encolarFoto } from "./cola-fotos-instancia";
+import { mensajeDeError } from "./error";
 import type { FotoCapturada } from "./foto-captura";
 import {
   type ContextoPrecio,
@@ -33,6 +34,18 @@ import { db } from "./powersync/db";
 // clave natural del hallazgo. Un `UPDATE incidencia … WHERE id = ?` sin señal
 // afecta a cero filas, PowerSync no encola nada, y la acción del mercaderista se
 // perdería sin un solo mensaje. Una puerta, un dueño. Ver docs/adr/0012.
+
+/**
+ * El primero de varios errores, ya legible. Null si ninguno falló.
+ *
+ * Pasa por `mensajeDeError` y no por `String()`: un cliente de infraestructura
+ * puede arrastrar contenido de la respuesta en su `.message`, y un objeto suelto
+ * se convertiría en `[object Object]` — un mensaje inútil justo cuando hace falta.
+ */
+function primerError(errores: readonly unknown[]): string | null {
+  const fallo = errores.find((e) => e !== null && e !== undefined);
+  return fallo === undefined ? null : mensajeDeError(fallo);
+}
 
 /** Una incidencia tal como baja a la réplica, con lo que hace falta pintarla. */
 export type IncidenciaLocal = {
@@ -93,8 +106,11 @@ export function useIncidenciasDeVisita(visitaId: string) {
     [visitaId],
   );
 
-  const { derivados, cargando: cargandoDerivados } =
-    useHallazgosDerivados(visitaId);
+  const {
+    derivados,
+    cargando: cargandoDerivados,
+    error: errorDerivados,
+  } = useHallazgosDerivados(visitaId);
   const {
     data: atenciones,
     isLoading: cargandoAtenciones,
@@ -118,11 +134,7 @@ export function useIncidenciasDeVisita(visitaId: string) {
   return {
     incidencias,
     cargando: isLoading || cargandoDerivados || cargandoAtenciones,
-    error: error
-      ? String(error)
-      : errorAtenciones
-        ? String(errorAtenciones)
-        : null,
+    error: primerError([error, errorAtenciones, errorDerivados]),
   };
 }
 
@@ -158,8 +170,13 @@ type FilaDerivada = {
 function useHallazgosDerivados(visitaId: string): {
   derivados: IncidenciaLocal[];
   cargando: boolean;
+  error: unknown;
 } {
-  const { data: visita, isLoading: cargandoVisita } = useQuery<{
+  const {
+    data: visita,
+    isLoading: cargandoVisita,
+    error: errorVisita,
+  } = useQuery<{
     check_in_at: string | null;
     tenant_id: string | null;
     cadena_id: string | null;
@@ -171,7 +188,11 @@ function useHallazgosDerivados(visitaId: string): {
   );
   const cadenaId = visita?.[0]?.cadena_id ?? null;
 
-  const { data: filas, isLoading: cargandoFilas } = useQuery<FilaDerivada>(
+  const {
+    data: filas,
+    isLoading: cargandoFilas,
+    error: errorFilas,
+  } = useQuery<FilaDerivada>(
     `SELECT ls.levantamiento_id, ls.sku_id, l.marca_id,
             m.nombre AS marca_nombre, s.nombre AS sku_nombre,
             m.tolerancia_precio_pct,
@@ -185,7 +206,11 @@ function useHallazgosDerivados(visitaId: string): {
     [visitaId],
   );
 
-  const { data: exhibiciones, isLoading: cargandoExh } = useQuery<{
+  const {
+    data: exhibiciones,
+    isLoading: cargandoExh,
+    error: errorExh,
+  } = useQuery<{
     levantamiento_id: string;
     exhibicion_negociada_id: string | null;
     instalada: number | null;
@@ -207,7 +232,11 @@ function useHallazgosDerivados(visitaId: string): {
   // otro —y una promo ajena justifica un precio bajo real—, porque el stream baja
   // el maestro del cliente entero. El SQL autoritativo filtra por
   // `tenant_id AND sku_id AND cadena_id`; esto tiene que filtrar igual.
-  const { data: periodos, isLoading: cargandoPrecios } = useQuery<{
+  const {
+    data: periodos,
+    isLoading: cargandoPrecios,
+    error: errorPrecios,
+  } = useQuery<{
     sku_id: string;
     precio: number;
     vigente_desde: string;
@@ -224,7 +253,11 @@ function useHallazgosDerivados(visitaId: string): {
     [cadenaId ?? "", visitaId],
   );
 
-  const { data: promociones, isLoading: cargandoPromos } = useQuery<{
+  const {
+    data: promociones,
+    isLoading: cargandoPromos,
+    error: errorPromos,
+  } = useQuery<{
     sku_id: string;
     precio_promo: number;
     fecha_inicio: string;
@@ -324,7 +357,19 @@ function useHallazgosDerivados(visitaId: string): {
     return salida;
   }, [cargando, visitaId, visita, filas, exhibiciones, periodos, promociones]);
 
-  return { derivados, cargando };
+  // El error NO se puede tragar: ante un fallo el hook devuelve `data: []` y
+  // `isLoading: false`, así que sin propagarlo la lista se ve VACÍA y la verja de
+  // check-out da verde — deja salir de la tienda con hallazgos sin atender y sin
+  // que nadie se entere. Es el mismo silencio que ADR-0012 existe para eliminar.
+  const error =
+    errorVisita ??
+    errorFilas ??
+    errorExh ??
+    errorPrecios ??
+    errorPromos ??
+    null;
+
+  return { derivados, cargando, error };
 }
 
 /**
@@ -396,16 +441,43 @@ export function unirHallazgos(
   return unidos;
 }
 
-/** Cuántas quedan por atender. `no_resuelta` ya fue atendida: no cuenta. */
+/**
+ * ¿Esta incidencia sigue sin atender?
+ *
+ * Único dueño de esa pregunta: lo consultan el contador de la cabecera y la
+ * verja de check-out. Dos copias del predicado se separarían en cuanto una de
+ * las dos aprendiera un caso nuevo, y entonces la lista diría una cosa y el
+ * botón de salir otra.
+ *
+ * `no_resuelta` ya fue atendida —el mercaderista la miró y dijo por qué no
+ * pudo— así que no cuenta. Y una atendida sin sincronizar tampoco: ya hizo su
+ * parte, y seguir contándola dejaría la verja impasable hasta que hubiera
+ * señal, que es la trampa que ADR-0012 existe para no construir.
+ */
+const FRENA_LA_SALIDA: Record<EstadoIncidencia, boolean> = {
+  pendiente: true,
+  // Atendida: el mercaderista la miró y dijo qué hizo o por qué no pudo.
+  resuelta: false,
+  no_resuelta: false,
+  // El hallazgo dejó de existir porque se corrigió el dato.
+  anulada: false,
+};
+
+export function sigueSinAtender(incidencia: IncidenciaLocal): boolean {
+  // Mapa exhaustivo y no `estado === "pendiente"`: escrito en positivo, un
+  // estado nuevo del enum caería en `false` y la verja lo dejaría pasar sin que
+  // nada se rompiera. Aquí tiene que romper la COMPILACIÓN — es una verja, y su
+  // fallo no se nota. Mismo criterio que `ETIQUETA_ESTADO` y `DESCRIPCION`.
+  return (
+    FRENA_LA_SALIDA[incidencia.estado] && !incidencia.atendidaSinSincronizar
+  );
+}
+
+/** Cuántas quedan por atender. */
 export function contarPendientes(
   incidencias: readonly IncidenciaLocal[],
 ): number {
-  // Una atendida sin sincronizar NO cuenta: el mercaderista ya hizo su parte, y
-  // seguir contándola dejaría la verja impasable hasta que hubiera señal — que
-  // es exactamente la trampa que ADR-0012 existe para no construir.
-  return incidencias.filter(
-    (i) => i.estado === "pendiente" && !i.atendidaSinSincronizar,
-  ).length;
+  return incidencias.filter(sigueSinAtender).length;
 }
 
 export type GrupoDeMarca = {
@@ -438,9 +510,10 @@ export function agruparPorMarca(
 
   for (const grupo of grupos.values()) {
     grupo.incidencias.sort((a, b) => {
-      const pendiente = (i: IncidenciaLocal) =>
-        i.estado === "pendiente" ? 0 : 1;
-      return pendiente(a) - pendiente(b);
+      // Mismo predicado que la verja: una atendida sin sincronizar ya no es
+      // lo que el mercaderista tiene que mirar primero.
+      const orden = (i: IncidenciaLocal) => (sigueSinAtender(i) ? 0 : 1);
+      return orden(a) - orden(b);
     });
   }
 

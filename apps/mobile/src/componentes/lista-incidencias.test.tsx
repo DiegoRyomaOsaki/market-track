@@ -150,4 +150,31 @@ describe("ListaIncidencias", () => {
       screen.getByText("un texto que la lista nunca pinta"),
     ).toThrow();
   });
+
+  it("una atendida sin sincronizar lo DICE, en vez de fingir que ya está cerrada", async () => {
+    // La declaración está escrita y aún no ha subido. Decir "Pendiente" haría
+    // que el mercaderista la atendiera otra vez, y esa segunda declaración
+    // chocaría en el servidor.
+    await pintar({
+      incidencias: [incidencia({ atendidaSinSincronizar: true })],
+    });
+    expect(screen.getByText(/pendiente de sincronizar/i)).toBeTruthy();
+  });
+
+  it("y su tarjeta se apaga: una segunda pulsación crearía otra declaración", async () => {
+    const onResolver = jest.fn();
+    await pintar({
+      incidencias: [incidencia({ atendidaSinSincronizar: true })],
+      onResolver,
+    });
+    // Se pulsa el BOTÓN, no el texto de dentro: `fireEvent` sube por el árbol
+    // buscando un handler, así que consultar el `<Text>` probaría la propagación
+    // de RNTL y no el `disabled` que se quiere fijar.
+    await fireEvent.press(
+      screen.getByRole("button", {
+        name: "Licuadora X, Atendida — pendiente de sincronizar",
+      }),
+    );
+    expect(onResolver).not.toHaveBeenCalled();
+  });
 });
