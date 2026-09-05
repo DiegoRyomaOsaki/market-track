@@ -11,8 +11,12 @@ import {
 } from "react-native";
 
 import { AyudaBoton } from "@/componentes/ayuda-boton";
-import { incidenciasQueFrenan, puedeCerrarVisita } from "@/lib/check-out";
-import { useIncidenciasDeVisita } from "@/lib/incidencias";
+import {
+  incidenciasQueFrenan,
+  puedeCerrarVisita,
+  visitaListaParaCheckOut,
+} from "@/lib/check-out";
+import { ETIQUETA_ESTADO, useIncidenciasDeVisita } from "@/lib/incidencias";
 import {
   useContingenciasDeVisita,
   useMarcasDeVisita,
@@ -46,8 +50,11 @@ export default function CheckOut() {
   const { visita, cargando } = useVisita(visitaId);
   const { marcas } = useMarcasDeVisita(visitaId);
   const contingencias = useContingenciasDeVisita(visitaId);
-  const { incidencias, cargando: cargandoIncidencias } =
-    useIncidenciasDeVisita(visitaId);
+  const {
+    incidencias,
+    cargando: cargandoIncidencias,
+    error: errorIncidencias,
+  } = useIncidenciasDeVisita(visitaId);
 
   const [bitacora, setBitacora] = useState("");
   const [ubic, setUbic] = useState<ResultadoUbicacion | null>(null);
@@ -69,15 +76,18 @@ export default function CheckOut() {
     () => incidenciasQueFrenan(incidencias),
     [incidencias],
   );
+  const marcasCompletas = visitaListaParaCheckOut(
+    marcas.map((m) => m.levantamiento_estado),
+  );
   const lista = puedeCerrarVisita(
     marcas.map((m) => m.levantamiento_estado),
     incidencias,
+    { cargando: cargandoIncidencias, error: errorIncidencias },
   );
   const yaCerrada = visita?.estado === "completada";
 
   async function confirmar() {
-    if (!visita || !ubic?.ok || !lista || cargandoIncidencias || guardando)
-      return;
+    if (!visita || !ubic?.ok || !lista || guardando) return;
     setGuardando(true);
     try {
       const ahora = new Date().toISOString();
@@ -155,7 +165,7 @@ export default function CheckOut() {
                 </Pressable>
               );
             })}
-            {!lista ? (
+            {!marcasCompletas ? (
               <Text style={e.avisoAlerta}>
                 Faltan marcas por auditar. Toca una para completarla; también
                 puedes omitir un paso con motivo (contingencia).
@@ -163,7 +173,22 @@ export default function CheckOut() {
             ) : null}
           </Seccion>
 
-          {sinCerrar.length > 0 ? (
+          {errorIncidencias !== null ? (
+            <Seccion titulo="Incidencias por atender">
+              {/* No se puede saber si quedan hallazgos, así que NO se deja
+                  cerrar: una lista vacía por un fallo de la réplica se ve igual
+                  que una visita limpia. */}
+              <Text style={e.avisoAlerta}>
+                No se pudo comprobar si quedan hallazgos por atender, así que la
+                visita no se puede cerrar todavía. Vuelve a entrar en un
+                momento.
+              </Text>
+            </Seccion>
+          ) : cargandoIncidencias ? (
+            <Seccion titulo="Incidencias por atender">
+              <Text style={e.avisoSuave}>Comprobando incidencias…</Text>
+            </Seccion>
+          ) : sinCerrar.length > 0 ? (
             <Seccion titulo="Incidencias por atender">
               {sinCerrar.map((grupo) => (
                 <View key={grupo.marcaId ?? "sin-marca"}>
@@ -172,7 +197,9 @@ export default function CheckOut() {
                     <Pressable
                       key={i.id}
                       onPress={() =>
-                        router.push(`/levantamiento/${visitaId}?incidencias=1`)
+                        router.push(
+                          `/levantamiento/${visitaId}?incidencias=1&hallazgo=${encodeURIComponent(i.id)}`,
+                        )
                       }
                       accessibilityRole="button"
                       style={e.fila}
@@ -181,7 +208,7 @@ export default function CheckOut() {
                         {i.sku_nombre ?? "Sin producto"}
                       </Text>
                       <Text style={[e.chip, { color: colores.alerta }]}>
-                        Pendiente
+                        {ETIQUETA_ESTADO[i.estado]}
                       </Text>
                     </Pressable>
                   ))}
@@ -351,6 +378,12 @@ const e = StyleSheet.create({
   chip: { fontSize: 12, fontWeight: "700" },
   punto: { width: 10, height: 10, borderRadius: 5 },
   avisoAlerta: {
+    color: colores.textoSuave,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: espacio.xs,
+  },
+  avisoSuave: {
     color: colores.textoSuave,
     fontSize: 13,
     lineHeight: 18,

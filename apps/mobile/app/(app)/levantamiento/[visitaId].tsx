@@ -46,9 +46,14 @@ import { colores, espacio, radio } from "@/tema";
 export default function VisitaLevantamiento() {
   const router = useRouter();
   const sesion = useSesion();
-  const { visitaId, incidencias: abrirIncidencias } = useLocalSearchParams<{
+  const {
+    visitaId,
+    incidencias: abrirIncidencias,
+    hallazgo: hallazgoPedido,
+  } = useLocalSearchParams<{
     visitaId: string;
     incidencias?: string;
+    hallazgo?: string;
   }>();
 
   const { visita } = useVisita(visitaId);
@@ -63,12 +68,22 @@ export default function VisitaLevantamiento() {
   } | null>(null);
   // La pestaña de incidencias es un tercer estado de ESTA pantalla, no una ruta:
   // así se puede abrir con un módulo abierto y volver a él, en vez de al menú.
-  // El check-out enlaza aquí con `?incidencias=1` para llevar al mercaderista
-  // directo a lo que le falta cerrar, de un toque.
   const [verIncidencias, setVerIncidencias] = useState(
     abrirIncidencias === "1",
   );
   const [atendiendo, setAtendiendo] = useState<IncidenciaLocal | null>(null);
+
+  // El check-out enlaza aquí con `?incidencias=1&hallazgo=<id>` para llevar al
+  // mercaderista directo a lo que le falta cerrar.
+  //
+  // Va en un efecto y NO solo en el inicializador de `useState`: la pantalla ya
+  // está en la pila —al check-out se llega desde ella— así que un `push` no
+  // garantiza remontarla, y el estado se quedaría pegado del primer montaje. El
+  // segundo toque parecería ignorado y aterrizaría en el menú de módulos.
+  useEffect(() => {
+    if (abrirIncidencias !== "1") return;
+    setVerIncidencias(true);
+  }, [abrirIncidencias, hallazgoPedido]);
   const {
     incidencias,
     pendientes,

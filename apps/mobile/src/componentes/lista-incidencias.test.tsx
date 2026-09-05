@@ -167,7 +167,14 @@ describe("ListaIncidencias", () => {
       incidencias: [incidencia({ atendidaSinSincronizar: true })],
       onResolver,
     });
-    await fireEvent.press(screen.getByText("Licuadora X"));
+    // Se pulsa el BOTÓN, no el texto de dentro: `fireEvent` sube por el árbol
+    // buscando un handler, así que consultar el `<Text>` probaría la propagación
+    // de RNTL y no el `disabled` que se quiere fijar.
+    await fireEvent.press(
+      screen.getByRole("button", {
+        name: "Licuadora X, Atendida — pendiente de sincronizar",
+      }),
+    );
     expect(onResolver).not.toHaveBeenCalled();
   });
 });

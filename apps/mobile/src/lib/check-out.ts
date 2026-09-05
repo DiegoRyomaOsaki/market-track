@@ -48,18 +48,38 @@ export function incidenciasQueFrenan(
 }
 
 /**
- * La visita está lista para cerrar: todas las marcas auditadas Y ningún hallazgo
- * sin cerrar.
+ * Cómo fue la lectura de las incidencias, no solo lo que devolvió.
  *
- * `incidencias` es obligatorio a propósito. Con un valor por defecto, un llamador
- * que se lo olvidara obtendría la verja en VERDE — el fallo silencioso que deja
- * salir al mercaderista con hallazgos sin atender, que es justo lo que esta
- * función existe para impedir. Sin default, `tsc` obliga a decidirlo.
+ * Entra en la regla porque una lista VACÍA significa dos cosas opuestas: «no hay
+ * hallazgos» o «todavía no sé si los hay». Sin esto no se pueden distinguir.
+ */
+export type LecturaIncidencias = {
+  cargando: boolean;
+  error: string | null;
+};
+
+/**
+ * La visita está lista para cerrar: todas las marcas auditadas, la lectura de
+ * incidencias resuelta y sin error, y ningún hallazgo sin cerrar.
+ *
+ * **Los dos últimos parámetros son obligatorios a propósito.** Con un valor por
+ * defecto, un llamador que se los olvidara obtendría la verja en VERDE — el
+ * fallo silencioso que deja salir al mercaderista con hallazgos sin atender, que
+ * es justo lo que esta función existe para impedir. Sin default, `tsc` obliga a
+ * decidirlo en cada llamada.
+ *
+ * Y `lectura` no es celo de más: MEDIDO contra `@powersync/react`, cuando una
+ * consulta falla el hook devuelve `isLoading: false` **y `data: []`**. O sea que
+ * un fallo de la réplica es indistinguible de una visita sin hallazgos, y sin
+ * mirar el error la verja se abre justo cuando menos se puede confiar en ella.
+ * Una verja que falla en abierto no se nota: falla CERRADA.
  */
 export function puedeCerrarVisita(
   estadosLevantamiento: readonly (string | null)[],
   incidencias: readonly IncidenciaLocal[],
+  lectura: LecturaIncidencias,
 ): boolean {
+  if (lectura.cargando || lectura.error !== null) return false;
   return (
     visitaListaParaCheckOut(estadosLevantamiento) &&
     incidenciasQueFrenan(incidencias).length === 0

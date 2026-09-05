@@ -9,6 +9,7 @@ jest.mock("./cola-fotos-instancia", () => ({ encolarFoto: jest.fn() }));
 
 import {
   incidenciasQueFrenan,
+  type LecturaIncidencias,
   puedeCerrarVisita,
   visitaListaParaCheckOut,
 } from "./check-out";
@@ -69,10 +70,11 @@ describe("la verja de incidencias", () => {
   });
 
   const TODAS_AUDITADAS = ["completado", "omitido"];
+  const LEIDAS: LecturaIncidencias = { cargando: false, error: null };
 
   it("sin incidencias, la visita se puede cerrar", () => {
     expect(incidenciasQueFrenan([])).toEqual([]);
-    expect(puedeCerrarVisita(TODAS_AUDITADAS, [])).toBe(true);
+    expect(puedeCerrarVisita(TODAS_AUDITADAS, [], LEIDAS)).toBe(true);
   });
 
   it("todas RESUELTAS: no frena ninguna", () => {
@@ -85,7 +87,7 @@ describe("la verja de incidencias", () => {
       }),
     ];
     expect(incidenciasQueFrenan(cerradas)).toEqual([]);
-    expect(puedeCerrarVisita(TODAS_AUDITADAS, cerradas)).toBe(true);
+    expect(puedeCerrarVisita(TODAS_AUDITADAS, cerradas, LEIDAS)).toBe(true);
   });
 
   it("todas JUSTIFICADAS: tampoco frena ninguna", () => {
@@ -95,11 +97,13 @@ describe("la verja de incidencias", () => {
       hallazgo({ estado: "no_resuelta", motivo: "El encargado no autorizó" }),
     ];
     expect(incidenciasQueFrenan(justificadas)).toEqual([]);
-    expect(puedeCerrarVisita(TODAS_AUDITADAS, justificadas)).toBe(true);
+    expect(puedeCerrarVisita(TODAS_AUDITADAS, justificadas, LEIDAS)).toBe(true);
   });
 
   it("con una PENDIENTE, la verja no deja salir", () => {
-    expect(puedeCerrarVisita(TODAS_AUDITADAS, [hallazgo()])).toBe(false);
+    expect(puedeCerrarVisita(TODAS_AUDITADAS, [hallazgo()], LEIDAS)).toBe(
+      false,
+    );
   });
 
   it("y dice CUÁLES faltan, agrupadas por marca", () => {
@@ -122,12 +126,14 @@ describe("la verja de incidencias", () => {
     // señal, que es la trampa que ADR-0012 existe para no construir.
     const atendida = [hallazgo({ atendidaSinSincronizar: true })];
     expect(incidenciasQueFrenan(atendida)).toEqual([]);
-    expect(puedeCerrarVisita(TODAS_AUDITADAS, atendida)).toBe(true);
+    expect(puedeCerrarVisita(TODAS_AUDITADAS, atendida, LEIDAS)).toBe(true);
   });
 
   it("una marca sin auditar frena aunque no haya incidencias", () => {
     // Las dos condiciones son independientes: la verja vieja sigue viva.
-    expect(puedeCerrarVisita(["completado", "en_curso"], [])).toBe(false);
+    expect(puedeCerrarVisita(["completado", "en_curso"], [], LEIDAS)).toBe(
+      false,
+    );
   });
 
   it("la verja NO mira si la foto ya subió a R2", () => {
@@ -136,6 +142,28 @@ describe("la verja de incidencias", () => {
     const conFotoEnCola = [
       hallazgo({ estado: "resuelta", accion_tomada: "Repuse desde bodega" }),
     ];
-    expect(puedeCerrarVisita(TODAS_AUDITADAS, conFotoEnCola)).toBe(true);
+    expect(puedeCerrarVisita(TODAS_AUDITADAS, conFotoEnCola, LEIDAS)).toBe(
+      true,
+    );
+  });
+
+  it("MIENTRAS CARGA no deja salir: una lista vacía todavía no dice nada", () => {
+    // Vacía significa dos cosas opuestas —«no hay hallazgos» y «aún no sé»— y
+    // solo el estado de la lectura las distingue.
+    expect(
+      puedeCerrarVisita(TODAS_AUDITADAS, [], { cargando: true, error: null }),
+    ).toBe(false);
+  });
+
+  it("con ERROR de la consulta tampoco: es cuando menos se puede confiar", () => {
+    // Medido contra `@powersync/react`: al fallar, el hook devuelve
+    // `isLoading: false` Y `data: []`. Sin mirar el error, un fallo de la réplica
+    // es indistinguible de una visita limpia y la verja se abre sola.
+    expect(
+      puedeCerrarVisita(TODAS_AUDITADAS, [], {
+        cargando: false,
+        error: "la réplica está bloqueada",
+      }),
+    ).toBe(false);
   });
 });

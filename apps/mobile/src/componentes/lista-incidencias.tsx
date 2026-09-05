@@ -6,6 +6,7 @@ import {
   describirIncidencia,
   ETIQUETA_ESTADO,
   type IncidenciaLocal,
+  sigueSinAtender,
 } from "@/lib/incidencias";
 import { colores, espacio, radio } from "@/tema";
 
@@ -21,6 +22,21 @@ import { colores, espacio, radio } from "@/tema";
 // Exhaustivo como `ETIQUETA_ESTADO`, y no un mapa laxo con color de reserva: un
 // estado nuevo tiene que romper la compilación en los dos sitios a la vez, no
 // romper en la etiqueta y colarse en gris aquí.
+/**
+ * Lo que dice el estado, para la pantalla Y para el lector de pantalla.
+ *
+ * Un solo sitio a propósito: cuando el texto visible decía "Atendida — pendiente
+ * de sincronizar" y la etiqueta accesible seguía anunciando "Pendiente", a quien
+ * usa TalkBack le quedaba un botón apagado sin forma de saber por qué no
+ * responde. El estado no puede depender de lo que se vea (WCAG 1.4.1) ni
+ * contradecirlo.
+ */
+function textoDeEstado(incidencia: IncidenciaLocal): string {
+  return incidencia.atendidaSinSincronizar
+    ? "Atendida — pendiente de sincronizar"
+    : ETIQUETA_ESTADO[incidencia.estado];
+}
+
 const COLOR_ESTADO: Record<EstadoIncidencia, string> = {
   pendiente: colores.alerta,
   resuelta: colores.completado,
@@ -102,15 +118,15 @@ export function ListaIncidencias({
             <View style={e.grupo}>
               <Text style={e.marca}>{item.marcaNombre}</Text>
               {item.incidencias.map((incidencia) => (
+                // `disabled` usa el MISMO predicado que la verja de check-out y
+                // el contador de la cabecera: copiarlo aquí abriría la tarjeta
+                // para algo que la verja ya da por cerrado.
                 <Pressable
                   key={incidencia.id}
                   onPress={() => onResolver(incidencia)}
-                  disabled={
-                    incidencia.estado !== "pendiente" ||
-                    incidencia.atendidaSinSincronizar
-                  }
+                  disabled={!sigueSinAtender(incidencia)}
                   accessibilityRole="button"
-                  accessibilityLabel={`${incidencia.sku_nombre ?? item.marcaNombre}, ${ETIQUETA_ESTADO[incidencia.estado]}`}
+                  accessibilityLabel={`${incidencia.sku_nombre ?? item.marcaNombre}, ${textoDeEstado(incidencia)}`}
                   style={({ pressed }) => [e.card, pressed && { opacity: 0.7 }]}
                 >
                   <View style={e.filaTitulo}>
@@ -129,13 +145,7 @@ export function ListaIncidencias({
                         },
                       ]}
                     >
-                      {/* No se finge que ya está cerrada: la declaración está
-                          escrita y aún no ha subido, y decirlo es lo honesto
-                          (ADR-0012). Mientras tanto la tarjeta se apaga, o una
-                          segunda pulsación crearía otra declaración. */}
-                      {incidencia.atendidaSinSincronizar
-                        ? "Atendida — pendiente de sincronizar"
-                        : ETIQUETA_ESTADO[incidencia.estado]}
+                      {textoDeEstado(incidencia)}
                     </Text>
                   </View>
                   <Text style={e.descripcion}>
