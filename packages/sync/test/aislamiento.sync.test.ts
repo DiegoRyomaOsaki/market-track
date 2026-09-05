@@ -223,6 +223,40 @@ describe("aislamiento de las sync rules", () => {
     });
   }, 180000);
 
+  it("los INSUMOS para derivar el hallazgo sin señal llegan, y solo los suyos", async () => {
+    // Sin ellos el espejo de `apps/mobile/src/lib/hallazgos.ts` calcula sobre
+    // datos que faltan y la verja de check-out subcuenta EN SILENCIO — el mismo
+    // fallo que MAR-153 arregla, reaparecido un piso más abajo. Ver docs/adr/0012.
+    //
+    // `vigente_hasta` se comprueba por su nombre y no solo contando filas: el
+    // SDK descarta las columnas que el esquema local no declara, así que una
+    // columna nueva en Postgres no rompe nada y el espejo resolvería con la
+    // regla anterior, dando por vigente un periodo ya cerrado.
+    const sesion = await sesionAal2(USUARIOS.joseMaracumango.email);
+    const [precios, promos] = await Promise.all([
+      filasReplicadas<{
+        id: string;
+        tenant_id: string;
+        vigente_hasta: string | null;
+      }>(sesion, "precio_regular", "id, tenant_id, vigente_hasta"),
+      filasReplicadas<{ id: string; tenant_id: string }>(
+        sesion,
+        "promocion",
+        "id, tenant_id",
+      ),
+    ]);
+
+    expect(precios.length).toBeGreaterThan(0);
+    expect(promos.length).toBeGreaterThan(0);
+    // El seed siembra precio y promoción para los DOS clientes: que baje UN solo
+    // tenant es la prueba de aislamiento, y no hace falta nombrar cuál.
+    expect(new Set(precios.map((p) => p.tenant_id)).size).toBe(1);
+    expect(new Set(promos.map((p) => p.tenant_id)).size).toBe(1);
+    // La columna existe en la réplica: si no se declarara, ni siquiera saldría
+    // como `null` — la consulta fallaría.
+    expect(precios[0]).toHaveProperty("vigente_hasta");
+  }, 60000);
+
   it("la incidencia que baja es solo la de SUS visitas", async () => {
     // La incidencia la CREA el servidor (un trigger sobre el dato levantado), y
     // la RLS no interviene en la bajada: si esta regla se quedara en el filtro

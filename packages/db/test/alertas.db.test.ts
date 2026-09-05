@@ -1,6 +1,8 @@
 import type { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { CASOS_PRECIO } from "../src/casos-precio";
+
 import { comoUsuario, conectar, TENANTS, USUARIOS } from "./ayudas";
 
 // El motor de alertas: triggers que producen `alerta` a partir de los datos de
@@ -189,6 +191,100 @@ describe("motor de alertas — árbol de precios (regular 6.90, tolerancia 5%)",
       expect(tipos).not.toContain("promo_no_activa");
     });
   });
+});
+
+describe("el corpus del árbol de precio, contra la BASE", () => {
+  // El MISMO fichero de casos que ejecuta el espejo del móvil
+  // (`apps/mobile/src/lib/hallazgos.test.ts`). Es la única verja real contra la
+  // divergencia entre las dos implementaciones: si el SQL cambia y el espejo no
+  // —o al revés— uno de los dos lados se pone rojo. Ver docs/adr/0012.
+  //
+  // Corre con el cliente crudo y no con `comoUsuario`: siembra periodos de
+  // precio, y para eso hay que borrar los del seed — cosa que ningún rol de la
+  // app puede hacer, a propósito. Lo que se prueba aquí es la ARITMÉTICA de la
+  // función, no quién puede llamarla; de eso responden los tests de privilegios.
+
+  const CADENA = "a0000001-0000-0000-0000-000000000001";
+
+  it.each(CASOS_PRECIO.map((c) => [c.nombre, c] as const))(
+    "%s",
+    async (_nombre, caso) => {
+      await db.query("begin");
+      try {
+        await db.query(
+          `delete from public.precio_regular where tenant_id = $1 and sku_id = $2`,
+          [TENANTS.maracumango, SKU],
+        );
+        await db.query(
+          `delete from public.promocion where tenant_id = $1 and sku_id = $2`,
+          [TENANTS.maracumango, SKU],
+        );
+        await db.query(
+          `update public.marca set tolerancia_precio_pct = $2 where id = $1`,
+          [MARCA, caso.tolerancia_pct],
+        );
+
+        for (const p of caso.periodos) {
+          await db.query(
+            `insert into public.precio_regular
+               (tenant_id, sku_id, cadena_id, tipo_tienda, precio, vigente_desde,
+                vigente_hasta)
+             values ($1,$2,$3,$4::public.tipo_tienda,$5,$6,$7)`,
+            [
+              TENANTS.maracumango,
+              SKU,
+              CADENA,
+              p.tipo_tienda,
+              p.precio,
+              p.vigente_desde,
+              p.vigente_hasta,
+            ],
+          );
+        }
+        for (const pr of caso.promociones) {
+          await db.query(
+            `insert into public.promocion
+               (tenant_id, sku_id, precio_promo, fecha_inicio, fecha_fin, comunicada)
+             values ($1,$2,$3,$4,$5,$6)`,
+            [
+              TENANTS.maracumango,
+              SKU,
+              pr.precio_promo,
+              pr.fecha_inicio,
+              pr.fecha_fin,
+              pr.comunicada,
+            ],
+          );
+        }
+
+        const r = await db.query<{
+          veredicto: string;
+          precio_regular: string | null;
+        }>(
+          `select veredicto, precio_regular::text
+             from app.evaluar_precio_sku($1,$2,$3,$4,$5,$6,$7,$8::date)`,
+          [
+            TENANTS.maracumango,
+            SKU,
+            MARCA,
+            CADENA,
+            caso.precio_registrado,
+            caso.hay_promo,
+            caso.promo_comunicada,
+            caso.fecha,
+          ],
+        );
+
+        expect(r.rows[0]?.veredicto).toBe(caso.espera);
+        const regular = r.rows[0]?.precio_regular;
+        expect(
+          regular === null || regular === undefined ? null : Number(regular),
+        ).toBe(caso.esperaRegular);
+      } finally {
+        await db.query("rollback");
+      }
+    },
+  );
 });
 
 describe("el precio de ayer no lo cambia el precio de hoy", () => {
