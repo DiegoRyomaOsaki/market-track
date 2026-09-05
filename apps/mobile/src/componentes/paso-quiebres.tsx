@@ -15,7 +15,7 @@ import {
   Stepper,
 } from "@/componentes/paso-comun";
 import { guardarQuiebres, useSkusDeLevantamiento } from "@/lib/levantamiento";
-import { deltaDiferencia, esDiferencia, esQuiebre } from "@/lib/quiebres";
+import { deltaDiferencia, esDiferencia, esQuiebre } from "@/lib/hallazgos";
 import { colores, espacio, radio } from "@/tema";
 
 // Paso 4.3 "Quiebres y diferencias": stock de sistema vs piso por SKU, con dos

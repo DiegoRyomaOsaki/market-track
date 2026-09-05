@@ -64,6 +64,11 @@ const precio_regular = new Table({
   tipo_tienda: column.text,
   precio: column.real,
   vigente_desde: column.text,
+  // Sin esta columna el espejo de `hallazgos.ts` resolvería con la regla
+  // ANTERIOR —solo `vigente_desde <= fecha`, sin cota superior— y un periodo ya
+  // cerrado seguiría ganando. El stream baja `SELECT *`, pero el SDK descarta
+  // lo que no se declara aquí: la deriva sería silenciosa.
+  vigente_hasta: column.text,
 });
 
 const promocion = new Table({
@@ -210,6 +215,30 @@ const incidencia = new Table({
   motivo: column.text,
   foto_resolucion_id: column.text,
   atendida_at: column.text,
+  creado_at: column.text,
+});
+
+// Lo que el mercaderista declara haber hecho con un hallazgo (ADR-0012).
+//
+// Lleva la CLAVE NATURAL del hallazgo y no un id de incidencia, y por eso se
+// puede escribir sin señal: la incidencia todavía no existe. Un `UPDATE` sobre
+// `incidencia` en ese momento afecta a cero filas, PowerSync no encola nada y la
+// acción del mercaderista —con su foto y su motivo— se pierde sin un mensaje.
+//
+// `aplicada_at` la escribe el SERVIDOR al volcarla; aquí baja solo para que la
+// lista sepa distinguir "atendida" de "atendida y ya confirmada".
+const atencion_hallazgo = new Table({
+  tenant_id: column.text,
+  visita_id: column.text,
+  levantamiento_id: column.text,
+  sku_id: column.text,
+  exhibicion_negociada_id: column.text,
+  origen: column.text,
+  estado: column.text,
+  accion_tomada: column.text,
+  motivo: column.text,
+  foto_resolucion_id: column.text,
+  aplicada_at: column.text,
   creado_at: column.text,
 });
 
@@ -419,6 +448,7 @@ export const AppSchema = new Schema({
   exhibicion,
   contingencia,
   incidencia,
+  atencion_hallazgo,
   levantamiento_paso,
   solicitud_cambio_ruta,
   profile,

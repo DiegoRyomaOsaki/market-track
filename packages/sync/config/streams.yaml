@@ -126,6 +126,11 @@ streams:
       # mercaderista. No hay aquí un monto de bono ni un contador de operación
       # que dejar fuera.
       - SELECT * FROM incidencia WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND visita_id IN (SELECT id FROM visita WHERE mercaderista_id = auth.user_id())
+      # Lo que el mercaderista declaró haber hecho con un hallazgo (ADR-0012). La
+      # ESCRIBE la app y la relee para saber qué ya atendió: sin ella, una visita
+      # hecha sin señal pierde la atención al sincronizar. Acotada al dueño de la
+      # visita, igual que la incidencia.
+      - SELECT * FROM atencion_hallazgo WHERE tenant_id IN (SELECT tenant_id FROM mi_tenant) AND visita_id IN (SELECT id FROM visita WHERE mercaderista_id = auth.user_id())
       # Solicitudes de cambio de ruta: la app las ESCRIBE y las relee para mostrar
       # su estado. Solo las PROPIAS (acotadas al usuario, no por parámetro del
       # cliente): la RLS deja al staff verlas todas, pero al teléfono solo bajan

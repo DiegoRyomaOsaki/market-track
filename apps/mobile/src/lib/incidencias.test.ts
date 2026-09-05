@@ -10,6 +10,7 @@ jest.mock("./cola-fotos-instancia", () => ({ encolarFoto: jest.fn() }));
 
 import {
   agruparPorMarca,
+  unirHallazgos,
   contarPendientes,
   describirIncidencia,
   ETIQUETA_ESTADO,
@@ -29,6 +30,10 @@ const incidencia = (p: Partial<IncidenciaLocal> = {}): IncidenciaLocal => ({
   accion_tomada: null,
   motivo: null,
   creado_at: "2026-09-04T12:00:00.000Z",
+  sku_id: null,
+  exhibicion_negociada_id: null,
+  derivada: false,
+  atendidaSinSincronizar: false,
   ...p,
 });
 
@@ -155,5 +160,67 @@ describe("ETIQUETA_ESTADO", () => {
     // Son dos cosas distintas y la lista tiene que dejarlo claro: una se
     // resolvió, la otra se miró y no se pudo.
     expect(ETIQUETA_ESTADO.no_resuelta).not.toBe(ETIQUETA_ESTADO.resuelta);
+  });
+});
+
+describe("unirHallazgos", () => {
+  const clave = {
+    levantamiento_id: "lev-oster",
+    sku_id: "sku-1",
+    exhibicion_negociada_id: null,
+    origen: "quiebre" as const,
+  };
+  const delServidor = incidencia({ id: "srv", ...clave });
+  const derivado = incidencia({ id: "derivada:…", derivada: true, ...clave });
+
+  it("el mismo hallazgo por los dos lados sale UNA vez", () => {
+    // Un duplicado deja la verja de check-out IMPOSIBLE de despejar, que es peor
+    // que no tenerla.
+    const r = unirHallazgos([delServidor], [derivado], []);
+    expect(r).toHaveLength(1);
+    expect(r[0]?.id).toBe("srv");
+  });
+
+  it("cuando la fila del servidor existe, MANDA ella", () => {
+    const r = unirHallazgos([delServidor], [derivado], []);
+    expect(r[0]?.derivada).toBe(false);
+  });
+
+  it("sin fila del servidor, el derivado rellena el hueco", () => {
+    const r = unirHallazgos([], [derivado], []);
+    expect(r).toHaveLength(1);
+    expect(r[0]?.derivada).toBe(true);
+  });
+
+  it("dos orígenes del MISMO sku no se pisan", () => {
+    const otro = incidencia({
+      id: "d2",
+      derivada: true,
+      ...clave,
+      origen: "desviacion_precio",
+    });
+    expect(unirHallazgos([], [derivado, otro], [])).toHaveLength(2);
+  });
+
+  it("el mismo origen de dos SKU distintos tampoco", () => {
+    const otro = incidencia({
+      id: "d2",
+      derivada: true,
+      ...clave,
+      sku_id: "sku-2",
+    });
+    expect(unirHallazgos([], [derivado, otro], [])).toHaveLength(2);
+  });
+
+  it("una atención declarada sin sincronizar marca el hallazgo como atendido", () => {
+    const r = unirHallazgos([], [derivado], [clave]);
+    expect(r[0]?.atendidaSinSincronizar).toBe(true);
+  });
+
+  it("y entonces DEJA de contar como pendiente: si no, la verja sería impasable", () => {
+    // El mercaderista ya hizo su parte; seguir contándola lo dejaría encerrado en
+    // la tienda hasta que hubiera señal.
+    expect(contarPendientes(unirHallazgos([], [derivado], [clave]))).toBe(0);
+    expect(contarPendientes(unirHallazgos([], [derivado], []))).toBe(1);
   });
 });

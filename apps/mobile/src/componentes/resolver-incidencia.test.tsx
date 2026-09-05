@@ -68,6 +68,10 @@ const INCIDENCIA: IncidenciaLocal = {
   accion_tomada: null,
   motivo: null,
   creado_at: "2026-09-04T12:00:00.000Z",
+  sku_id: "sku-1",
+  exhibicion_negociada_id: null,
+  derivada: false,
+  atendidaSinSincronizar: false,
 };
 
 function pintar(props: Partial<Parameters<typeof ResolverIncidencia>[0]> = {}) {
@@ -147,11 +151,17 @@ describe("ResolverIncidencia", () => {
       screen.getByRole("button", { name: "Marcar resuelta" }),
     );
 
+    // Viaja la CLAVE NATURAL del hallazgo, no un id de incidencia: sin señal esa
+    // fila no existe. Ver docs/adr/0012.
     expect(mockResolver).toHaveBeenCalledWith(
       expect.objectContaining({
-        incidenciaId: "i1",
-        visitaId: "v1",
+        tenantId: "t1",
         accionTomada: "Cambié el precio en góndola",
+        hallazgo: expect.objectContaining({
+          visita_id: "v1",
+          sku_id: "sku-1",
+          origen: "quiebre",
+        }),
       }),
     );
     expect(onAtendida).toHaveBeenCalled();
@@ -199,8 +209,9 @@ describe("ResolverIncidencia", () => {
     );
 
     expect(mockNoPuedo).toHaveBeenCalledWith({
-      incidenciaId: "i1",
+      tenantId: "t1",
       motivo: "El encargado no autorizó tocar la góndola",
+      hallazgo: expect.objectContaining({ visita_id: "v1", origen: "quiebre" }),
     });
     expect(onAtendida).toHaveBeenCalled();
   });

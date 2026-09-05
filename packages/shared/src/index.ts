@@ -27,3 +27,14 @@ export * from "./schemas/levantamiento";
 export * from "./schemas/perfect-merchandiser";
 export * from "./schemas/perfect-store";
 export * from "./schemas/revision";
+
+// El corpus de casos del árbol de precio vive en `packages/db` —para que
+// `packages/db/test` lo lea sin crear un ciclo de workspace— y se reexporta aquí
+// para el móvil, que no depende de `db`. Ver docs/adr/0012.
+export type {
+  CasoPrecio,
+  PeriodoPrecio,
+  PromocionVigente,
+  VeredictoPrecio,
+} from "@market-track/db";
+export { CASOS_PRECIO } from "@market-track/db";

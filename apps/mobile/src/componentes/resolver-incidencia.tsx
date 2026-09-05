@@ -89,10 +89,8 @@ export function ResolverIncidencia({
     setError(null);
     try {
       await resolverIncidencia({
-        incidenciaId: incidencia.id,
-        visitaId: incidencia.visita_id,
+        hallazgo: incidencia,
         tenantId,
-        levantamientoId: incidencia.levantamiento_id,
         accionTomada: accion.trim(),
         foto,
       });
@@ -115,7 +113,7 @@ export function ResolverIncidencia({
     setGuardando(true);
     setError(null);
     try {
-      await noPuedoResolver({ incidenciaId: incidencia.id, motivo: texto });
+      await noPuedoResolver({ hallazgo: incidencia, tenantId, motivo: texto });
       cerrar();
       onAtendida();
     } catch (err: unknown) {

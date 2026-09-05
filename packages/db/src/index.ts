@@ -23,3 +23,14 @@ export type {
   TablesUpdate,
 } from "./database.types";
 export { Constants } from "./database.types";
+
+// El corpus de casos del árbol de precio: DATOS, no lógica. Lo ejecutan los dos
+// lados —Postgres y el espejo del móvil— para que CI se ponga rojo si divergen.
+// Ver docs/adr/0012.
+export type {
+  CasoPrecio,
+  PeriodoPrecio,
+  PromocionVigente,
+  VeredictoPrecio,
+} from "./casos-precio";
+export { CASOS_PRECIO } from "./casos-precio";

@@ -30,6 +30,10 @@ const incidencia = (p: Partial<IncidenciaLocal> = {}): IncidenciaLocal => ({
   accion_tomada: null,
   motivo: null,
   creado_at: "2026-09-04T12:00:00.000Z",
+  sku_id: null,
+  exhibicion_negociada_id: null,
+  derivada: false,
+  atendidaSinSincronizar: false,
   ...p,
 });
 

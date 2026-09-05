@@ -1,5 +1,6 @@
 import {
   detalleIncidenciaSchema,
+  diaEnLima,
   type EstadoIncidencia,
   type OrigenIncidencia,
 } from "@market-track/shared";
@@ -8,6 +9,12 @@ import { useMemo } from "react";
 
 import { encolarFoto } from "./cola-fotos-instancia";
 import type { FotoCapturada } from "./foto-captura";
+import {
+  type ContextoPrecio,
+  type HallazgoDerivado,
+  hallazgosDeExhibicion,
+  hallazgosDeSku,
+} from "./hallazgos";
 import { db } from "./powersync/db";
 
 // La lista global de incidencias de una visita, y su resolución.
@@ -17,14 +24,22 @@ import { db } from "./powersync/db";
 // módulo — "si estabas en góndola y pasó una hora, en tu cabeza no vas a decir
 // «tenía que entrar a góndola porque ahí tenía la incidencia»".
 //
-// Nada de esto RECALCULA nada: la incidencia la crea el motor en la base a
-// partir del dato levantado, y aquí solo se lee, se describe y se atiende.
+// El hallazgo lo produce el motor en la base; aquí se LEE y, mientras su fila no
+// ha llegado, se ESPEJA de forma efímera (`hallazgos.ts`) para que una visita
+// hecha sin señal no se vea igual que una sin hallazgos.
+//
+// La atención NO se escribe sobre `incidencia`: va a `atencion_hallazgo`, con la
+// clave natural del hallazgo. Un `UPDATE incidencia … WHERE id = ?` sin señal
+// afecta a cero filas, PowerSync no encola nada, y la acción del mercaderista se
+// perdería sin un solo mensaje. Una puerta, un dueño. Ver docs/adr/0012.
 
 /** Una incidencia tal como baja a la réplica, con lo que hace falta pintarla. */
 export type IncidenciaLocal = {
   id: string;
   visita_id: string;
   levantamiento_id: string | null;
+  sku_id: string | null;
+  exhibicion_negociada_id: string | null;
   marca_id: string | null;
   marca_nombre: string | null;
   sku_nombre: string | null;
@@ -34,6 +49,23 @@ export type IncidenciaLocal = {
   accion_tomada: string | null;
   motivo: string | null;
   creado_at: string;
+  /**
+   * Derivada en el teléfono porque su fila del servidor todavía no ha llegado.
+   *
+   * Se pinta igual, pero no tiene `id` de incidencia: la atención se declara por
+   * la clave natural del hallazgo. Ver docs/adr/0012.
+   */
+  derivada: boolean;
+  /** Atendida aquí y aún sin confirmar por el servidor. */
+  atendidaSinSincronizar: boolean;
+};
+
+/** La clave natural del hallazgo: lo que casa el derivado con el del servidor. */
+export type ClaveHallazgo = {
+  levantamiento_id: string | null;
+  sku_id: string | null;
+  exhibicion_negociada_id: string | null;
+  origen: OrigenIncidencia;
 };
 
 /**
@@ -47,9 +79,11 @@ export type IncidenciaLocal = {
  */
 export function useIncidenciasDeVisita(visitaId: string) {
   const { data, isLoading, error } = useQuery<IncidenciaLocal>(
-    `SELECT i.id, i.visita_id, i.levantamiento_id, i.marca_id,
+    `SELECT i.id, i.visita_id, i.levantamiento_id, i.sku_id,
+            i.exhibicion_negociada_id, i.marca_id,
             m.nombre AS marca_nombre, s.nombre AS sku_nombre,
-            i.origen, i.estado, i.detalle, i.accion_tomada, i.motivo, i.creado_at
+            i.origen, i.estado, i.detalle, i.accion_tomada, i.motivo, i.creado_at,
+            0 AS derivada, 0 AS atendidaSinSincronizar
        FROM incidencia i
        LEFT JOIN marca m ON m.id = i.marca_id
        LEFT JOIN sku s ON s.id = i.sku_id
@@ -57,18 +91,258 @@ export function useIncidenciasDeVisita(visitaId: string) {
       ORDER BY i.creado_at`,
     [visitaId],
   );
+
+  const derivadas = useHallazgosDerivados(visitaId);
+  const { data: atenciones } = useQuery<ClaveHallazgo>(
+    `SELECT levantamiento_id, sku_id, exhibicion_negociada_id, origen
+       FROM atencion_hallazgo
+      WHERE visita_id = ? AND aplicada_at IS NULL`,
+    [visitaId],
+  );
+
+  const incidencias = useMemo(
+    () => unirHallazgos(data ?? [], derivadas, atenciones ?? []),
+    [data, derivadas, atenciones],
+  );
+
   return {
-    incidencias: data ?? [],
+    incidencias,
     cargando: isLoading,
     error: error ? String(error) : null,
   };
+}
+
+type FilaDerivada = {
+  levantamiento_id: string;
+  sku_id: string | null;
+  marca_id: string | null;
+  marca_nombre: string | null;
+  sku_nombre: string | null;
+  tolerancia_precio_pct: number | null;
+  stock_sistema: number | null;
+  stock_piso: number | null;
+  precio_registrado: number | null;
+  hay_promo: number | null;
+  promo_comunicada: number | null;
+};
+
+/**
+ * Los hallazgos que el teléfono deriva de lo que ya tiene en la réplica.
+ *
+ * Existen porque la `incidencia` la crea un trigger que corre cuando la fila
+ * llega al SERVIDOR: en una visita hecha entera sin señal no hay ninguna, y la
+ * lista se ve igual que una visita sin hallazgos. Ver docs/adr/0012.
+ *
+ * **La fecha es la del check-in declarado.** El servidor evalúa con
+ * `check_in_recibido_at` —el instante en que la visita LLEGA— y el teléfono no lo
+ * tiene ni podría: es un sello anti-falsificación. En una visita rezagada son
+ * días distintos, así que el veredicto derivado puede diferir del definitivo. Se
+ * acepta a propósito: lo derivado es efímero y se corrige solo al sincronizar.
+ *
+ * Una consulta por visita, no una por SKU: derivar está en el camino de pintado.
+ */
+function useHallazgosDerivados(visitaId: string): IncidenciaLocal[] {
+  const { data: visita } = useQuery<{
+    check_in_at: string | null;
+    tenant_id: string | null;
+    cadena_id: string | null;
+  }>(
+    `SELECT v.check_in_at, t.tenant_id, t.cadena_id
+       FROM visita v LEFT JOIN tienda t ON t.id = v.tienda_id
+      WHERE v.id = ?`,
+    [visitaId],
+  );
+  const cadenaId = visita?.[0]?.cadena_id ?? null;
+
+  const { data: filas } = useQuery<FilaDerivada>(
+    `SELECT ls.levantamiento_id, ls.sku_id, l.marca_id,
+            m.nombre AS marca_nombre, s.nombre AS sku_nombre,
+            m.tolerancia_precio_pct,
+            ls.stock_sistema, ls.stock_piso, ls.precio_registrado,
+            ls.hay_promo, ls.promo_comunicada
+       FROM levantamiento_sku ls
+       JOIN levantamiento l ON l.id = ls.levantamiento_id
+       LEFT JOIN marca m ON m.id = l.marca_id
+       LEFT JOIN sku s ON s.id = ls.sku_id
+      WHERE l.visita_id = ?`,
+    [visitaId],
+  );
+
+  const { data: exhibiciones } = useQuery<{
+    levantamiento_id: string;
+    exhibicion_negociada_id: string | null;
+    instalada: number | null;
+    unidades: number | null;
+    marca_id: string | null;
+    marca_nombre: string | null;
+  }>(
+    `SELECT e.levantamiento_id, e.exhibicion_negociada_id, e.instalada,
+            e.unidades, l.marca_id, m.nombre AS marca_nombre
+       FROM exhibicion e
+       JOIN levantamiento l ON l.id = e.levantamiento_id
+       LEFT JOIN marca m ON m.id = l.marca_id
+      WHERE l.visita_id = ?`,
+    [visitaId],
+  );
+
+  const { data: periodos } = useQuery<{
+    precio: number;
+    vigente_desde: string;
+    vigente_hasta: string | null;
+    tipo_tienda: string | null;
+  }>(
+    `SELECT precio, vigente_desde, vigente_hasta, tipo_tienda
+       FROM precio_regular WHERE cadena_id = ?`,
+    [cadenaId ?? ""],
+  );
+
+  const { data: promociones } = useQuery<{
+    precio_promo: number;
+    fecha_inicio: string;
+    fecha_fin: string;
+    comunicada: number;
+  }>(`SELECT precio_promo, fecha_inicio, fecha_fin, comunicada FROM promocion`);
+
+  return useMemo(() => {
+    const fecha = diaEnLima(
+      visita?.[0]?.check_in_at ? new Date(visita[0].check_in_at) : new Date(),
+    );
+    const contextoBase = {
+      periodos: periodos ?? [],
+      promociones: (promociones ?? []).map((p) => ({
+        ...p,
+        comunicada: p.comunicada === 1,
+      })),
+      fecha,
+    };
+
+    const pintable = (
+      h: HallazgoDerivado,
+      marcaId: string | null,
+      marcaNombre: string | null,
+      skuNombre: string | null,
+    ): IncidenciaLocal => ({
+      // No hay id de incidencia: la fila del servidor no existe todavía. La
+      // atención se declara por la clave natural, no por este id.
+      id: `derivada:${h.levantamientoId ?? ""}:${h.skuId ?? ""}:${h.exhibicionNegociadaId ?? ""}:${h.origen}`,
+      visita_id: visitaId,
+      levantamiento_id: h.levantamientoId,
+      sku_id: h.skuId,
+      exhibicion_negociada_id: h.exhibicionNegociadaId,
+      marca_id: marcaId,
+      marca_nombre: marcaNombre,
+      sku_nombre: skuNombre,
+      origen: h.origen,
+      estado: "pendiente",
+      detalle: JSON.stringify(h.detalle),
+      accion_tomada: null,
+      motivo: null,
+      creado_at: fecha,
+      derivada: true,
+      atendidaSinSincronizar: false,
+    });
+
+    const salida: IncidenciaLocal[] = [];
+    for (const f of filas ?? []) {
+      const contexto: ContextoPrecio = {
+        ...contextoBase,
+        toleranciaPct: f.tolerancia_precio_pct ?? 0,
+      };
+      for (const h of hallazgosDeSku(
+        { ...f, sku_id: f.sku_id ?? "" },
+        contexto,
+      )) {
+        salida.push(pintable(h, f.marca_id, f.marca_nombre, f.sku_nombre));
+      }
+    }
+    for (const e of exhibiciones ?? []) {
+      for (const h of hallazgosDeExhibicion(e)) {
+        salida.push(pintable(h, e.marca_id, e.marca_nombre, null));
+      }
+    }
+    return salida;
+  }, [visitaId, visita, filas, exhibiciones, periodos, promociones]);
+}
+
+/**
+ * Une lo que el servidor ya produjo con lo que el teléfono derivó, sin duplicar.
+ *
+ * **Cuando la fila del servidor existe, manda ella** (ADR-0012). El derivado solo
+ * rellena el hueco temporal: si el motor dice `anulada` y el espejo dice que hay
+ * hallazgo, gana el servidor. Sin esa regla escrita, cada pantalla desempata a su
+ * manera.
+ *
+ * Un hallazgo duplicado no es un detalle estético: deja la verja de check-out
+ * IMPOSIBLE de despejar, que es peor que no tenerla. Por eso la clave se lleva en
+ * mapas anidados y no en un string con separador — un id puede contener el
+ * separador, y ahí el duplicado vuelve por la puerta de atrás.
+ */
+export function unirHallazgos(
+  servidor: readonly IncidenciaLocal[],
+  derivados: readonly IncidenciaLocal[],
+  atendidosSinSincronizar: readonly ClaveHallazgo[],
+): IncidenciaLocal[] {
+  const vistos = new Map<
+    string | null,
+    Map<string | null, Map<string | null, Set<string>>>
+  >();
+
+  const marcar = (c: ClaveHallazgo): boolean => {
+    const porLev =
+      vistos.get(c.levantamiento_id) ??
+      new Map<string | null, Map<string | null, Set<string>>>();
+    vistos.set(c.levantamiento_id, porLev);
+    const porSku =
+      porLev.get(c.sku_id) ?? new Map<string | null, Set<string>>();
+    porLev.set(c.sku_id, porSku);
+    const origenes = porSku.get(c.exhibicion_negociada_id) ?? new Set<string>();
+    porSku.set(c.exhibicion_negociada_id, origenes);
+    if (origenes.has(c.origen)) return false;
+    origenes.add(c.origen);
+    return true;
+  };
+
+  const atendidos = new Set<string>();
+  for (const c of atendidosSinSincronizar) {
+    atendidos.add(
+      [c.levantamiento_id, c.sku_id, c.exhibicion_negociada_id, c.origen].join(
+        "\u0000",
+      ),
+    );
+  }
+  const yaAtendido = (c: ClaveHallazgo) =>
+    atendidos.has(
+      [c.levantamiento_id, c.sku_id, c.exhibicion_negociada_id, c.origen].join(
+        "\u0000",
+      ),
+    );
+
+  // El servidor primero: es quien manda, y así el derivado nunca lo desplaza.
+  const unidos: IncidenciaLocal[] = [];
+  for (const i of servidor) {
+    marcar(i);
+    unidos.push({
+      ...i,
+      atendidaSinSincronizar: i.estado === "pendiente" && yaAtendido(i),
+    });
+  }
+  for (const d of derivados) {
+    if (!marcar(d)) continue;
+    unidos.push({ ...d, atendidaSinSincronizar: yaAtendido(d) });
+  }
+  return unidos;
 }
 
 /** Cuántas quedan por atender. `no_resuelta` ya fue atendida: no cuenta. */
 export function contarPendientes(
   incidencias: readonly IncidenciaLocal[],
 ): number {
-  return incidencias.filter((i) => i.estado === "pendiente").length;
+  // Una atendida sin sincronizar NO cuenta: el mercaderista ya hizo su parte, y
+  // seguir contándola dejaría la verja impasable hasta que hubiera señal — que
+  // es exactamente la trampa que ADR-0012 existe para no construir.
+  return incidencias.filter(
+    (i) => i.estado === "pendiente" && !i.atendidaSinSincronizar,
+  ).length;
 }
 
 export type GrupoDeMarca = {
@@ -175,13 +449,24 @@ export const ETIQUETA_ESTADO: Record<EstadoIncidencia, string> = {
 };
 
 export type DatosResolucion = {
-  incidenciaId: string;
-  visitaId: string;
+  /** La clave natural del hallazgo, no un id de incidencia. */
+  hallazgo: IncidenciaLocal;
   tenantId: string;
-  levantamientoId: string | null;
   accionTomada: string;
   foto: FotoCapturada;
 };
+
+/** Los seis campos de la clave natural, tal como los espera la tabla. */
+function claveDe(h: IncidenciaLocal, tenantId: string) {
+  return [
+    tenantId,
+    h.visita_id,
+    h.levantamiento_id,
+    h.sku_id,
+    h.exhibicion_negociada_id,
+    h.origen,
+  ];
+}
 
 /**
  * Resuelve una incidencia: la acción tomada y su foto de evidencia.
@@ -197,17 +482,23 @@ export async function resolverIncidencia(d: DatosResolucion): Promise<void> {
     {
       foto: d.foto,
       tenantId: d.tenantId,
-      visitaId: d.visitaId,
-      levantamientoId: d.levantamientoId,
+      visitaId: d.hallazgo.visita_id,
+      levantamientoId: d.hallazgo.levantamiento_id,
       tipo: "resolucion_incidencia",
     },
     async (tx, fotoId) => {
       await tx.execute(
-        `UPDATE incidencia
-            SET estado = 'resuelta', accion_tomada = ?,
-                foto_resolucion_id = ?, atendida_at = ?
-          WHERE id = ?`,
-        [d.accionTomada, fotoId, new Date().toISOString(), d.incidenciaId],
+        `INSERT OR REPLACE INTO atencion_hallazgo
+           (id, tenant_id, visita_id, levantamiento_id, sku_id,
+            exhibicion_negociada_id, origen, estado, accion_tomada,
+            foto_resolucion_id, creado_at)
+         VALUES (uuid(), ?, ?, ?, ?, ?, ?, 'resuelta', ?, ?, ?)`,
+        [
+          ...claveDe(d.hallazgo, d.tenantId),
+          d.accionTomada,
+          fotoId,
+          new Date().toISOString(),
+        ],
       );
     },
   );
@@ -221,14 +512,16 @@ export async function resolverIncidencia(d: DatosResolucion): Promise<void> {
  * la lista.
  */
 export async function noPuedoResolver(d: {
-  incidenciaId: string;
+  hallazgo: IncidenciaLocal;
+  tenantId: string;
   motivo: string;
 }): Promise<void> {
   await db.execute(
-    `UPDATE incidencia
-        SET estado = 'no_resuelta', motivo = ?, atendida_at = ?
-      WHERE id = ?`,
-    [d.motivo, new Date().toISOString(), d.incidenciaId],
+    `INSERT OR REPLACE INTO atencion_hallazgo
+       (id, tenant_id, visita_id, levantamiento_id, sku_id,
+        exhibicion_negociada_id, origen, estado, motivo, creado_at)
+     VALUES (uuid(), ?, ?, ?, ?, ?, ?, 'no_resuelta', ?, ?)`,
+    [...claveDe(d.hallazgo, d.tenantId), d.motivo, new Date().toISOString()],
   );
 }
 
