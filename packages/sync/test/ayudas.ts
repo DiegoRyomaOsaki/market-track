@@ -95,6 +95,32 @@ export const AppSchema = new Schema({
     origen: column.text,
     estado: column.text,
   }),
+  // Lo que el mercaderista declara haber hecho con un hallazgo (ADR-0012). La
+  // ESCRIBE la app y la relee: sin ella en la réplica, una visita hecha sin
+  // señal pierde la atención al sincronizar.
+  atencion_hallazgo: new Table({
+    tenant_id: column.text,
+    visita_id: column.text,
+    origen: column.text,
+    estado: column.text,
+  }),
+  // Los INSUMOS de la derivación offline del hallazgo. No se declaraban porque
+  // hasta ahora nadie los leía en el móvil: se replicaban sin lector. El espejo
+  // de `hallazgos.ts` es su primer consumidor, y si no llegan —o llegan sin
+  // `vigente_hasta`— calcula sobre datos que faltan y la verja de check-out
+  // subcuenta EN SILENCIO, que es el mismo bug un piso más abajo.
+  precio_regular: new Table({
+    tenant_id: column.text,
+    sku_id: column.text,
+    precio: column.real,
+    vigente_desde: column.text,
+    vigente_hasta: column.text,
+  }),
+  promocion: new Table({
+    tenant_id: column.text,
+    sku_id: column.text,
+    comunicada: column.integer,
+  }),
   // Los módulos ya cerrados. `paso` se declara para poder señalar CUÁL bajó como
   // control positivo, no solo contar filas.
   levantamiento_paso: new Table({
