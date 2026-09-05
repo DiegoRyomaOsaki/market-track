@@ -37,4 +37,4 @@ export type {
   PromocionVigente,
   VeredictoPrecio,
 } from "@market-track/db";
-export { CASOS_PRECIO } from "@market-track/db";
+export { CASOS_PRECIO, ORDEN_TIPO_TIENDA } from "@market-track/db";

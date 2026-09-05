@@ -33,4 +33,4 @@ export type {
   PromocionVigente,
   VeredictoPrecio,
 } from "./casos-precio";
-export { CASOS_PRECIO } from "./casos-precio";
+export { CASOS_PRECIO, ORDEN_TIPO_TIENDA } from "./casos-precio";

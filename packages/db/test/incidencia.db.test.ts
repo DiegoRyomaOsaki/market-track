@@ -709,6 +709,42 @@ describe("la atención declarada sin señal encuentra su incidencia", () => {
     });
   });
 
+  it.each([
+    ["resuelta sin acción", "resuelta", null, null],
+    ["no_resuelta sin motivo", "no_resuelta", null, null],
+    ["un motivo de 501 caracteres", "no_resuelta", null, "x".repeat(501)],
+  ])(
+    "una atención malformada se rechaza AQUÍ (%s), no al volcarla",
+    async (_caso, estado, accion, motivo) => {
+      // Si pasara, el volcado copiaría estos campos sobre `incidencia` y su CHECK
+      // levantaría un 23514 que sube por la cadena de triggers hasta ABORTAR la
+      // escritura de `levantamiento_sku`. El conector la daría por permanente y
+      // descartaría el dato de campo — y un mercaderista podría suprimir a
+      // conciencia la derivación de su propio quiebre.
+      await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+        const cadena = await abrirVisita(c, "f8");
+        await pasoSos(c, cadena);
+        await expect(
+          c.query(
+            `insert into public.atencion_hallazgo
+               (tenant_id, visita_id, levantamiento_id, sku_id, origen, estado,
+                accion_tomada, motivo)
+             values ($1,$2,$3,$4,'quiebre',$5,$6,$7)`,
+            [
+              TENANTS.maracumango,
+              cadena.visita,
+              cadena.levantamiento,
+              SKU,
+              estado,
+              accion,
+              motivo,
+            ],
+          ),
+        ).rejects.toThrow();
+      });
+    },
+  );
+
   it("el mercaderista NO puede declarar sobre la visita de un compañero", async () => {
     await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
       await expect(
@@ -722,19 +758,56 @@ describe("la atención declarada sin señal encuentra su incidencia", () => {
     });
   });
 
-  it("`aplicada_at` no la puede escribir el cliente: es la señal de divergencia", async () => {
+  it("`aplicada_at` que mande el cliente se IGNORA: la recalcula el servidor", async () => {
+    // No se rechaza, se ignora, y la diferencia importa: PowerSync sube la fila
+    // entera, así que rechazar sería un 42501 que el conector clasifica como
+    // permanente y descarta EN SILENCIO — perdiendo la atención. Marcar como
+    // aplicada una que nunca se volcó borraría la señal de que el espejo del
+    // móvil y el motor divergieron.
     await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
       const cadena = await abrirVisita(c, "f6");
       await pasoSos(c, cadena);
-      await expect(
-        c.query(
-          `insert into public.atencion_hallazgo
-             (tenant_id, visita_id, levantamiento_id, sku_id, origen, estado,
-              aplicada_at)
-           values ($1,$2,$3,$4,'quiebre','resuelta', now())`,
-          [TENANTS.maracumango, cadena.visita, cadena.levantamiento, SKU],
-        ),
-      ).rejects.toThrow(/permission denied/);
+      await c.query(
+        `insert into public.atencion_hallazgo
+           (id, tenant_id, visita_id, levantamiento_id, sku_id, origen, estado,
+            accion_tomada, aplicada_at, creado_at)
+         values (gen_random_uuid(),$1,$2,$3,$4,'quiebre','resuelta','Repuse',
+                 now(), now())`,
+        [TENANTS.maracumango, cadena.visita, cadena.levantamiento, SKU],
+      );
+
+      // No hay incidencia que casar, así que sigue sin aplicar pese a lo enviado.
+      expect(await atencionesDe(c, cadena.visita)).toEqual([
+        { aplicada: false, estado: "resuelta" },
+      ]);
+    });
+  });
+
+  it("la fila COMPLETA que sube PowerSync entra: `id` y `creado_at` incluidos", async () => {
+    // El grant es de tabla y no por columnas justo por esto. Con uno por
+    // columnas este insert muere con 42501, el conector lo da por permanente y
+    // descarta la atención sin un mensaje.
+    await comoUsuario(db, USUARIOS.mercaderistaMaracumango, async (c) => {
+      const cadena = await levantarEnPasos(c, "f7", {
+        stock_sistema: 10,
+        stock_piso: 0,
+      });
+      await c.query(
+        `insert into public.atencion_hallazgo
+           (id, tenant_id, visita_id, levantamiento_id, sku_id,
+            exhibicion_negociada_id, origen, estado, accion_tomada, motivo,
+            foto_resolucion_id, aplicada_at, creado_at)
+         values (gen_random_uuid(),$1,$2,$3,$4,null,'quiebre','resuelta',
+                 'Repuse', null, null, null, now())`,
+        [TENANTS.maracumango, cadena.visita, cadena.levantamiento, SKU],
+      );
+
+      expect((await incidenciasDe(c, cadena.visita))[0]?.estado).toBe(
+        "resuelta",
+      );
+      expect(await atencionesDe(c, cadena.visita)).toEqual([
+        { aplicada: true, estado: "resuelta" },
+      ]);
     });
   });
 });

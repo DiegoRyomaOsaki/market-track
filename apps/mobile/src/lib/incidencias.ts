@@ -5,6 +5,7 @@ import {
   type OrigenIncidencia,
 } from "@market-track/shared";
 import { useQuery } from "@powersync/react-native";
+import * as Crypto from "expo-crypto";
 import { useMemo } from "react";
 
 import { encolarFoto } from "./cola-fotos-instancia";
@@ -92,8 +93,13 @@ export function useIncidenciasDeVisita(visitaId: string) {
     [visitaId],
   );
 
-  const derivadas = useHallazgosDerivados(visitaId);
-  const { data: atenciones } = useQuery<ClaveHallazgo>(
+  const { derivados, cargando: cargandoDerivados } =
+    useHallazgosDerivados(visitaId);
+  const {
+    data: atenciones,
+    isLoading: cargandoAtenciones,
+    error: errorAtenciones,
+  } = useQuery<ClaveHallazgo>(
     `SELECT levantamiento_id, sku_id, exhibicion_negociada_id, origen
        FROM atencion_hallazgo
       WHERE visita_id = ? AND aplicada_at IS NULL`,
@@ -101,14 +107,22 @@ export function useIncidenciasDeVisita(visitaId: string) {
   );
 
   const incidencias = useMemo(
-    () => unirHallazgos(data ?? [], derivadas, atenciones ?? []),
-    [data, derivadas, atenciones],
+    () => unirHallazgos(data ?? [], derivados, atenciones ?? []),
+    [data, derivados, atenciones],
   );
 
+  // `cargando` cubre TODAS las consultas, no solo la del servidor: con la de
+  // `incidencia` resuelta en vacío y las derivadas aún en vuelo, la lista
+  // afirmaría "nada que atender" y el contador de pendientes daría cero — que es
+  // por donde una verja de check-out dejaría salir.
   return {
     incidencias,
-    cargando: isLoading,
-    error: error ? String(error) : null,
+    cargando: isLoading || cargandoDerivados || cargandoAtenciones,
+    error: error
+      ? String(error)
+      : errorAtenciones
+        ? String(errorAtenciones)
+        : null,
   };
 }
 
@@ -141,8 +155,11 @@ type FilaDerivada = {
  *
  * Una consulta por visita, no una por SKU: derivar está en el camino de pintado.
  */
-function useHallazgosDerivados(visitaId: string): IncidenciaLocal[] {
-  const { data: visita } = useQuery<{
+function useHallazgosDerivados(visitaId: string): {
+  derivados: IncidenciaLocal[];
+  cargando: boolean;
+} {
+  const { data: visita, isLoading: cargandoVisita } = useQuery<{
     check_in_at: string | null;
     tenant_id: string | null;
     cadena_id: string | null;
@@ -154,7 +171,7 @@ function useHallazgosDerivados(visitaId: string): IncidenciaLocal[] {
   );
   const cadenaId = visita?.[0]?.cadena_id ?? null;
 
-  const { data: filas } = useQuery<FilaDerivada>(
+  const { data: filas, isLoading: cargandoFilas } = useQuery<FilaDerivada>(
     `SELECT ls.levantamiento_id, ls.sku_id, l.marca_id,
             m.nombre AS marca_nombre, s.nombre AS sku_nombre,
             m.tolerancia_precio_pct,
@@ -168,7 +185,7 @@ function useHallazgosDerivados(visitaId: string): IncidenciaLocal[] {
     [visitaId],
   );
 
-  const { data: exhibiciones } = useQuery<{
+  const { data: exhibiciones, isLoading: cargandoExh } = useQuery<{
     levantamiento_id: string;
     exhibicion_negociada_id: string | null;
     instalada: number | null;
@@ -185,36 +202,78 @@ function useHallazgosDerivados(visitaId: string): IncidenciaLocal[] {
     [visitaId],
   );
 
-  const { data: periodos } = useQuery<{
+  // Acotados a los SKU de ESTA visita y, en el caso del precio, a su cadena. Sin
+  // el filtro por SKU el espejo compara el precio de un SKU contra el periodo de
+  // otro —y una promo ajena justifica un precio bajo real—, porque el stream baja
+  // el maestro del cliente entero. El SQL autoritativo filtra por
+  // `tenant_id AND sku_id AND cadena_id`; esto tiene que filtrar igual.
+  const { data: periodos, isLoading: cargandoPrecios } = useQuery<{
+    sku_id: string;
     precio: number;
     vigente_desde: string;
     vigente_hasta: string | null;
     tipo_tienda: string | null;
   }>(
-    `SELECT precio, vigente_desde, vigente_hasta, tipo_tienda
-       FROM precio_regular WHERE cadena_id = ?`,
-    [cadenaId ?? ""],
+    `SELECT pr.sku_id, pr.precio, pr.vigente_desde, pr.vigente_hasta,
+            pr.tipo_tienda
+       FROM precio_regular pr
+      WHERE pr.cadena_id = ?
+        AND pr.sku_id IN (SELECT ls.sku_id FROM levantamiento_sku ls
+                            JOIN levantamiento l ON l.id = ls.levantamiento_id
+                           WHERE l.visita_id = ?)`,
+    [cadenaId ?? "", visitaId],
   );
 
-  const { data: promociones } = useQuery<{
+  const { data: promociones, isLoading: cargandoPromos } = useQuery<{
+    sku_id: string;
     precio_promo: number;
     fecha_inicio: string;
     fecha_fin: string;
     comunicada: number;
-  }>(`SELECT precio_promo, fecha_inicio, fecha_fin, comunicada FROM promocion`);
+  }>(
+    `SELECT p.sku_id, p.precio_promo, p.fecha_inicio, p.fecha_fin, p.comunicada
+       FROM promocion p
+      WHERE p.sku_id IN (SELECT ls.sku_id FROM levantamiento_sku ls
+                           JOIN levantamiento l ON l.id = ls.levantamiento_id
+                          WHERE l.visita_id = ?)`,
+    [visitaId],
+  );
 
-  return useMemo(() => {
+  // Mientras alguno de los insumos no ha resuelto, la derivación NO se hace: con
+  // la cadena a medias todos los SKU darían `sin_precio_vigente` y la lista
+  // afirmaría "nada que atender" durante un frame — el mismo fallo que este
+  // módulo existe para quitar, entrando por la puerta del primer render.
+  const cargando =
+    cargandoVisita ||
+    cargandoFilas ||
+    cargandoExh ||
+    cargandoPrecios ||
+    cargandoPromos;
+
+  const derivados = useMemo(() => {
+    if (cargando) return [];
     const fecha = diaEnLima(
       visita?.[0]?.check_in_at ? new Date(visita[0].check_in_at) : new Date(),
     );
-    const contextoBase = {
-      periodos: periodos ?? [],
-      promociones: (promociones ?? []).map((p) => ({
+
+    // Indexados UNA vez: sin esto cada SKU recorre el maestro entero, y son
+    // decenas de SKU por visita.
+    const porSku = <T extends { sku_id: string }>(filas: readonly T[]) => {
+      const mapa = new Map<string, T[]>();
+      for (const f of filas) {
+        const previas = mapa.get(f.sku_id) ?? [];
+        previas.push(f);
+        mapa.set(f.sku_id, previas);
+      }
+      return mapa;
+    };
+    const preciosPorSku = porSku(periodos ?? []);
+    const promosPorSku = porSku(
+      (promociones ?? []).map((p) => ({
         ...p,
         comunicada: p.comunicada === 1,
       })),
-      fecha,
-    };
+    );
 
     const pintable = (
       h: HallazgoDerivado,
@@ -245,7 +304,9 @@ function useHallazgosDerivados(visitaId: string): IncidenciaLocal[] {
     const salida: IncidenciaLocal[] = [];
     for (const f of filas ?? []) {
       const contexto: ContextoPrecio = {
-        ...contextoBase,
+        fecha,
+        periodos: preciosPorSku.get(f.sku_id ?? "") ?? [],
+        promociones: promosPorSku.get(f.sku_id ?? "") ?? [],
         toleranciaPct: f.tolerancia_precio_pct ?? 0,
       };
       for (const h of hallazgosDeSku(
@@ -261,7 +322,9 @@ function useHallazgosDerivados(visitaId: string): IncidenciaLocal[] {
       }
     }
     return salida;
-  }, [visitaId, visita, filas, exhibiciones, periodos, promociones]);
+  }, [cargando, visitaId, visita, filas, exhibiciones, periodos, promociones]);
+
+  return { derivados, cargando };
 }
 
 /**
@@ -469,6 +532,21 @@ function claveDe(h: IncidenciaLocal, tenantId: string) {
 }
 
 /**
+ * Deja UNA sola declaración por hallazgo en la réplica.
+ *
+ * `INSERT OR REPLACE` no sirve: la tabla local solo tiene `id` como clave —
+ * PowerSync no crea índices únicos— así que con un uuid nuevo cada vez nunca
+ * reemplaza nada. La segunda declaración se insertaría como fila aparte, y en el
+ * servidor chocaría contra `atencion_hallazgo_uq` con un 23505 que el conector
+ * clasifica como permanente y DESCARTA: el mercaderista cambia de opinión y su
+ * cambio desaparece sin un mensaje.
+ */
+const BORRAR_PREVIA = `DELETE FROM atencion_hallazgo
+   WHERE tenant_id = ? AND visita_id = ?
+     AND levantamiento_id IS ? AND sku_id IS ?
+     AND exhibicion_negociada_id IS ? AND origen = ?`;
+
+/**
  * Resuelve una incidencia: la acción tomada y su foto de evidencia.
  *
  * La foto y el enlace se escriben en la MISMA transacción local. PowerSync
@@ -487,14 +565,17 @@ export async function resolverIncidencia(d: DatosResolucion): Promise<void> {
       tipo: "resolucion_incidencia",
     },
     async (tx, fotoId) => {
+      const clave = claveDe(d.hallazgo, d.tenantId);
+      await tx.execute(BORRAR_PREVIA, clave);
       await tx.execute(
-        `INSERT OR REPLACE INTO atencion_hallazgo
+        `INSERT INTO atencion_hallazgo
            (id, tenant_id, visita_id, levantamiento_id, sku_id,
             exhibicion_negociada_id, origen, estado, accion_tomada,
             foto_resolucion_id, creado_at)
-         VALUES (uuid(), ?, ?, ?, ?, ?, ?, 'resuelta', ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'resuelta', ?, ?, ?)`,
         [
-          ...claveDe(d.hallazgo, d.tenantId),
+          Crypto.randomUUID(),
+          ...clave,
           d.accionTomada,
           fotoId,
           new Date().toISOString(),
@@ -516,13 +597,17 @@ export async function noPuedoResolver(d: {
   tenantId: string;
   motivo: string;
 }): Promise<void> {
-  await db.execute(
-    `INSERT OR REPLACE INTO atencion_hallazgo
-       (id, tenant_id, visita_id, levantamiento_id, sku_id,
-        exhibicion_negociada_id, origen, estado, motivo, creado_at)
-     VALUES (uuid(), ?, ?, ?, ?, ?, ?, 'no_resuelta', ?, ?)`,
-    [...claveDe(d.hallazgo, d.tenantId), d.motivo, new Date().toISOString()],
-  );
+  const clave = claveDe(d.hallazgo, d.tenantId);
+  await db.writeTransaction(async (tx) => {
+    await tx.execute(BORRAR_PREVIA, clave);
+    await tx.execute(
+      `INSERT INTO atencion_hallazgo
+         (id, tenant_id, visita_id, levantamiento_id, sku_id,
+          exhibicion_negociada_id, origen, estado, motivo, creado_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'no_resuelta', ?, ?)`,
+      [Crypto.randomUUID(), ...clave, d.motivo, new Date().toISOString()],
+    );
+  });
 }
 
 /** El resumen que la cabecera pinta desde cualquier módulo. */

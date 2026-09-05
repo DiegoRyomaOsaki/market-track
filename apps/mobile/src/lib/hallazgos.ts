@@ -1,8 +1,9 @@
-import type {
-  OrigenIncidencia,
-  PeriodoPrecio,
-  PromocionVigente,
-  VeredictoPrecio,
+import {
+  type OrigenIncidencia,
+  ORDEN_TIPO_TIENDA,
+  type PeriodoPrecio,
+  type PromocionVigente,
+  type VeredictoPrecio,
 } from "@market-track/shared";
 
 // El ESPEJO EFÍMERO del motor de hallazgos, para que una visita hecha sin señal
@@ -55,10 +56,22 @@ export function precioRegularVigente(
   );
   if (vigentes.length === 0) return null;
 
+  // `order by tipo_tienda nulls first, vigente_desde desc`, literalmente.
+  //
+  // El nulo primero, y entre los NO nulos por el orden en que el enum se
+  // DECLARÓ, que es como Postgres ordena una columna enum — no alfabéticamente.
+  // `vigente_desde desc` solo desempata dentro de un mismo tipo.
+  //
+  // Ordenar por el texto parece lo natural y da otro periodo que el motor: lo
+  // cazó el corpus con dos tipos de tienda a la vez, que es exactamente para lo
+  // que el corpus existe.
+  const rango = (tipo: string | null) =>
+    tipo === null ? -1 : ORDEN_TIPO_TIENDA.indexOf(tipo);
+
   return vigentes.reduce((mejor, actual) => {
-    const generalMejor = mejor.tipo_tienda === null;
-    const generalActual = actual.tipo_tienda === null;
-    if (generalActual !== generalMejor) return generalActual ? actual : mejor;
+    const rActual = rango(actual.tipo_tienda);
+    const rMejor = rango(mejor.tipo_tienda);
+    if (rActual !== rMejor) return rActual < rMejor ? actual : mejor;
     return actual.vigente_desde > mejor.vigente_desde ? actual : mejor;
   });
 }

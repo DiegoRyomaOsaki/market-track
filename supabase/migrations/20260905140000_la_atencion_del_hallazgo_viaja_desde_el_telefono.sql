@@ -45,6 +45,23 @@ create table public.atencion_hallazgo (
   aplicada_at  timestamptz,
   creado_at    timestamptz not null default now(),
 
+  -- Los MISMOS invariantes que `incidencia`, y no por simetría estética: el
+  -- volcado copia estos tres campos tal cual. Una atención que aquí pasara y
+  -- allí no haría fallar el UPDATE del volcado con un 23514, y ese error sube
+  -- por la cadena de triggers hasta ABORTAR la escritura de `levantamiento_sku`
+  -- que lo disparó. El conector la daría por permanente y descartaría el dato de
+  -- campo — y un mercaderista podría suprimir a conciencia la derivación de su
+  -- propio quiebre plantando una atención envenenada antes de sincronizar.
+  constraint atencion_accion_si_resuelta check (
+    estado <> 'resuelta' or length(btrim(coalesce(accion_tomada, ''))) > 0),
+  constraint atencion_motivo_si_no_resuelta check (
+    estado <> 'no_resuelta' or length(btrim(coalesce(motivo, ''))) > 0),
+  -- Estos textos bajan a un teléfono por la réplica: se acotan igual que allí.
+  constraint atencion_accion_tamano check (
+    accion_tomada is null or length(accion_tomada) <= 500),
+  constraint atencion_motivo_tamano check (
+    motivo is null or length(motivo) <= 500),
+
   constraint atencion_hallazgo_uq unique nulls not distinct
     (tenant_id, visita_id, levantamiento_id, sku_id, exhibicion_negociada_id, origen),
 
@@ -166,11 +183,22 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+declare
+  v_previa timestamptz;
 begin
-  if new.aplicada_at is not null then return new; end if;
-  if app.volcar_atencion(new) then
-    new.aplicada_at := now();
+  -- `aplicada_at` NO la decide quien escribe: se recalcula aquí, se mande lo que
+  -- se mande. Es la única forma de que sea del servidor — un grant por columnas
+  -- no sirve, porque PowerSync sube la fila ENTERA y el INSERT moriría con un
+  -- 42501 que el conector descarta en silencio, perdiendo justo la atención que
+  -- esta tabla existe para conservar.
+  v_previa := case when tg_op = 'UPDATE' then old.aplicada_at else null end;
+  if v_previa is not null then
+    -- Ya se volcó: no se vuelve a tocar ni se puede "desaplicar".
+    new.aplicada_at := v_previa;
+    return new;
   end if;
+
+  new.aplicada_at := case when app.volcar_atencion(new) then now() else null end;
   return new;
 end;
 $$;
@@ -201,12 +229,16 @@ begin
     and a.exhibicion_negociada_id is not distinct from new.exhibicion_negociada_id
     and a.origen = new.origen;
 
-  if v_atencion.id is null then return null; end if;
-
-  if app.volcar_atencion(v_atencion) then
-    update public.atencion_hallazgo set aplicada_at = now()
-    where id = v_atencion.id;
+  if v_atencion.id is null or v_atencion.aplicada_at is not null then
+    return null;
   end if;
+
+  -- Se TOCA la atención y su propio trigger hace el volcado y sella la hora. Un
+  -- solo dueño de esa secuencia: si aquí se escribiera `aplicada_at` a mano, el
+  -- trigger de la atención lo recalcularía encima —ya no queda incidencia
+  -- pendiente que volcar— y la dejaría en null. Medido: ese era el fallo.
+  update public.atencion_hallazgo set aplicada_at = null
+  where id = v_atencion.id;
   return null;
 end;
 $$;
@@ -227,18 +259,21 @@ create trigger incidencia_busca_su_atencion
 -- la política permite, ni uno más.
 --
 -- Aquí SÍ hay INSERT para `authenticated`, y es la diferencia con `incidencia`:
--- esto no es un derivado, es lo que el mercaderista declara. `aplicada_at` queda
--- fuera del grant de columnas: lo escribe el servidor al volcar, y dejarlo
--- escribir al cliente permitiría marcar como aplicada una atención que nunca se
--- volcó — justo la señal de divergencia que esta tabla existe para conservar.
+-- esto no es un derivado, es lo que el mercaderista declara.
+--
+-- Y el grant es de TABLA, no por columnas. La migración de `incidencia` ya
+-- nombró el peligro —"un grant por columna rompe el upsert de reintento de
+-- PowerSync"— y lo descartó porque el móvil nunca inserta esa tabla. Aquí sí
+-- inserta, así que el peligro es real: MEDIDO, el INSERT tal como lo sube el
+-- conector —con `id` y `creado_at`— muere con un 42501, y el conector clasifica
+-- ese error como PERMANENTE y descarta la operación en silencio. O sea que un
+-- grant por columnas habría perdido justo la atención que esta tabla existe para
+-- conservar.
+--
+-- `aplicada_at` no queda desprotegida por eso: la recalcula el trigger de arriba
+-- en cada escritura, se mande lo que se mande. Un valor del cliente se ignora.
 
-grant select on public.atencion_hallazgo to authenticated;
-grant insert (tenant_id, visita_id, levantamiento_id, sku_id,
-              exhibicion_negociada_id, origen, estado, accion_tomada, motivo,
-              foto_resolucion_id)
-  on public.atencion_hallazgo to authenticated;
-grant update (estado, accion_tomada, motivo, foto_resolucion_id)
-  on public.atencion_hallazgo to authenticated;
+grant select, insert, update on public.atencion_hallazgo to authenticated;
 grant all on public.atencion_hallazgo to service_role;
 
 alter table public.atencion_hallazgo enable row level security;
