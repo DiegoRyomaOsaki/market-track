@@ -66,6 +66,7 @@ alguien construirá encima creyendo que está cerrado.
 | [0009](0009-tiles-autohospedados-en-r2.md) | Los tiles de los mapas se autohospedan en R2 con Protomaps (PMTiles) | aceptado | 2026-07-16 |
 | [0010](0010-formularios-de-levantamiento-configurables.md) | El formulario de levantamiento es una definición versionada que configura presentación y campos libres, no las reglas de negocio | aceptado | 2026-07-28 |
 | [0011](0011-puntajes-derivados-en-la-base.md) | Los puntajes de Perfect Store y Perfect Merchandiser se derivan en la base, con la configuración congelada en cada resultado | aceptado | 2026-08-04 |
+| [0012](0012-el-hallazgo-lo-deriva-el-servidor-la-atencion-la-declara-el-mercaderista.md) | El hallazgo lo deriva el servidor; la atención la declara el mercaderista, y por eso sí viaja desde el teléfono | aceptado | 2026-09-05 |
 
 Plantilla: [`0000-plantilla.md`](0000-plantilla.md). Siguiente número libre: **0012**.
 
